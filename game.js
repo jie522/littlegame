@@ -40,11 +40,15 @@ const store = {
 
 /* 依加入順序分配角色:房主 = 0 號 */
 const PLAYERS = [
-  { name: '紫紫兔', emoji: '🐰', color: '#9b7bff', soft: '#ede6ff' },
-  { name: '暖暖熊', emoji: '🐻', color: '#ffa04d', soft: '#fff0dc' },
-  { name: '呱呱蛙', emoji: '🐸', color: '#3fbf78', soft: '#dcf6e6' },
-  { name: '喵喵貓', emoji: '🐱', color: '#5b9bff', soft: '#e0ecff' },
+  { name: '兔兔', file: 'bunny', color: '#9b7bff', soft: '#ede6ff' },
+  { name: '熊熊', file: 'bear', color: '#ffa04d', soft: '#fff0dc' },
+  { name: '柴柴', file: 'shiba', color: '#3fbf78', soft: '#dcf6e6' },
+  { name: '貓貓', file: 'cat', color: '#5b9bff', soft: '#e0ecff' },
 ];
+/* emoji 欄位:文字裡用的小頭像(圖片);畫布遊戲用 CHAR_IMG 直接畫圖 */
+PLAYERS.forEach(p => { p.emoji = '<img class="pe" src="assets/chars/head_' + p.file + '.png" alt="">'; });
+const loadImg = src => { const i = new Image(); i.src = src; return i; };
+const CHAR_IMG = PLAYERS.map(p => ({ full: loadImg('assets/chars/' + p.file + '.png'), head: loadImg('assets/chars/head_' + p.file + '.png') }));
 
 const APP_VERSION = '2026.10.11';
 const S = { muted: store.get('muted', false) };
@@ -420,7 +424,7 @@ const GAMES = [
   },
   {
     id: 'volley', emoji: '🏐', name: '萌寵打排球', tag: '反應+對戰', color: '#f6c445', desc: '橫向畫面大對決!',
-    rules: ['手機橫著拿!(直拿時畫面會自動轉向)', '◀ ▶ 移動、按「跳」跳起來,在空中靠近球時按「殺」可以殺球', '球落在哪一邊的地上,另一邊就得 1 分', '2 人是 1 對 1,3~4 人分成左右兩隊', '先拿到 9 分的一隊獲勝!'],
+    rules: ['手機橫著拿!(直拿時畫面會自動轉向)', '左半邊螢幕按住左右滑動 = 移動;右下角按「跳」跳起來,在空中靠近球時按「殺」可以殺球', '球落在哪一邊的地上,另一邊就得 1 分', '2 人是 1 對 1,3~4 人分成左右兩隊', '先拿到 9 分的一隊獲勝!'],
     host: hVolley, view: vVolley,
   },
 ];
@@ -447,7 +451,7 @@ function home() {
       <div class="logo-t"><span class="l1">萌萌</span><span class="l2">派對</span></div>
       ${ribbon('PARTY GAMES')}
     </header>
-    <div class="mascots"><span>🐰</span><span>🐻</span><span>🐸</span><span>🐱</span></div>
+    <div class="mascots">${PLAYERS.map(p => `<img class="mimg" src="assets/chars/${p.file}.png" alt="">`).join('')}</div>
     <nav class="menu">
       <button class="btn big green" id="solo"><span class="bi">▶</span><span class="bt">單人遊戲<small>對戰電腦</small></span></button>
       <button class="btn big yellow" id="create"><span class="bi">🏠</span><span class="bt">建立房間<small>邀請朋友一起玩</small></span></button>
@@ -1996,7 +2000,10 @@ function vTank(V) {
     ctx.fillStyle = '#4a4f68';
     rr(-1.3, -9.5, 2.6, 7, 1);
     ctx.restore();
-    emoji(face, x + 8, y + 8.6, 8.5);
+    if (typeof face === 'number') {
+      const im = CHAR_IMG[face].head;
+      if (im.complete && im.naturalWidth) { const hh = 11.5, ww = hh * im.naturalWidth / im.naturalHeight; ctx.drawImage(im, x + 8 - ww / 2, y + 8.6 - hh / 2, ww, hh); }
+    } else emoji(face, x + 8, y + 8.6, 8.5);
     if (flags & 1) {
       ctx.save();
       ctx.strokeStyle = 'rgba(255,255,255,.85)';
@@ -2048,7 +2055,7 @@ function vTank(V) {
       const p = prev.get(id);
       let dx = x, dy = y;
       if (p && Math.abs(p[1] - x) + Math.abs(p[2] - y) < 12) { dx = p[1] + (x - p[1]) * a; dy = p[2] + (y - p[2]) * a; }
-      if (slot >= 0) drawTank(dx, dy, d, PLAYERS[slot].color, PLAYERS[slot].emoji, flags, slot === V.me, now);
+      if (slot >= 0) drawTank(dx, dy, d, PLAYERS[slot].color, slot, flags, slot === V.me, now);
       else drawTank(dx, dy, d, ENEMY_KINDS[kind].color, ENEMY_KINDS[kind].emoji, flags, false, now);
     });
     ctx.fillStyle = '#fff6b0';
@@ -2168,6 +2175,15 @@ function canvasStage(V, aspect, fill) {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(ch, 0, 0);
+    ctx.restore();
+  };
+  C.char = (slot, x, y, h, head, bottom) => { // 畫角色圖片:(x, y) 是中心,bottom 時 y 是腳底
+    const im = CHAR_IMG[slot][head ? 'head' : 'full'];
+    if (!im.complete || !im.naturalWidth) return;
+    const w = h * im.naturalWidth / im.naturalHeight, ctx = C.ctx;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(im, x * C.sc + C.ox - w * C.sc / 2, y * C.sc + C.oy - (bottom ? h * C.sc : h * C.sc / 2), w * C.sc, h * C.sc);
     ctx.restore();
   };
   C.rr = (x, y, w, h, r) => {
@@ -2441,7 +2457,7 @@ function vShaft(V) {
       }
       ctx.fillStyle = P.color;
       ctx.beginPath(); ctx.ellipse(x + PW / 2, y + PH - 1, 8, 2.5, 0, 0, Math.PI * 2); ctx.fill();
-      C.emoji(P.emoji, x + PW / 2, y + PH / 2 - 1, 21);
+      C.char(q[0], x + PW / 2, y + PH / 2 - 2, 25, true);
     });
     // 天花板尖刺
     ctx.fillStyle = '#7d879f';
@@ -2499,7 +2515,7 @@ function vShaft(V) {
    9. 萌寵打排球 🏐(橫向畫面;靈感來自經典排球小遊戲,角色是我們自己的萌寵)
    座標:寬 432 x 高 304,地面 y = 262,網子在正中間
    ========================================================= */
-const VB = { W: 432, H: 304, G: 262, NET_X: 216, NET_TOP: 172, NET_W: 10, PR: 28, BR: 18, TICK: 40, WIN: 9 };
+const VB = { W: 432, H: 304, G: 262, NET_X: 216, NET_TOP: 172, NET_W: 10, PR: 30, BR: 18, TICK: 40, WIN: 9 };
 
 function hVolley(H) {
   const { W, G, NET_X, NET_TOP, NET_W, PR, BR, WIN } = VB, dt = VB.TICK / 1000;
@@ -2622,7 +2638,7 @@ function vVolley(V) {
   landscape(V);
   const C = canvasStage(V, W / VH, true), ctx = C.ctx;
   V.pad.innerHTML = `
-    <div class="vgrp"><button class="vb" data-d="-1">◀</button><button class="vb" data-d="1">▶</button></div>
+    <div class="vhint">👈 左半邊螢幕左右滑動 = 移動</div>
     <div class="vgrp"><button class="vb jump">跳</button><button class="vb spike">殺</button></div>`;
   const held = new Set();
   let dir = 0;
@@ -2630,10 +2646,46 @@ function vVolley(V) {
     const d = (held.has(1) ? 1 : 0) - (held.has(-1) ? 1 : 0);
     if (d !== dir) { dir = d; V.send({ e: 'mv', d }); }
   };
-  $$('.vb[data-d]', V.pad).forEach(b => {
-    const d = +b.dataset.d;
-    holdBtn(b, () => { held.add(d); upd(); }, () => { held.delete(d); upd(); });
+  // 左半邊螢幕:按住後左右滑動就會移動(虛擬搖桿跟著手指走,不用回到原點就能換方向)
+  let stickId = null, sx0 = 0;
+  const ring = el('div', 'vring', '<i></i>');
+  V.root.appendChild(ring);
+  const gpos = e => { // 手機直拿時畫面轉了 90 度,要換算回遊戲座標
+    const r = V.root.getBoundingClientRect(), rot = V.root.classList.contains('rot');
+    return rot ? { x: e.clientY - r.top, y: r.right - e.clientX } : { x: e.clientX - r.left, y: e.clientY - r.top };
+  };
+  V.root.addEventListener('pointerdown', e => {
+    if (stickId != null || e.target.closest('.exit, .vb')) return;
+    const p = gpos(e);
+    if (p.x >= V.root.clientWidth / 2) return;
+    e.preventDefault();
+    try { V.root.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    stickId = e.pointerId; sx0 = p.x;
+    ring.style.left = p.x + 'px'; ring.style.top = p.y + 'px';
+    ring.style.setProperty('--dx', '0px');
+    ring.classList.add('on');
+    V.root.classList.add('used');
   });
+  V.root.addEventListener('pointermove', e => {
+    if (e.pointerId !== stickId) return;
+    const x = gpos(e).x;
+    if (Math.abs(x - sx0) > 46) sx0 = x - Math.sign(x - sx0) * 46;
+    const dx = x - sx0;
+    ring.style.setProperty('--dx', Math.max(-26, Math.min(26, dx * 0.6)) + 'px');
+    const d = dx > 10 ? 1 : dx < -10 ? -1 : 0;
+    held.clear();
+    if (d) held.add(d);
+    upd();
+  });
+  const stickEnd = e => {
+    if (e.pointerId !== stickId) return;
+    stickId = null;
+    ring.classList.remove('on');
+    held.clear();
+    upd();
+  };
+  V.root.addEventListener('pointerup', stickEnd);
+  V.root.addEventListener('pointercancel', stickEnd);
   holdBtn($('.vb.jump', V.pad), () => V.send({ e: 'jump' }));
   holdBtn($('.vb.spike', V.pad), () => V.send({ e: 'spike' }));
   const k = d => [() => { held.add(d); upd(); }, () => { held.delete(d); upd(); }];
@@ -2718,7 +2770,7 @@ function vVolley(V) {
       ctx.save();
       ctx.shadowColor = 'rgba(20,30,60,.95)';
       ctx.shadowBlur = 4 * C.sc;
-      C.emoji(P.emoji, x, y - PR + 2, PR * 2.3);
+      C.char(q[0], x, y + 3, PR * 2.5, false, true);
       ctx.restore();
       if (q[3]) C.emoji('💢', x + 18, y - PR * 2 + 4, 16);
       if (q[0] === V.me) {
@@ -2940,7 +2992,9 @@ const BOTS = {
       else dir = Math.abs(dx) < Math.abs(dy) ? (dx > 0 ? 1 : 3) : (dy > 0 ? 2 : 0);
     }
     if (Math.random() > botSkill().sk) dir = rand(0, 3);
-    if (dir === 2 && x >= 80 && x <= 128 && y >= 100) fire = false; // 別打到自己的基地
+    // 別打到自己的基地(基地在 x 96~112、y 192~208):砲口朝向基地的那條線上就不開火
+    const nearRow = y >= 168, nearCol = x >= 72 && x <= 136;
+    if ((dir === 2 && nearCol && y >= 100) || (dir === 3 && nearRow && x > 100) || (dir === 1 && nearRow && x < 108)) fire = false;
     if (dir !== st.dir) { st.dir = dir; botSend(H, s, { e: 'dir', d: dir }); }
     if (fire !== st.fire) { st.fire = fire; botSend(H, s, { e: 'f', on: fire }); }
   },
