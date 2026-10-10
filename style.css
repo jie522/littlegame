@@ -616,7 +616,8 @@ button:disabled { cursor: not-allowed; }
 .play-tank.hideCtl { touch-action: none; }
 .hideCtl .dpad, .hideCtl .firebtn { opacity: 0; pointer-events: none; }
 .hideCtl .pad { min-height: 0; flex: 0 0 40px; height: 40px; padding: 0; background: transparent; border-color: transparent; box-shadow: none; }
-.hideCtl .stage { padding: 4px; }
+.play-tank.hideCtl { padding-left: 4px; padding-right: 4px; }
+.play-tank.hideCtl .stage { flex: 1; padding: 2px; background: transparent; box-shadow: none; }
 .hideCtl .zhint {
   display: block;
   position: absolute; top: 50%;

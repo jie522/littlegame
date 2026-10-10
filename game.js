@@ -1788,9 +1788,9 @@ function vTank(V) {
   /* 依舞台大小調整成正方形畫布 */
   function fit() {
     const top = $('.topbar', V.root).offsetHeight;
-    if (hidden) { // 隱藏按鈕:畫面撐滿整個螢幕,鏡頭放大並跟著自己的坦克
-      wrap.style.width = Math.max(100, V.root.clientWidth - 24) + 'px';
-      wrap.style.height = Math.max(100, V.root.clientHeight - top - 116 - hud.offsetHeight) + 'px';
+    if (hidden) { // 隱藏按鈕:整張地圖貼齊螢幕左右邊緣,盡量放大
+      const size = Math.max(100, Math.floor(Math.min(V.root.clientWidth - 14, V.root.clientHeight - top - 116 - hud.offsetHeight)));
+      wrap.style.width = wrap.style.height = size + 'px';
       return;
     }
     // 先決定地圖大小,剩下的高度都給操作區
@@ -1893,7 +1893,7 @@ function vTank(V) {
 
   /* ---- 繪圖 ---- */
   let sc = 1, ox = 0, oy = 0, camX = 104, camY = 104;
-  const ZOOM = 1.7;
+  const ZOOM = 1; // 1 = 看得到整張地圖
   function emoji(ch, x, y, size) {
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
