@@ -40,7 +40,7 @@ const store = {
 
 /* 依加入順序分配角色:房主 = 0 號 */
 const PLAYERS = [
-  { name: '粉粉兔', emoji: '🐰', color: '#ff7fa8', soft: '#ffe3ec' },
+  { name: '紫紫兔', emoji: '🐰', color: '#9b7bff', soft: '#ede6ff' },
   { name: '暖暖熊', emoji: '🐻', color: '#ffa04d', soft: '#fff0dc' },
   { name: '呱呱蛙', emoji: '🐸', color: '#3fbf78', soft: '#dcf6e6' },
   { name: '喵喵貓', emoji: '🐱', color: '#5b9bff', soft: '#e0ecff' },
@@ -371,6 +371,11 @@ const GAMES = [
     rules: ['2 人對戰!房間超過 2 人時抽籤決定誰上場,其他人觀戰', '輪到你時:翻開一顆棋,或把自己的棋走一格', '第一個翻棋的人,翻到什麼顏色就是那一方', '大吃小:帥 > 仕 > 相 > 俥 > 傌 > 炮 > 兵,但兵能吃帥、帥不能吃兵', '炮要隔著一顆棋跳過去吃,吃光對方或讓對方無路可走就贏了!'],
     host: hChess, view: vChess, noCountdown: true,
   },
+  {
+    id: 'tank', emoji: '🪖', name: '坦克大戰', tag: '反應+合作', color: '#4f9d69', desc: '一起守護基地!',
+    rules: ['大家同一隊!一起保護地圖下方的基地 🦅', '左邊方向鍵移動(可以滑動),右邊按鈕發射砲彈', '磚牆打得破、鐵牆打不破、水過不去、草叢可以躲', '打倒敵人得分:👾 1 分、👻 2 分、🤖 3 分(要打 3 下)', '每人 3 條命;打到隊友會讓他暫停一下,也別打到自己的基地喔!'],
+    host: hTank, view: vTank,
+  },
 ];
 const GAME = Object.fromEntries(GAMES.map(g => [g.id, g]));
 
@@ -657,7 +662,7 @@ function resultsView(m) {
 }
 
 function confetti() {
-  const bits = ['🎉', '⭐', '💖', '🌸', '🍬', '✨', '🎈'];
+  const bits = ['🎉', '⭐', '💙', '🍀', '🍬', '✨', '🎈'];
   for (let i = 0; i < 28; i++) {
     const c = el('div', 'confetti', pick(bits));
     c.style.left = Math.random() * 100 + 'vw';
@@ -1428,6 +1433,526 @@ function vChess(V) {
       V.stage(m.winner == null
         ? `<div class="big">🤝</div><div>${m.reason}</div>`
         : `<div class="big">${pinfo(m.winner).emoji}</div><div>${who(m.winner)} 獲勝!</div><div class="small">${m.reason}</div>`);
+    }
+  };
+}
+
+/* =========================================================
+   7. 坦克大戰 🪖(合作模式:大家一起守護基地 🦅)
+   座標單位:地圖 208 x 208,磚塊格 8 x 8(26 x 26 格),坦克 16 x 16
+   格子代碼:0 空地、1 磚牆、2 鐵牆、3 水、4 草叢、5 基地
+   ========================================================= */
+const TANK = { N: 26, U: 8, W: 208, S: 16, TICK: 40 };
+const TANK_MAP = [
+  '.............',
+  '.b.b.b.b.b.b.',
+  '.b.b.b.b.b.b.',
+  '.b.b.bsb.b.b.',
+  '.b.b.b.b.b.b.',
+  'gg...b.b...gg',
+  's.bb.....bb.s',
+  '..ww.b.b.ww..',
+  '.b.b.bbb.b.b.',
+  '.b.b.b.b.b.b.',
+  '.b.b.....b.b.',
+  '.b.b.....b.b.',
+  '.............',
+];
+const TDIR = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // 上 右 下 左
+const ENEMY_KINDS = [
+  { speed: 1.0, hp: 1, pts: 1, bullet: 4.5, color: '#8d94b8', emoji: '👾' },
+  { speed: 1.9, hp: 1, pts: 2, bullet: 5.5, color: '#5fc4c9', emoji: '👻' },
+  { speed: 0.75, hp: 3, pts: 3, bullet: 4.5, color: '#8b6fc4', emoji: '🤖' },
+];
+
+function tankBuildMap() {
+  const N = TANK.N, c = new Uint8Array(N * N), code = { '.': 0, b: 1, s: 2, w: 3, g: 4 };
+  TANK_MAP.forEach((row, r) => [...row].forEach((ch, col) => {
+    for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) c[(r * 2 + dy) * N + col * 2 + dx] = code[ch] || 0;
+  }));
+  for (let x = 11; x <= 14; x++) c[23 * N + x] = 1; // 基地外圍的磚牆
+  for (const y of [24, 25]) { c[y * N + 11] = 1; c[y * N + 14] = 1; c[y * N + 12] = 5; c[y * N + 13] = 5; }
+  return c;
+}
+
+function hTank(H) {
+  const { N, U, S } = TANK, MAX = TANK.W - S;
+  const cells = tankBuildMap();
+  const n = H.players.length;
+  const P_SPAWN = [64, 128, 32, 160], E_SPAWN = [0, 96, 192];
+  const maxOn = Math.min(6, 2 + n);
+  let tanks = [], bullets = [], nextId = 1, tick = 0, over = false, baseAlive = true;
+  let toSpawn = 6 + 4 * n, spawnI = 0, spawnCd = 20, brk = [], fx = [];
+  const lives = {}, respawnAt = {}, ctrl = {};
+  H.players.forEach(s => { lives[s] = 3; respawnAt[s] = 0; ctrl[s] = { dir: -1, fire: false }; });
+  const startAt = Date.now();
+  const r1 = v => Math.round(v * 10) / 10;
+
+  const cellAt = (cx, cy) => (cx < 0 || cy < 0 || cx >= N || cy >= N ? -1 : cells[cy * N + cx]);
+  const overlap = (a, b, as, bs) => a.x < b.x + bs && b.x < a.x + as && a.y < b.y + bs && b.y < a.y + as;
+  function rectHits(x, y, w, h, fn) {
+    for (let cy = Math.floor(y / U); cy <= Math.floor((y + h - 0.01) / U); cy++)
+      for (let cx = Math.floor(x / U); cx <= Math.floor((x + w - 0.01) / U); cx++) fn(cx, cy, cellAt(cx, cy));
+  }
+  function freeFor(t, x, y) {
+    if (x < 0 || y < 0 || x > MAX || y > MAX) return false;
+    let ok = true;
+    rectHits(x, y, S, S, (cx, cy, v) => { if (v === 1 || v === 2 || v === 3 || v === 5) ok = false; });
+    if (!ok) return false;
+    // 已經重疊的坦克(例如剛出生)允許分開
+    return !tanks.some(o => o !== t && !o.dead && overlap({ x, y }, o, S, S) && !overlap(t, o, S, S));
+  }
+  const spawnFree = (x, y) => !tanks.some(o => !o.dead && overlap({ x, y }, o, S, S));
+  function addTank(o) {
+    const t = { id: nextId++, d: 0, bullet: null, cd: 0, shield: 0, stun: 0, hit: 0, ai: 0, blocked: false, dead: false, ...o };
+    tanks.push(t);
+    return t;
+  }
+  function spawnPlayer(s) {
+    const x = P_SPAWN[H.players.indexOf(s)];
+    if (!spawnFree(x, 192)) return;
+    addTank({ x, y: 192, slot: s, kind: -1, speed: 1.5, hp: 1, shield: 75, bspeed: 5 });
+  }
+  function move(t, d) {
+    if (d !== t.d) {
+      const vert = d % 2 === 0;
+      if (vert !== (t.d % 2 === 0)) {
+        // 轉彎時對齊格線,才鑽得進 16 寬的走道
+        const sx = vert ? Math.round(t.x / U) * U : t.x, sy = vert ? t.y : Math.round(t.y / U) * U;
+        if (freeFor(t, sx, sy)) { t.x = sx; t.y = sy; }
+      }
+      t.d = d;
+    }
+    const [dx, dy] = TDIR[d];
+    let moved = false;
+    for (let s = 0; s < t.speed - 1e-6; s += 0.5) {
+      const step = Math.min(0.5, t.speed - s);
+      const nx = t.x + dx * step, ny = t.y + dy * step;
+      if (!freeFor(t, nx, ny)) break;
+      t.x = nx; t.y = ny; moved = true;
+    }
+    return moved;
+  }
+  function fire(t) {
+    if (t.bullet || t.cd > 0) return;
+    const [dx, dy] = TDIR[t.d];
+    const b = { x: t.x + S / 2 - 2 + dx * 8, y: t.y + S / 2 - 2 + dy * 8, d: t.d, v: t.bspeed, owner: t, dead: false };
+    bullets.push(b);
+    t.bullet = b;
+    t.cd = t.slot != null ? 6 : 20;
+  }
+  function killBullet(b, pop) {
+    b.dead = true;
+    if (b.owner.bullet === b) b.owner.bullet = null;
+    if (pop) fx.push(['p', r1(b.x + 2), r1(b.y + 2)]);
+  }
+  function breakCell(cx, cy) {
+    if (cellAt(cx, cy) === 1) { cells[cy * N + cx] = 0; brk.push(cy * N + cx); }
+  }
+  function hitWalls(b) {
+    let hit = false, base = false;
+    const bricks = [];
+    rectHits(b.x, b.y, 4, 4, (cx, cy, v) => {
+      if (v === -1 || v === 2) hit = true;
+      else if (v === 1) { hit = true; bricks.push([cx, cy]); }
+      else if (v === 5) { hit = true; base = true; }
+    });
+    if (base && baseAlive) { baseAlive = false; fx.push(['b', 104, 200]); }
+    const vert = b.d % 2 === 0, mx = b.x + 2, my = b.y + 2;
+    bricks.forEach(([cx, cy]) => {
+      // 一發砲彈打掉約一個坦克寬的磚
+      if (vert) for (let x = Math.floor((mx - 7) / U); x <= Math.floor((mx + 7) / U); x++) breakCell(x, cy);
+      else for (let y = Math.floor((my - 7) / U); y <= Math.floor((my + 7) / U); y++) breakCell(cx, y);
+    });
+    return hit;
+  }
+  function killTank(t) {
+    t.dead = true;
+    fx.push(['x', r1(t.x + 8), r1(t.y + 8)]);
+    if (t.slot != null) { lives[t.slot]--; respawnAt[t.slot] = tick + 40; }
+  }
+  function hitTanks(b) {
+    const o = b.owner, fromP = o.slot != null;
+    for (const t of tanks) {
+      if (t === o || t.dead || !overlap(b, t, 4, S)) continue;
+      const toP = t.slot != null;
+      if (!fromP && !toP) continue; // 敵人不會打到自己人
+      if (fromP && toP) { if (!t.shield) t.stun = 40; return true; } // 打到隊友:暫停一下
+      if (fromP) {
+        t.hp--;
+        if (t.hp <= 0) { killTank(t); H.add(o.slot, ENEMY_KINDS[t.kind].pts); }
+        else t.hit = 4;
+        return true;
+      }
+      if (!t.shield) killTank(t);
+      return true;
+    }
+    return false;
+  }
+  function chooseDir(t) {
+    const r = Math.random();
+    if (r < 0.35) return 2;
+    if (r < 0.55) return t.x < 96 ? 1 : 3;
+    if (r < 0.7) {
+      const ps = tanks.filter(o => o.slot != null && !o.dead);
+      if (ps.length) {
+        const p = pick(ps), dx = p.x - t.x, dy = p.y - t.y;
+        return Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : 3) : (dy > 0 ? 2 : 0);
+      }
+    }
+    return rand(0, 3);
+  }
+  function ai(t) {
+    if (--t.ai <= 0 || t.blocked) { t.goal = chooseDir(t); t.ai = rand(15, 50); }
+    t.blocked = !move(t, t.goal == null ? 2 : t.goal);
+    if (!t.bullet && Math.random() < 0.035) fire(t);
+  }
+
+  const state = () => ({
+    t: 'g', e: 's',
+    tk: tanks.map(t => [t.id, r1(t.x), r1(t.y), t.d, t.slot == null ? -1 : t.slot, t.kind, (t.shield ? 1 : 0) | (t.stun ? 2 : 0) | (t.hit ? 4 : 0)]),
+    bl: bullets.map(b => [r1(b.x), r1(b.y)]),
+    br: brk, fx,
+    en: toSpawn + tanks.filter(t => t.slot == null).length,
+    lv: lives, base: baseAlive ? 1 : 0,
+  });
+
+  function checkEnd() {
+    let res = null;
+    if (!baseAlive) res = { win: false, reason: '基地被攻破了!' };
+    else if (toSpawn === 0 && !tanks.some(t => t.slot == null)) res = { win: true, reason: '打倒所有敵人,守住基地了!' };
+    else if (H.players.every(s => !H.online(s) || lives[s] <= 0) && !tanks.some(t => t.slot != null)) res = { win: false, reason: '大家都被打倒了…' };
+    else if (Date.now() - startAt > 300000) res = { win: false, reason: '時間到!' };
+    if (res) {
+      over = true;
+      H.bc({ t: 'g', e: 'over', ...res });
+      H.s.after(3000, H.finish);
+    }
+  }
+
+  function step() {
+    if (over) return;
+    tick++;
+    brk = [];
+    fx = [];
+    H.players.forEach(s => {
+      if (H.online(s) && lives[s] > 0 && tick >= respawnAt[s] && !tanks.some(t => t.slot === s)) spawnPlayer(s);
+    });
+    if (--spawnCd <= 0 && toSpawn > 0 && tanks.filter(t => t.slot == null).length < maxOn) {
+      const x = E_SPAWN[spawnI++ % 3];
+      if (spawnFree(x, 0)) {
+        const kind = Math.random() < 0.6 ? 0 : Math.random() < 0.6 ? 1 : 2, K = ENEMY_KINDS[kind];
+        addTank({ x, y: 0, d: 2, slot: null, kind, speed: K.speed, hp: K.hp, bspeed: K.bullet });
+        toSpawn--;
+        spawnCd = 55;
+      } else spawnCd = 10;
+    }
+    for (const t of tanks) {
+      if (t.cd > 0) t.cd--;
+      if (t.shield > 0) t.shield--;
+      if (t.hit > 0) t.hit--;
+      if (t.slot == null) { ai(t); continue; }
+      if (t.stun > 0) { t.stun--; continue; }
+      const c = ctrl[t.slot];
+      if (c.dir >= 0) move(t, c.dir);
+      if (c.fire) fire(t);
+    }
+    for (const b of bullets) {
+      if (b.dead) continue;
+      const k = Math.ceil(b.v / 2), st = b.v / k, [dx, dy] = TDIR[b.d];
+      for (let i = 0; i < k; i++) {
+        b.x += dx * st;
+        b.y += dy * st;
+        if (hitWalls(b)) { killBullet(b, true); break; }
+        if (hitTanks(b)) { killBullet(b, false); break; }
+      }
+    }
+    for (let i = 0; i < bullets.length; i++) for (let j = i + 1; j < bullets.length; j++) {
+      const a = bullets[i], c = bullets[j];
+      if (!a.dead && !c.dead && a.owner !== c.owner && overlap(a, c, 4, 4)) { killBullet(a, true); killBullet(c, false); }
+    }
+    bullets = bullets.filter(b => !b.dead);
+    tanks = tanks.filter(t => !t.dead);
+    H.bc(state());
+    checkEnd();
+  }
+
+  H.bc({ t: 'g', e: 'map', cells: cells.join('') });
+  H.players.forEach(spawnPlayer);
+  H.bc(state());
+
+  return {
+    start() { H.s.every(TANK.TICK, step); },
+    input(slot, m) {
+      if (m.e === 'dir') ctrl[slot].dir = [0, 1, 2, 3].includes(m.d) ? m.d : -1;
+      else if (m.e === 'f') ctrl[slot].fire = !!m.on;
+    },
+    presence() {
+      H.players.forEach(s => {
+        if (H.online(s)) return;
+        lives[s] = 0;
+        tanks.forEach(t => { if (t.slot === s) t.dead = true; });
+      });
+      tanks = tanks.filter(t => !t.dead);
+    },
+  };
+}
+
+function vTank(V) {
+  const sin = $('.sin', V.root);
+  sin.innerHTML = '<div class="twrap"><canvas class="tcv"></canvas><div class="tov"></div></div><div class="hud"></div>';
+  const wrap = $('.twrap', sin), cv = $('.tcv', sin), ov = $('.tov', sin), hud = $('.hud', sin);
+  const ctx = cv.getContext('2d');
+  V.pad.innerHTML = `
+    <div class="dpad">${['up', 'right', 'down', 'left'].map((c, i) => `<div class="dp ${c}" data-d="${i}">${'▲▶▼◀'[i]}</div>`).join('')}<div class="dpc"></div></div>
+    <button class="firebtn">💥<span>發射</span></button>`;
+  const dpad = $('.dpad', V.pad), fireBtn = $('.firebtn', V.pad);
+  const stageEl = $('.stage', V.root);
+
+  let cells = null, prev = new Map(), cur = new Map(), curAt = 0, bl = [], st = null, hudTxt = '';
+  const fxs = [];
+
+  /* 依舞台大小調整成正方形畫布 */
+  function fit() {
+    // 先決定地圖大小,剩下的高度都給操作區
+    const top = $('.topbar', V.root).offsetHeight;
+    const h = V.root.clientHeight - top - V.root.clientHeight * 0.26 - 50 - hud.offsetHeight;
+    const size = Math.max(100, Math.floor(Math.min(stageEl.clientWidth - 12, h)));
+    wrap.style.width = wrap.style.height = size + 'px';
+  }
+  const ro = new ResizeObserver(fit);
+  ro.observe(V.root);
+  fit();
+
+  V.countdown = n => {
+    ov.innerHTML = n > 0 ? `<div class="big pulse">${n}</div>` : '<div class="big">出發!</div>';
+    ov.classList.add('on');
+    if (n > 0) SFX.tick();
+    else { SFX.go(); setTimeout(() => ov.classList.remove('on'), 700); }
+  };
+
+  /* ---- 操作:方向鍵(可滑動)+ 發射鈕 ---- */
+  let dir = -1, dpId = null;
+  function setDir(d) {
+    if (d === dir) return;
+    dir = d;
+    $$('.dp', dpad).forEach(x => x.classList.toggle('on', +x.dataset.d === d));
+    V.send({ e: 'dir', d });
+  }
+  function dirFrom(e) {
+    const r = dpad.getBoundingClientRect();
+    const dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+    if (Math.hypot(dx, dy) < r.width * 0.12) return setDir(-1);
+    setDir(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : 3) : (dy > 0 ? 2 : 0));
+  }
+  dpad.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    dpId = e.pointerId;
+    try { dpad.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    dirFrom(e);
+  });
+  dpad.addEventListener('pointermove', e => { if (e.pointerId === dpId) dirFrom(e); });
+  const dpEnd = e => { if (e.pointerId === dpId) { dpId = null; setDir(-1); } };
+  dpad.addEventListener('pointerup', dpEnd);
+  dpad.addEventListener('pointercancel', dpEnd);
+
+  let firing = false;
+  function setFire(on) {
+    if (on === firing) return;
+    firing = on;
+    fireBtn.classList.toggle('on', on);
+    V.send({ e: 'f', on });
+    if (on) SFX.tap();
+  }
+  fireBtn.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    try { fireBtn.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    setFire(true);
+  });
+  fireBtn.addEventListener('pointerup', () => setFire(false));
+  fireBtn.addEventListener('pointercancel', () => setFire(false));
+
+  /* 電腦也能玩:方向鍵 + 空白鍵 */
+  const KEYS = { ArrowUp: 0, ArrowRight: 1, ArrowDown: 2, ArrowLeft: 3, w: 0, d: 1, s: 2, a: 3 };
+  const onKey = e => {
+    if (!cv.isConnected) { removeEventListener('keydown', onKey); removeEventListener('keyup', onKey); return; }
+    const down = e.type === 'keydown';
+    if (e.key === ' ') { e.preventDefault(); setFire(down); }
+    else if (e.key in KEYS) { e.preventDefault(); if (down) setDir(KEYS[e.key]); else if (dir === KEYS[e.key]) setDir(-1); }
+  };
+  addEventListener('keydown', onKey);
+  addEventListener('keyup', onKey);
+
+  /* ---- 繪圖 ---- */
+  let k = 1;
+  function emoji(ch, x, y, size) {
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.font = `${Math.round(size * k)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(ch, x * k, y * k);
+    ctx.restore();
+  }
+  function rr(x, y, w, h, r) {
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h);
+    ctx.fill();
+  }
+  function drawCell(v, x, y, now) {
+    if (v === 1) {
+      ctx.fillStyle = '#eba36f';
+      ctx.fillRect(x, y, 8, 8);
+      ctx.fillStyle = '#c47a4a';
+      const odd = (y / 8) % 2;
+      ctx.fillRect(x, y + 3.6, 8, 0.8);
+      ctx.fillRect(x + (odd ? 2 : 5), y, 0.8, 3.6);
+      ctx.fillRect(x + (odd ? 5 : 2), y + 4.4, 0.8, 3.6);
+    } else if (v === 2) {
+      ctx.fillStyle = '#a9b4c9';
+      ctx.fillRect(x, y, 8, 8);
+      ctx.fillStyle = '#e4eaf4';
+      ctx.fillRect(x + 1.5, y + 1.5, 5, 5);
+    } else if (v === 3) {
+      ctx.fillStyle = '#4ea8e6';
+      ctx.fillRect(x, y, 8, 8);
+      ctx.fillStyle = '#a5d8ff';
+      ctx.fillRect(x + 1 + Math.sin(now / 400 + x) * 1.2, y + 2.5, 4, 0.9);
+      ctx.fillRect(x + 3 + Math.cos(now / 400 + y) * 1.2, y + 5.5, 3, 0.9);
+    }
+  }
+  function drawTank(x, y, d, color, face, flags, isMe, now) {
+    ctx.save();
+    ctx.translate(x + 8, y + 8);
+    if ((flags & 2) && Math.floor(now / 120) % 2) ctx.globalAlpha = 0.35;
+    if (isMe) {
+      ctx.fillStyle = 'rgba(255,230,90,.35)';
+      ctx.beginPath();
+      ctx.arc(0, 0, 11, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.rotate(d * Math.PI / 2);
+    ctx.fillStyle = '#3d4258';
+    rr(-8, -7.5, 4, 15, 1.5);
+    rr(4, -7.5, 4, 15, 1.5);
+    ctx.fillStyle = '#6b7190';
+    for (let i = -6; i < 7; i += 3) { ctx.fillRect(-7.5, i, 3, 0.7); ctx.fillRect(4.5, i, 3, 0.7); }
+    ctx.fillStyle = (flags & 4) ? '#ffffff' : color;
+    rr(-5, -6, 10, 12, 3);
+    ctx.fillStyle = '#4a4f68';
+    rr(-1.3, -9.5, 2.6, 7, 1);
+    ctx.restore();
+    emoji(face, x + 8, y + 8.6, 8.5);
+    if (flags & 1) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255,255,255,.85)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([2, 2]);
+      ctx.lineDashOffset = -now / 60;
+      ctx.beginPath();
+      ctx.arc(x + 8, y + 8, 11, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+  function draw() {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const px = Math.round(cv.clientWidth * dpr);
+    if (px && cv.width !== px) { cv.width = cv.height = px; }
+    k = cv.width / TANK.W;
+    ctx.setTransform(k, 0, 0, k, 0, 0);
+    ctx.fillStyle = '#2f3550';
+    ctx.fillRect(0, 0, TANK.W, TANK.W);
+    if (!cells) return;
+    const now = performance.now();
+    for (let i = 0; i < cells.length; i++) {
+      const v = cells[i];
+      if (v && v !== 4 && v !== 5) drawCell(v, (i % TANK.N) * 8, Math.floor(i / TANK.N) * 8, now);
+    }
+    emoji(st && !st.base ? '💀' : '🦅', 104, 200.5, 14);
+
+    const a = Math.min(1, (now - curAt) / TANK.TICK);
+    cur.forEach(t => {
+      const [id, x, y, d, slot, kind, flags] = t;
+      const p = prev.get(id);
+      let dx = x, dy = y;
+      if (p && Math.abs(p[1] - x) + Math.abs(p[2] - y) < 12) { dx = p[1] + (x - p[1]) * a; dy = p[2] + (y - p[2]) * a; }
+      if (slot >= 0) drawTank(dx, dy, d, PLAYERS[slot].color, PLAYERS[slot].emoji, flags, slot === V.me, now);
+      else drawTank(dx, dy, d, ENEMY_KINDS[kind].color, ENEMY_KINDS[kind].emoji, flags, false, now);
+    });
+    ctx.fillStyle = '#fff6b0';
+    ctx.strokeStyle = '#e0a400';
+    ctx.lineWidth = 0.6;
+    bl.forEach(([x, y]) => { ctx.beginPath(); ctx.arc(x + 2, y + 2, 2, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); });
+
+    for (let i = 0; i < cells.length; i++) {
+      if (cells[i] !== 4) continue;
+      const x = (i % TANK.N) * 8, y = Math.floor(i / TANK.N) * 8;
+      ctx.fillStyle = '#4fbf73';
+      ctx.beginPath();
+      ctx.arc(x + 4, y + 4, 4.6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#7fdc98';
+      ctx.beginPath();
+      ctx.arc(x + 3, y + 3, 1.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    for (let i = fxs.length - 1; i >= 0; i--) {
+      const f = fxs[i], age = now - f.t;
+      const life = f.k === 'p' ? 220 : f.k === 'x' ? 450 : 900;
+      if (age > life) { fxs.splice(i, 1); continue; }
+      if (f.k === 'p') {
+        ctx.fillStyle = `rgba(255,200,80,${1 - age / life})`;
+        ctx.beginPath();
+        ctx.arc(f.x, f.y, 2 + age / 40, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.save();
+        ctx.globalAlpha = 1 - age / life;
+        emoji('💥', f.x, f.y, (f.k === 'x' ? 12 : 22) + age / 30);
+        ctx.restore();
+      }
+    }
+  }
+  const loop = () => {
+    if (!cv.isConnected) { ro.disconnect(); return; }
+    draw();
+    requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
+
+  function updateHud() {
+    const meAlive = st.tk.some(t => t[4] === V.me);
+    const parts = V.players.map(s => `<span style="--c:${PLAYERS[s].color}">${PLAYERS[s].emoji}❤️${Math.max(0, st.lv[s] || 0)}</span>`);
+    let txt = `<span>👾 ×${st.en}</span>${parts.join('')}`;
+    if (!meAlive && (st.lv[V.me] || 0) <= 0) txt += '<span class="dead">👻 你陣亡了,幫隊友加油!</span>';
+    if (txt !== hudTxt) { hudTxt = txt; hud.innerHTML = txt; fit(); }
+  }
+
+  V.on = m => {
+    if (m.e === 'map') {
+      cells = Uint8Array.from(m.cells, ch => +ch);
+    } else if (m.e === 's') {
+      prev = cur;
+      cur = new Map(m.tk.map(t => [t[0], t]));
+      curAt = performance.now();
+      bl = m.bl;
+      st = m;
+      if (cells) m.br.forEach(i => { cells[i] = 0; });
+      m.fx.forEach(f => {
+        fxs.push({ k: f[0], x: f[1], y: f[2], t: performance.now() });
+        if (f[0] !== 'p') { beep(110, 0.3, 'sawtooth', 0.07); beep(60, 0.4, 'square', 0.05, 0.05); }
+      });
+      updateHud();
+    } else if (m.e === 'over') {
+      ov.innerHTML = `<div class="big">${m.win ? '🏆' : '💔'}</div><div>${m.reason}</div>`;
+      ov.classList.add('on');
+      if (m.win) SFX.win(); else SFX.bad();
+      setDir(-1);
+      setFire(false);
     }
   };
 }
