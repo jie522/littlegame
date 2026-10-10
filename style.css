@@ -207,6 +207,14 @@ button:disabled { cursor: not-allowed; }
 .gcard b { font-size: 1.1rem; }
 .gdesc { font-size: .8rem; opacity: .75; }
 
+.room .solo-t { font-size: 1.7rem; letter-spacing: 2px; padding-left: 0; white-space: nowrap; margin: 4px 0; }
+.botbar { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.brow { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.mini:disabled { opacity: .4; }
+.lvl { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: .9rem; }
+.lv { padding: 4px 12px; border-radius: 999px; background: #eef4fc; border: 2px solid #cfe0f7; font-weight: 800; }
+.lv.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.solo { margin-top: 10px; }
 .waiting p { font-weight: 700; margin-top: 6px; }
 .spin { font-size: 3rem; display: inline-block; animation: wiggle 1.2s ease-in-out infinite; }
 .spin-s { display: inline-block; animation: wiggle 1.2s ease-in-out infinite; }

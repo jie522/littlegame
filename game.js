@@ -146,6 +146,8 @@ const NET = {
   players: [],       // [{slot, name, online}]
   stars: [0, 0, 0, 0],
   phase: 'lobby',    // host: lobby | intro | game | results
+  solo: false,       // 單人模式(不連線,只有房主 + 電腦)
+  level: 1,          // 電腦強度 0 簡單 / 1 普通 / 2 困難
   introG: null,
   game: null,        // host 遊戲進行中的狀態
   hostT: null,
@@ -153,7 +155,7 @@ const NET = {
 
 const pinfo = slot => {
   const p = NET.players.find(x => x.slot === slot);
-  return { ...PLAYERS[slot], name: p ? p.name : PLAYERS[slot].name, online: p ? p.online : false };
+  return { ...PLAYERS[slot], name: p ? p.name : PLAYERS[slot].name, online: p ? p.online : false, bot: !!(p && p.bot) };
 };
 const myName = () => (store.get('name', '') || '').trim().slice(0, 8);
 
@@ -163,12 +165,41 @@ function leaveRoom(msg) {
   if (old.hostT) old.hostT.stop();
   Object.assign(NET, {
     role: null, peer: null, code: null, conn: null, conns: new Map(), mySlot: 0,
-    players: [], stars: [0, 0, 0, 0], phase: 'lobby', introG: null, game: null, hostT: null,
+    players: [], stars: [0, 0, 0, 0], phase: 'lobby', introG: null, game: null, hostT: null, solo: false,
   });
   releaseWake();
   try { conns.forEach(c => c.close()); if (conn) conn.close(); if (peer) peer.destroy(); } catch (e) { /* ignore */ }
   home();
   if (msg) toast(msg);
+}
+
+/* =========================================================
+   電腦玩家:由房主手機扮演
+   ========================================================= */
+const BOT_LEVELS = ['簡單', '普通', '困難'];
+const botSkill = () => [{ sk: 0.6, spd: 1.5 }, { sk: 0.8, spd: 1 }, { sk: 0.95, spd: 0.7 }][NET.level];
+
+function addBot() {
+  if (NET.players.length >= 4) return;
+  const used = new Set(NET.players.map(p => p.slot));
+  const slot = [1, 2, 3].find(s => !used.has(s));
+  if (slot == null) return;
+  NET.players.push({ slot, name: '🤖' + PLAYERS[slot].name, online: true, bot: true });
+  NET.players.sort((a, b) => a.slot - b.slot);
+  NET.stars[slot] = 0;
+}
+function removeBot() {
+  const b = NET.players.filter(p => p.bot).pop();
+  if (b) NET.players = NET.players.filter(p => p !== b);
+}
+
+function createSolo() {
+  resetView();
+  Object.assign(NET, { role: 'host', peer: null, code: '單人', solo: true, mySlot: 0, phase: 'lobby', stars: [0, 0, 0, 0] });
+  NET.players = [{ slot: 0, name: myName() || PLAYERS[0].name, online: true }];
+  addBot();
+  requestWake();
+  hostToLobby();
 }
 
 /* ---- 房主 ---- */
@@ -212,7 +243,11 @@ function onClientConn(conn) {
     if (m.t === 'hello') {
       if (slot !== null) return;
       const used = new Set(NET.players.filter(p => p.online).map(p => p.slot));
-      const free = [1, 2, 3].find(s => !used.has(s));
+      let free = [1, 2, 3].find(s => !used.has(s));
+      if (free == null) { // 滿了的話,讓真人把電腦的位置換掉
+        const b = NET.players.filter(p => p.bot).pop();
+        if (b) { NET.players = NET.players.filter(p => p !== b); free = b.slot; }
+      }
       if (free == null) {
         conn.send({ t: 'full' });
         setTimeout(() => conn.close(), 600);
@@ -398,7 +433,8 @@ function home() {
       <input class="field" id="name" maxlength="8" placeholder="輸入暱稱(可不填)" value="${esc(myName())}">
     </section>
     <section class="panel">
-      <button class="btn wide" id="create">🏠 建立房間</button>
+      <button class="btn wide" id="create">🏠 建立房間(找朋友玩)</button>
+      <button class="btn wide alt solo" id="solo">🤖 單人玩(對電腦)</button>
       <div class="or"><span>或</span></div>
       <div class="join">
         <input class="field" id="code" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="4 位數房號" value="${esc(roomParam)}">
@@ -417,6 +453,7 @@ function home() {
   const saveName = () => store.set('name', nameIn.value.trim().slice(0, 8));
   nameIn.addEventListener('change', saveName);
   $('#create', h).addEventListener('click', () => { saveName(); createRoom(); });
+  $('#solo', h).addEventListener('click', () => { saveName(); createSolo(); });
   $('#join', h).addEventListener('click', () => { saveName(); joinRoom(codeIn.value); });
   codeIn.addEventListener('keydown', e => { if (e.key === 'Enter') { saveName(); joinRoom(codeIn.value); } });
   $('#mute', h).addEventListener('click', () => { S.muted = !S.muted; store.set('muted', S.muted); home(); });
@@ -433,7 +470,7 @@ function showWait(msg) {
 function playerChipsHTML(withStars) {
   return NET.players.map(p => {
     const P = PLAYERS[p.slot];
-    const tags = (p.slot === 0 ? '<span class="ptag">房主</span>' : '') + (p.slot === NET.mySlot ? '<span class="ptag me">我</span>' : '');
+    const tags = (p.bot ? '<span class="ptag">電腦</span>' : '') + (p.slot === 0 ? '<span class="ptag">房主</span>' : '') + (p.slot === NET.mySlot ? '<span class="ptag me">我</span>' : '');
     return `<div class="pchip${p.online ? '' : ' off'}" style="--c:${P.color};--soft:${P.soft}">
       <span class="pemo">${P.emoji}</span><span class="pname">${esc(p.name)}</span>${tags}
       ${withStars ? `<span class="pstar">⭐ ${NET.stars[p.slot] || 0}</span>` : ''}</div>`;
@@ -449,15 +486,20 @@ function lobbyView() {
   const d = el('div', 'screen lobby');
   d.innerHTML = `
     <section class="panel room">
-      <div class="small">房號</div>
+      ${NET.solo ? '<div class="code solo-t">🤖 單人模式</div>' : `<div class="small">房號</div>
       <div class="code">${esc(NET.code)}</div>
-      <button class="mini" id="share">📤 邀請朋友</button>
+      <button class="mini" id="share">📤 邀請朋友</button>`}
     </section>
     <section class="panel">
       <h2>玩家 ${NET.players.length} / 4</h2>
       <div class="players">${playerChipsHTML(true)}</div>
-      ${NET.players.length < 4 ? '<p class="tip">等朋友輸入房號加入… 🐾</p>' : ''}
+      ${NET.players.length < 4 && !NET.solo ? '<p class="tip">等朋友輸入房號加入… 🐾</p>' : ''}
     </section>
+    ${isHost ? `<section class="panel botbar">
+      <div class="brow"><button class="mini" id="addbot" ${NET.players.length >= 4 ? 'disabled' : ''}>🤖 加入電腦</button>
+      <button class="mini" id="rmbot" ${NET.players.some(p => p.bot) ? '' : 'disabled'}>➖ 移除電腦</button></div>
+      ${NET.players.some(p => p.bot) ? `<div class="lvl">電腦強度 ${BOT_LEVELS.map((n, i) => `<button class="lv${i === NET.level ? ' on' : ''}" data-l="${i}">${n}</button>`).join('')}</div>` : ''}
+    </section>` : ''}
     ${isHost ? `
       <h2 class="sect">${enough ? '選一個遊戲開始吧!' : '至少 2 人才能開始喔'}</h2>
       <section class="games">${GAMES.map(g => `
@@ -470,7 +512,12 @@ function lobbyView() {
     <footer class="foot"><button class="mini" id="leave">🚪 離開房間</button></footer>`;
   app.appendChild(d);
 
-  $('#share', d).addEventListener('click', shareRoom);
+  const sh = $('#share', d);
+  if (sh) sh.addEventListener('click', shareRoom);
+  const ab = $('#addbot', d), rb = $('#rmbot', d);
+  if (ab) ab.addEventListener('click', () => { addBot(); hostToLobby(); });
+  if (rb) rb.addEventListener('click', () => { removeBot(); hostToLobby(); });
+  $$('.lv', d).forEach(b => b.addEventListener('click', () => { NET.level = +b.dataset.l; hostToLobby(); }));
   $('#leave', d).addEventListener('click', () => {
     if (!isHost || confirm('你是房主,離開後房間會解散,確定嗎?')) leaveRoom();
   });
@@ -685,7 +732,8 @@ function hostStartGame(g) {
   const players = NET.players.map(p => p.slot);
   const H = { g, s: T, players, scores: {}, done: false };
   players.forEach(s => { H.scores[s] = 0; });
-  H.bc = hostBroadcast;
+  H.bs = {};
+  H.bc = m => { hostBroadcast(m); botsHear(H, m); };
   H.online = s => { const p = NET.players.find(x => x.slot === s); return !!(p && p.online); };
   H.active = () => H.players.filter(H.online);
   H.add = (slot, v) => {
@@ -1962,6 +2010,170 @@ function vTank(V) {
     }
   };
 }
+
+/* =========================================================
+   電腦玩家的行為:聽到房主的廣播,就像真人一樣送出操作
+   ========================================================= */
+function botsHear(H, m) {
+  const fn = BOTS[H.g.id];
+  if (!fn) return;
+  H.players.forEach(s => {
+    const p = NET.players.find(x => x.slot === s);
+    if (p && p.bot) fn(H, s, m, botSkill());
+  });
+}
+function botSend(H, s, o) {
+  if (H.logic && !H.done && NET.game === H) H.logic.input(s, { t: 'in', ...o });
+}
+
+const BOTS = {
+  reaction(H, s, m, k) {
+    if (m.t !== 'g') return;
+    const st = H.bs[s] || (H.bs[s] = { phase: 'idle', round: 0 });
+    const slip = (1 - k.sk) * 0.25;
+    if (m.e === 'wait') {
+      const first = st.round !== m.round;
+      st.round = m.round;
+      st.phase = 'wait';
+      if (first && Math.random() < slip) {
+        const r = m.round;
+        H.s.after(rand(600, 1400), () => { if (st.round === r && st.phase === 'wait') botSend(H, s, { e: 'early' }); });
+      }
+    } else if (m.e === 'bomb') {
+      st.phase = 'bomb';
+      const r = st.round;
+      if (Math.random() < slip) H.s.after(rand(300, 800), () => { if (st.round === r && st.phase === 'bomb') botSend(H, s, { e: 'bomb' }); });
+    } else if (m.e === 'go') {
+      st.phase = 'go';
+      const rt = Math.round(rand(250, 520) * k.spd + Math.random() * 120);
+      H.s.after(rt, () => botSend(H, s, { e: 'rt', rt }));
+    } else st.phase = 'done';
+  },
+
+  tap(H, s, m) {
+    if (m.t !== 'g' || m.e !== 'start') return;
+    const rate = [4.5, 6, 8][NET.level] * (0.9 + Math.random() * 0.2);
+    const t0 = Date.now() + 2600;
+    const iv = H.s.every(250, () => {
+      const el = (Date.now() - t0) / 1000;
+      if (el < 0) return;
+      const fin = el >= m.T;
+      botSend(H, s, { e: 'count', n: Math.floor(Math.min(el, m.T) * rate), final: fin });
+      if (fin) clearInterval(iv);
+    });
+  },
+
+  math(H, s, m, k) {
+    if (m.t !== 'g' || m.e !== 'q') return;
+    const mm = m.text.match(/(\d+) (\S) (\d+)/);
+    const a = +mm[1], b = +mm[3], op = mm[2];
+    const ans = op === '+' ? a + b : op === '×' ? a * b : a - b;
+    const v = Math.random() < k.sk ? ans : pick(m.opts.filter(x => x !== ans));
+    const rt = Math.round(rand(1800, 4800) * k.spd + m.round * 150);
+    H.s.after(rt, () => botSend(H, s, { e: 'ans', v, rt, round: m.round }));
+  },
+
+  color(H, s, m, k) {
+    if (m.t !== 'g' || m.e !== 'p') return;
+    const match = COLORS.find(c => c.n === m.w).c === m.c;
+    if (!(match ? Math.random() < 0.5 + k.sk / 2 : Math.random() < (1 - k.sk) * 0.3)) return;
+    const rt = Math.round(rand(450, 1100) * k.spd);
+    H.s.after(rt, () => botSend(H, s, { e: 'tap', i: m.i, rt }));
+  },
+
+  memory(H, s, m, k) {
+    if (m.t !== 'g' || m.e !== 'board') return;
+    const st = H.bs[s] || (H.bs[s] = { seen: {} });
+    m.cells.forEach((c, i) => {
+      if (c.m != null) delete st.seen[i];
+      else if (c.f && !(i in st.seen) && Math.random() < k.sk + 0.1) st.seen[i] = c.f; // 偶爾「忘記」
+    });
+    if (m.turn !== s) return;
+    const open = m.cells.map((c, i) => (c.f && c.m == null ? i : -1)).filter(i => i >= 0);
+    if (open.length >= 2) return;
+    clearTimeout(st.timer);
+    st.timer = H.s.after(rand(700, 1300) * k.spd, () => {
+      let idx = -1;
+      const known = Object.keys(st.seen).map(Number).filter(j => !m.cells[j].f);
+      if (open.length === 1) {
+        const face = m.cells[open[0]].f;
+        const j = known.find(x => st.seen[x] === face);
+        if (j != null) idx = j;
+      } else {
+        const byFace = {};
+        known.forEach(j => { (byFace[st.seen[j]] = byFace[st.seen[j]] || []).push(j); });
+        const pair = Object.values(byFace).find(a => a.length >= 2);
+        if (pair) idx = pair[0];
+      }
+      if (idx < 0) {
+        let c = m.cells.map((x, i) => (!x.f && x.m == null && !(i in st.seen) ? i : -1)).filter(i => i >= 0);
+        if (!c.length) c = m.cells.map((x, i) => (!x.f && x.m == null ? i : -1)).filter(i => i >= 0);
+        if (!c.length) return;
+        idx = pick(c);
+      }
+      botSend(H, s, { e: 'flip', i: idx });
+    });
+  },
+
+  chess(H, s, m, k) {
+    if (m.t !== 'g' || m.e !== 'board' || m.turn !== s) return;
+    H.s.after(rand(900, 1700) * k.spd, () => {
+      const cells = m.cells, col = m.color[s];
+      const hid = cells.map((x, i) => (x && x.h ? i : -1)).filter(i => i >= 0);
+      const act = o => botSend(H, s, o);
+      if (!col) return act({ e: 'flip', i: pick(hid) });
+      const moves = [];
+      cells.forEach((x, i) => { if (x && !x.h && x.c === col) chessTargets(cells, i).forEach(t => moves.push([i, t])); });
+      const caps = moves.filter(([, t]) => cells[t]).sort((a, b) => CHESS_RANK[cells[b[1]].k] - CHESS_RANK[cells[a[1]].k]);
+      if (caps.length && Math.random() < 0.5 + k.sk / 2) {
+        const [f, t] = NET.level === 0 && caps.length > 1 ? pick(caps.slice(0, 2)) : caps[0];
+        return act({ e: 'move', from: f, to: t });
+      }
+      if (hid.length && (Math.random() < 0.55 || !moves.length)) return act({ e: 'flip', i: pick(hid) });
+      if (!moves.length) return;
+      if (Math.random() > k.sk) { const [f, t] = pick(moves); return act({ e: 'move', from: f, to: t }); }
+      // 往打得贏的敵棋靠近,並避開會被吃掉的位置
+      const enemies = [];
+      cells.forEach((x, i) => { if (x && !x.h && x.c !== col) enemies.push([i, x.k]); });
+      const dist = (a, b) => Math.abs(Math.floor(a / CHESS_COLS) - Math.floor(b / CHESS_COLS)) + Math.abs((a % CHESS_COLS) - (b % CHESS_COLS));
+      const beats = (a, d) => (a === 'K' && d === 'P' ? false : a === 'P' && d === 'K' ? true : CHESS_RANK[a] >= CHESS_RANK[d]);
+      let best = null;
+      moves.forEach(([f, t]) => {
+        const me = cells[f].k;
+        let sc = 6 + Math.random();
+        enemies.forEach(([ei, ek]) => {
+          if (beats(me, ek)) sc = Math.min(sc, dist(t, ei) + Math.random());
+          if (dist(t, ei) === 1 && beats(ek, me)) sc += 4;
+        });
+        if (!best || sc < best.sc) best = { sc, f, t };
+      });
+      act({ e: 'move', from: best.f, to: best.t });
+    });
+  },
+
+  tank(H, s, m) {
+    if (m.t !== 'g' || m.e !== 's') return;
+    const st = H.bs[s] || (H.bs[s] = { t: 0, dir: -1, fire: false });
+    const now = Date.now();
+    if (now - st.t < [500, 350, 250][NET.level]) return;
+    st.t = now;
+    const me = m.tk.find(t => t[4] === s);
+    if (!me) return;
+    const x = me[1], y = me[2];
+    let dir = rand(0, 3), fire = true;
+    const en = m.tk.filter(t => t[4] < 0).sort((a, b) => Math.hypot(a[1] - x, a[2] - y) - Math.hypot(b[1] - x, b[2] - y));
+    if (en.length) {
+      const dx = en[0][1] - x, dy = en[0][2] - y;
+      if (Math.abs(dx) < 10) dir = dy > 0 ? 2 : 0;
+      else if (Math.abs(dy) < 10) dir = dx > 0 ? 1 : 3;
+      else dir = Math.abs(dx) < Math.abs(dy) ? (dx > 0 ? 1 : 3) : (dy > 0 ? 2 : 0);
+    }
+    if (Math.random() > botSkill().sk) dir = rand(0, 3);
+    if (dir === 2 && x >= 80 && x <= 128 && y >= 100) fire = false; // 別打到自己的基地
+    if (dir !== st.dir) { st.dir = dir; botSend(H, s, { e: 'dir', d: dir }); }
+    if (fire !== st.fire) { st.fire = fire; botSend(H, s, { e: 'f', on: fire }); }
+  },
+};
 
 /* ---------- 防止雙指縮放 / 長按選單 ---------- */
 document.addEventListener('gesturestart', e => e.preventDefault());
