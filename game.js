@@ -1787,8 +1787,13 @@ function vTank(V) {
 
   /* 依舞台大小調整成正方形畫布 */
   function fit() {
-    // 先決定地圖大小,剩下的高度都給操作區
     const top = $('.topbar', V.root).offsetHeight;
+    if (hidden) { // 隱藏按鈕:畫面撐滿整個螢幕,鏡頭放大並跟著自己的坦克
+      wrap.style.width = Math.max(100, V.root.clientWidth - 24) + 'px';
+      wrap.style.height = Math.max(100, V.root.clientHeight - top - 116 - hud.offsetHeight) + 'px';
+      return;
+    }
+    // 先決定地圖大小,剩下的高度都給操作區
     const h = V.root.clientHeight - top - V.root.clientHeight * (hidden ? 0.16 : 0.26) - 50 - hud.offsetHeight;
     const size = Math.max(100, Math.floor(Math.min(stageEl.clientWidth - 12, h)));
     wrap.style.width = wrap.style.height = size + 'px';
@@ -1887,14 +1892,15 @@ function vTank(V) {
   addEventListener('keyup', onKey);
 
   /* ---- 繪圖 ---- */
-  let k = 1;
+  let sc = 1, ox = 0, oy = 0, camX = 104, camY = 104;
+  const ZOOM = 1.7;
   function emoji(ch, x, y, size) {
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.font = `${Math.round(size * k)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+    ctx.font = `${Math.round(size * sc)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(ch, x * k, y * k);
+    ctx.fillText(ch, x * sc + ox, y * sc + oy);
     ctx.restore();
   }
   function rr(x, y, w, h, r) {
@@ -1960,14 +1966,31 @@ function vTank(V) {
   }
   function draw() {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
-    const px = Math.round(cv.clientWidth * dpr);
-    if (px && cv.width !== px) { cv.width = cv.height = px; }
-    k = cv.width / TANK.W;
-    ctx.setTransform(k, 0, 0, k, 0, 0);
+    const pw = Math.round(cv.clientWidth * dpr), ph = Math.round(cv.clientHeight * dpr);
+    if (pw && ph && (cv.width !== pw || cv.height !== ph)) { cv.width = pw; cv.height = ph; }
+    const now = performance.now();
+    if (hidden) {
+      sc = cv.width / (TANK.W / ZOOM);
+      const mine = cur.get([...cur.keys()].find(id => cur.get(id)[4] === V.me));
+      const tx = mine ? mine[1] + 8 : 104, ty = mine ? mine[2] + 8 : 140;
+      camX += (tx - camX) * 0.25;
+      camY += (ty - camY) * 0.25;
+      const vw = cv.width / sc, vh = cv.height / sc;
+      const cx = vw >= TANK.W ? TANK.W / 2 : Math.max(vw / 2, Math.min(TANK.W - vw / 2, camX));
+      const cy = vh >= TANK.W ? TANK.W / 2 : Math.max(vh / 2, Math.min(TANK.W - vh / 2, camY));
+      ox = cv.width / 2 - cx * sc;
+      oy = cv.height / 2 - cy * sc;
+    } else {
+      sc = cv.width / TANK.W;
+      ox = oy = 0;
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#1e2338';
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.setTransform(sc, 0, 0, sc, ox, oy);
     ctx.fillStyle = '#2f3550';
     ctx.fillRect(0, 0, TANK.W, TANK.W);
     if (!cells) return;
-    const now = performance.now();
     for (let i = 0; i < cells.length; i++) {
       const v = cells[i];
       if (v && v !== 4 && v !== 5) drawCell(v, (i % TANK.N) * 8, Math.floor(i / TANK.N) * 8, now);

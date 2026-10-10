@@ -615,7 +615,8 @@ button:disabled { cursor: not-allowed; }
 .zhint { display: none; }
 .play-tank.hideCtl { touch-action: none; }
 .hideCtl .dpad, .hideCtl .firebtn { opacity: 0; pointer-events: none; }
-.hideCtl .pad { min-height: 0; flex: 0 0 auto; height: 16%; background: transparent; border-color: transparent; box-shadow: none; }
+.hideCtl .pad { min-height: 0; flex: 0 0 40px; height: 40px; padding: 0; background: transparent; border-color: transparent; box-shadow: none; }
+.hideCtl .stage { padding: 4px; }
 .hideCtl .zhint {
   display: block;
   position: absolute; top: 50%;
@@ -627,7 +628,7 @@ button:disabled { cursor: not-allowed; }
 }
 .hideCtl .zhint.zl { left: 14px; text-align: left; }
 .hideCtl .zhint.zr { right: 14px; text-align: right; }
-.hideCtl .hidebtn { top: auto; bottom: 4px; opacity: .6; }
+.hideCtl .hidebtn { top: 50%; transform: translate(-50%, -50%); opacity: .7; }
 
 /* ---------- 結算 ---------- */
 .result { display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; }
