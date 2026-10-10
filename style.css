@@ -1034,7 +1034,17 @@ button:disabled { cursor: not-allowed; }
 /* 小朋友下樓梯 */
 .play-shaft .stage, .play-volley .stage { flex: 1; padding: 5px; }
 .play-shaft .sin, .play-volley .sin { height: 100%; justify-content: center; gap: 4px; }
-.play-shaft .pad { flex: 0 0 19%; padding: 10px 14px; justify-content: space-between; gap: 14px; }
+.play-shaft .pad { display: none; }
+.play-shaft { touch-action: none; }
+.shint {
+  position: absolute; left: 0; right: 0; bottom: max(26px, env(safe-area-inset-bottom));
+  text-align: center;
+  color: #fff; text-shadow: var(--ol-sm);
+  font-size: 1rem; font-weight: 800;
+  pointer-events: none;
+  animation: hop 1.6s ease-in-out infinite;
+}
+.play.used .shint { display: none; }
 .hbtn {
   flex: 1;
   height: 100%;
@@ -1196,3 +1206,5 @@ body.wide #app, body.wide .sky { left: 0; width: 100%; transform: none; }
 .rrow span .pe { height: 1.3em; }
 .vsline .pe { height: 1.3em; }
 @media (max-height: 760px) { .mimg { height: 84px; } }
+.play-shaft .stage { background: transparent; border-color: transparent; box-shadow: none; }
+.play-shaft .hud { color: #fff; text-shadow: var(--ol-sm); }

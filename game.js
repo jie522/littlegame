@@ -419,7 +419,7 @@ const GAMES = [
   },
   {
     id: 'shaft', emoji: '🪜', name: '小朋友下樓梯', tag: '反應', color: '#f2994a', desc: '一直往下跳!',
-    rules: ['平台會一直往上升,要往下跳到平台上,別被天花板的尖刺刺到', '按住 ◀ ▶ 左右移動', '綠色平台回血、尖刺平台扣血;還有輸送帶、彈簧和會碎掉的平台', '血量歸零或掉出畫面就出局', '下到最深樓層的人獲勝!'],
+    rules: ['平台會一直往上升,要往下跳到平台上,別被天花板的尖刺刺到', '在畫面任何地方按住左右滑動就能移動(沒有按鍵)', '綠色平台回血、尖刺平台扣血;還有輸送帶、彈簧和會碎掉的平台', '血量歸零或掉出畫面就出局', '下到最深樓層的人獲勝!'],
     host: hShaft, view: vShaft,
   },
   {
@@ -2380,17 +2380,49 @@ function hShaft(H) {
 function vShaft(V) {
   const { W, PW, PH, TICK } = SHAFT, VH = SHAFT.H;
   const C = canvasStage(V, W / VH), ctx = C.ctx;
-  V.pad.innerHTML = '<button class="hbtn" data-d="-1">◀</button><button class="hbtn" data-d="1">▶</button>';
+  V.pad.innerHTML = '';
   const held = new Set();
   let dir = 0;
   const upd = () => {
     const d = (held.has(1) ? 1 : 0) - (held.has(-1) ? 1 : 0);
     if (d !== dir) { dir = d; V.send({ e: 'mv', d }); }
   };
-  $$('.hbtn', V.pad).forEach(b => {
-    const d = +b.dataset.d;
-    holdBtn(b, () => { held.add(d); upd(); }, () => { held.delete(d); upd(); });
+  // 沒有實體按鍵:在畫面任何地方按住左右滑動就會移動(虛擬搖桿跟著手指走)
+  const hint = el('div', 'shint', '👆 在畫面上左右滑動 = 移動');
+  const ring = el('div', 'vring', '<i></i>');
+  V.root.appendChild(hint);
+  V.root.appendChild(ring);
+  let stickId = null, sx0 = 0;
+  V.root.addEventListener('pointerdown', e => {
+    if (stickId != null || e.target.closest('.exit')) return;
+    e.preventDefault();
+    try { V.root.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    const r = V.root.getBoundingClientRect();
+    stickId = e.pointerId; sx0 = e.clientX;
+    ring.style.left = (e.clientX - r.left) + 'px'; ring.style.top = (e.clientY - r.top) + 'px';
+    ring.style.setProperty('--dx', '0px');
+    ring.classList.add('on');
+    V.root.classList.add('used');
   });
+  V.root.addEventListener('pointermove', e => {
+    if (e.pointerId !== stickId) return;
+    if (Math.abs(e.clientX - sx0) > 46) sx0 = e.clientX - Math.sign(e.clientX - sx0) * 46;
+    const dx = e.clientX - sx0;
+    ring.style.setProperty('--dx', Math.max(-26, Math.min(26, dx * 0.6)) + 'px');
+    const d = dx > 8 ? 1 : dx < -8 ? -1 : 0;
+    held.clear();
+    if (d) held.add(d);
+    upd();
+  });
+  const stickEnd = e => {
+    if (e.pointerId !== stickId) return;
+    stickId = null;
+    ring.classList.remove('on');
+    held.clear();
+    upd();
+  };
+  V.root.addEventListener('pointerup', stickEnd);
+  V.root.addEventListener('pointercancel', stickEnd);
   const k = d => [() => { held.add(d); upd(); }, () => { held.delete(d); upd(); }];
   keyCtl(C.cv, { ArrowLeft: k(-1), ArrowRight: k(1), a: k(-1), d: k(1) });
 
