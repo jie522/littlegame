@@ -1284,14 +1284,14 @@ function hChess(H) {
   const fighters = shuffle(H.players).slice(0, 2); // 超過 2 人就抽籤
   const KINDS = ['K', 'A', 'A', 'E', 'E', 'R', 'R', 'N', 'N', 'C', 'C', 'P', 'P', 'P', 'P', 'P'];
   const board = shuffle(['r', 'b'].flatMap(c => KINDS.map(k => ({ c, k, up: false }))));
-  const color = {};
+  const color = {}, dead = { r: [], b: [] };
   let turnI = 0, idle = 0, last = null, over = false;
 
   const view = () => board.map(p => (!p ? null : p.up ? { c: p.c, k: p.k } : { h: 1 }));
   const left = c => board.filter(p => p && p.c === c).length;
   const bc = () => H.bc({
     t: 'g', e: 'board', cells: view(), turn: fighters[turnI], fighters, color, last,
-    left: { r: left('r'), b: left('b') }, idle,
+    left: { r: left('r'), b: left('b') }, dead, idle,
   });
   function end(winner, reason) {
     over = true;
@@ -1332,6 +1332,7 @@ function hChess(H) {
         const cap = board[to];
         board[to] = p;
         board[from] = null;
+        if (cap) dead[cap.c].push(cap.k);
         idle = cap ? 0 : idle + 1;
         last = { type: cap ? 'cap' : 'move', from, to, slot, cap: cap ? { c: cap.c, k: cap.k } : null };
         afterAction(slot);
@@ -1374,8 +1375,13 @@ function vChess(V) {
     let note = '';
     if (st.last && st.last.type === 'cap') note = `${pinfo(st.last.slot).emoji} ${who(st.last.slot)} 吃掉了 ${CHESS_NAME[st.last.cap.c][st.last.cap.k]}!`;
     else if (st.idle >= 40) note = `再 ${50 - st.idle} 步沒吃子就平手`;
+    const grave = c => {
+      const ks = [...st.dead[c]].sort((a, b) => CHESS_RANK[b] - CHESS_RANK[a]);
+      return `<div class="grave"><span class="gl ${c}">${c === 'r' ? '🔴' : '⚫'} 被吃掉</span>${ks.length ? ks.map(k => `<i class="gp ${c}">${CHESS_NAME[c][k]}</i>`).join('') : '<span class="gnone">還沒有</span>'}</div>`;
+    };
     V.stage(`<div class="sides">${st.fighters.map(side).join('<span class="vs">VS</span>')}</div>
-      <div class="turn">${msg}</div>${note ? `<div class="small">${note}</div>` : ''}`);
+      <div class="turn">${msg}</div>${note ? `<div class="small">${note}</div>` : ''}
+      <div class="graves">${grave('r')}${grave('b')}</div>`);
   }
   function render() {
     targets = sel != null && myTurn() ? chessTargets(st.cells, sel) : [];

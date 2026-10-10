@@ -458,6 +458,24 @@ button:disabled { cursor: not-allowed; }
 .vs { font-weight: 900; color: var(--accent); font-size: .95rem; }
 .play-chess.myturn .vs { color: #fff; }
 
+.graves { width: 100%; display: flex; flex-direction: column; gap: 3px; margin-top: 4px; }
+.grave { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; min-height: 26px; font-size: .8rem; font-weight: 700; text-align: left; }
+.gl { flex: none; min-width: 5.6em; opacity: .85; }
+.gnone { opacity: .5; font-weight: 400; }
+.gp {
+  font-style: normal;
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #e3b979;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .85rem; font-weight: 900;
+  font-family: "Kaiti TC", "BiauKai", "DFKai-SB", "PingFang TC", "Microsoft JhengHei", serif;
+}
+.gp.r { color: #e8344e; }
+.gp.b { color: #3a2d3d; }
+.play-chess.myturn .gl { color: #fff; }
+
 .cboard {
   height: 100%;
   max-width: 100%;
