@@ -358,6 +358,7 @@ button:disabled { cursor: not-allowed; }
   font-size: 1.6rem;
 }
 .gs-i b { white-space: nowrap; text-shadow: var(--ol-sm); }
+.ver { opacity: .6; font-size: .7rem; }
 .tip { font-size: .8rem; color: #24477a; text-align: center; line-height: 1.5; }
 
 /* ---------- 房間 ---------- */
@@ -480,6 +481,40 @@ button:disabled { cursor: not-allowed; }
 .wcard { width: 100%; max-width: 340px; display: flex; flex-direction: column; align-items: center; gap: 14px; font-size: 1.1rem; line-height: 1.5; padding: 24px 16px; }
 .waittxt { font-weight: 800; color: #fff; text-shadow: var(--ol-sm); }
 .icard .waittxt { color: var(--ink); text-shadow: none; }
+
+.scrollhint {
+  position: sticky;
+  bottom: 6px;
+  align-self: center;
+  width: auto !important;
+  margin-top: -44px;
+  padding: 6px 16px;
+  border-radius: 999px;
+  background: linear-gradient(#ffe066, #ffa800);
+  border: 3px solid var(--ink);
+  box-shadow: 0 3px 0 var(--ink);
+  color: #fff;
+  font-size: .85rem;
+  font-weight: 900;
+  text-shadow: var(--ol-sm);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(8px);
+  transition: opacity .2s, transform .2s;
+  animation: hop 1.2s ease-in-out infinite;
+  z-index: 5;
+}
+.scrollhint.on { opacity: 1; pointer-events: auto; transform: none; }
+@media (max-height: 760px) {
+  .lobby { gap: 10px; }
+  .gico { aspect-ratio: 1.6; font-size: 1.9rem; }
+  .gcard { padding: 5px 4px 6px; gap: 3px; }
+  .gcard b { font-size: .78rem; }
+  .ava-big { width: 42px; height: 42px; font-size: 1.5rem; }
+  .logo-t { font-size: 3rem; }
+  .mascots { font-size: 2.2rem; }
+  .home { gap: 10px; }
+}
 
 /* ---------- 規則頁 ---------- */
 .intro { display: flex; align-items: center; justify-content: center; }

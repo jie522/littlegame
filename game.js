@@ -46,6 +46,7 @@ const PLAYERS = [
   { name: '喵喵貓', emoji: '🐱', color: '#5b9bff', soft: '#e0ecff' },
 ];
 
+const APP_VERSION = '2026.10.11';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -459,7 +460,7 @@ function home() {
       <div class="gs-t">🎮 ${GAMES.length} 款小遊戲</div>
       <div class="gs-row">${GAMES.map(g => `<div class="gs-i" style="--g:${g.color}"><span>${g.emoji}</span><b>${g.name}</b></div>`).join('')}</div>
     </section>
-    <p class="tip">每人一支手機 · 2~4 人連線 · 建議連同一個 Wi-Fi</p>`;
+    <p class="tip">每人一支手機 · 2~4 人連線 · 建議連同一個 Wi-Fi<br><span class="ver">版本 ${APP_VERSION} · ${GAMES.length} 款遊戲</span></p>`;
   app.appendChild(h);
 
   const nameIn = $('#name', h), codeIn = $('#code', h);
@@ -549,6 +550,14 @@ function lobbyView() {
     if (!isHost || NET.solo || confirm('你是房主,離開後房間會解散,確定嗎?')) leaveRoom();
   });
   $$('.gcard', d).forEach(b => b.addEventListener('click', () => hostPickGame(b.dataset.g)));
+
+  // 內容比螢幕長時,提示「往下滑還有更多遊戲」
+  const hint = el('button', 'scrollhint', '▼ 還有更多遊戲');
+  d.appendChild(hint);
+  const upd = () => { hint.classList.toggle('on', d.scrollHeight - d.scrollTop - d.clientHeight > 24 && !!$('.gcard', d)); };
+  hint.addEventListener('click', () => d.scrollBy({ top: d.clientHeight * 0.7, behavior: 'smooth' }));
+  d.addEventListener('scroll', upd);
+  setTimeout(upd, 50);
 }
 
 async function shareRoom() {

@@ -11,12 +11,23 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Noto+Sans+TC:wght@500;700;900&display=swap">
-<link rel="stylesheet" href="style.css">
+
 </head>
 <body>
 <div class="sky" aria-hidden="true"><i class="cloud c1"></i><i class="cloud c2"></i><i class="cloud c3"></i><i class="cloud c4"></i></div>
 <div id="app"></div>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script src="game.js"></script>
+<script>
+/* 每次都載入最新版的樣式和程式,避免手機瀏覽器卡在舊版快取 */
+(function () {
+  var t = Date.now();
+  var l = document.createElement('link');
+  l.rel = 'stylesheet'; l.href = 'style.css?t=' + t;
+  document.head.appendChild(l);
+  var s = document.createElement('script');
+  s.src = 'game.js?t=' + t;
+  document.body.appendChild(s);
+})();
+</script>
 </body>
 </html>
