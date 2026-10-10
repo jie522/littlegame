@@ -599,6 +599,35 @@ button:disabled { cursor: not-allowed; }
 }
 .firebtn span { font-size: .45em; }
 .firebtn.on { transform: translateY(5px); box-shadow: 0 2px 0 #d9761c; }
+.hidebtn {
+  position: absolute;
+  left: 50%; top: 6px;
+  transform: translateX(-50%);
+  background: #fff;
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: .75rem;
+  font-weight: 700;
+  box-shadow: 0 2px 0 rgba(0,0,0,.1);
+  z-index: 3;
+  white-space: nowrap;
+}
+.zhint { display: none; }
+.play-tank.hideCtl { touch-action: none; }
+.hideCtl .dpad, .hideCtl .firebtn { opacity: 0; pointer-events: none; }
+.hideCtl .pad { min-height: 0; flex: 0 0 auto; height: 16%; background: transparent; border-color: transparent; box-shadow: none; }
+.hideCtl .zhint {
+  display: block;
+  position: absolute; top: 50%;
+  transform: translateY(-50%);
+  font-size: .75rem; font-weight: 700; line-height: 1.35;
+  color: var(--c); opacity: .35;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.hideCtl .zhint.zl { left: 14px; text-align: left; }
+.hideCtl .zhint.zr { right: 14px; text-align: right; }
+.hideCtl .hidebtn { top: auto; bottom: 4px; opacity: .6; }
 
 /* ---------- 結算 ---------- */
 .result { display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; }

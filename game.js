@@ -1759,18 +1759,37 @@ function vTank(V) {
   const ctx = cv.getContext('2d');
   V.pad.innerHTML = `
     <div class="dpad">${['up', 'right', 'down', 'left'].map((c, i) => `<div class="dp ${c}" data-d="${i}">${'▲▶▼◀'[i]}</div>`).join('')}<div class="dpc"></div></div>
-    <button class="firebtn">💥<span>發射</span></button>`;
-  const dpad = $('.dpad', V.pad), fireBtn = $('.firebtn', V.pad);
+    <button class="firebtn">💥<span>發射</span></button>
+    <button class="hidebtn"></button>
+    <div class="zhint zl">⬅ 左半邊按住滑動<br>上下左右移動</div>
+    <div class="zhint zr">右半邊按住<br>發射 💥</div>`;
+  const dpad = $('.dpad', V.pad), fireBtn = $('.firebtn', V.pad), hideBtn = $('.hidebtn', V.pad);
   const stageEl = $('.stage', V.root);
 
   let cells = null, prev = new Map(), cur = new Map(), curAt = 0, bl = [], st = null, hudTxt = '';
   const fxs = [];
 
+  /* 隱藏按鈕:左半邊滑動 = 方向,右半邊按住 = 發射 */
+  let hidden = store.get('tankHide', false);
+  function applyHide() {
+    V.root.classList.toggle('hideCtl', hidden);
+    hideBtn.textContent = hidden ? '👁 顯示按鈕' : '🙈 隱藏按鈕';
+    if (!hidden) { setDir(-1); setFire(false); }
+    fit();
+  }
+  hideBtn.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    hidden = !hidden;
+    store.set('tankHide', hidden);
+    applyHide();
+  });
+
   /* 依舞台大小調整成正方形畫布 */
   function fit() {
     // 先決定地圖大小,剩下的高度都給操作區
     const top = $('.topbar', V.root).offsetHeight;
-    const h = V.root.clientHeight - top - V.root.clientHeight * 0.26 - 50 - hud.offsetHeight;
+    const h = V.root.clientHeight - top - V.root.clientHeight * (hidden ? 0.16 : 0.26) - 50 - hud.offsetHeight;
     const size = Math.max(100, Math.floor(Math.min(stageEl.clientWidth - 12, h)));
     wrap.style.width = wrap.style.height = size + 'px';
   }
@@ -1827,6 +1846,34 @@ function vTank(V) {
   });
   fireBtn.addEventListener('pointerup', () => setFire(false));
   fireBtn.addEventListener('pointercancel', () => setFire(false));
+
+  /* 隱藏模式的觸控:整個畫面分左右兩半 */
+  let stickId = null, stickX = 0, stickY = 0, fireId = null;
+  V.root.addEventListener('pointerdown', e => {
+    if (!hidden || e.target.closest('.exit, .hidebtn, .chips')) return;
+    e.preventDefault();
+    try { V.root.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    if (e.clientX < innerWidth / 2) {
+      if (stickId == null) { stickId = e.pointerId; stickX = e.clientX; stickY = e.clientY; }
+    } else if (fireId == null) { fireId = e.pointerId; setFire(true); }
+  });
+  V.root.addEventListener('pointermove', e => {
+    if (!hidden || e.pointerId !== stickId) return;
+    const dx = e.clientX - stickX, dy = e.clientY - stickY, d = Math.hypot(dx, dy);
+    if (d > 70) { // 搖桿跟著手指走,不用回到原點就能換方向
+      stickX += dx / d * (d - 70);
+      stickY += dy / d * (d - 70);
+    }
+    if (d < 14) return setDir(-1);
+    setDir(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : 3) : (dy > 0 ? 2 : 0));
+  });
+  const rootEnd = e => {
+    if (e.pointerId === stickId) { stickId = null; setDir(-1); }
+    if (e.pointerId === fireId) { fireId = null; setFire(false); }
+  };
+  V.root.addEventListener('pointerup', rootEnd);
+  V.root.addEventListener('pointercancel', rootEnd);
+  applyHide();
 
   /* 電腦也能玩:方向鍵 + 空白鍵 */
   const KEYS = { ArrowUp: 0, ArrowRight: 1, ArrowDown: 2, ArrowLeft: 3, w: 0, d: 1, s: 2, a: 3 };
