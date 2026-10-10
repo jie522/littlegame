@@ -349,7 +349,7 @@ const GAMES = [
   {
     id: 'tap', emoji: '🥕', name: '狂點拔蘿蔔', tag: '反應', color: '#ff9147', desc: '拼手速拔蘿蔔!',
     rules: ['倒數後瘋狂點擊下方的區域', '每點一下蘿蔔就被拔高一點', '上方可以看到大家的進度', '8 秒內點最多下的人獲勝!'],
-    host: hTap, view: vTap,
+    host: hTap, view: vTap, noCountdown: true,
   },
   {
     id: 'math', emoji: '🧮', name: '算數小天才', tag: '益智', color: '#3fbf78', desc: '搶答算數題!',
@@ -364,7 +364,12 @@ const GAMES = [
   {
     id: 'memory', emoji: '🃏', name: '萌寵翻翻樂', tag: '益智', color: '#5b9bff', desc: '輪流翻牌找配對',
     rules: ['大家看到同一副牌,輪流翻兩張', '輪到你時手機會震動提醒', '翻到一樣的得 1 分,還能再翻一次', '全部配對完,分數最高的人獲勝!'],
-    host: hMemory, view: vMemory,
+    host: hMemory, view: vMemory, noCountdown: true,
+  },
+  {
+    id: 'chess', emoji: '♟️', name: '暗棋大對決', tag: '益智', color: '#d9773f', desc: '翻棋吃子 2 人對戰',
+    rules: ['2 人對戰!房間超過 2 人時抽籤決定誰上場,其他人觀戰', '輪到你時:翻開一顆棋,或把自己的棋走一格', '第一個翻棋的人,翻到什麼顏色就是那一方', '大吃小:帥 > 仕 > 相 > 俥 > 傌 > 炮 > 兵,但兵能吃帥、帥不能吃兵', '炮要隔著一顆棋跳過去吃,吃光對方或讓對方無路可走就贏了!'],
+    host: hChess, view: vChess, noCountdown: true,
   },
 ];
 const GAME = Object.fromEntries(GAMES.map(g => [g.id, g]));
@@ -702,7 +707,7 @@ function hostStartGame(g) {
   NET.phase = 'game';
   hostBroadcast({ t: 'play', g: g.id, players, scores: H.scores });
   H.logic = g.host(H);
-  if (g.id === 'tap' || g.id === 'memory') T.after(500, H.logic.start);
+  if (g.noCountdown) T.after(500, H.logic.start);
   else T.after(500, () => H.countdown(H.logic.start));
 }
 
@@ -1230,6 +1235,200 @@ function vMemory(V) {
     }
     if (myTurn && lastTurn !== V.me) { SFX.tick(); buzz(80); }
     lastTurn = m.turn;
+  };
+}
+
+/* =========================================================
+   6. 暗棋大對決 ♟️(2 人回合制,4 x 8 棋盤,直式顯示)
+   棋盤格子:{h:1} = 還沒翻開、{c:'r'|'b', k} = 翻開的棋、null = 空格
+   ========================================================= */
+const CHESS_RANK = { K: 7, A: 6, E: 5, R: 4, N: 3, C: 2, P: 1 };
+const CHESS_NAME = {
+  r: { K: '帥', A: '仕', E: '相', R: '俥', N: '傌', C: '炮', P: '兵' },
+  b: { K: '將', A: '士', E: '象', R: '車', N: '馬', C: '包', P: '卒' },
+};
+const CHESS_COLS = 4, CHESS_ROWS = 8;
+const COLOR_LABEL = { r: '🔴 紅方', b: '⚫ 黑方' };
+
+function chessCan(cells, from, to) {
+  const a = cells[from], d = cells[to];
+  if (!a || a.h || from === to) return false;
+  const fr = Math.floor(from / CHESS_COLS), fc = from % CHESS_COLS;
+  const tr = Math.floor(to / CHESS_COLS), tc = to % CHESS_COLS;
+  const adj = Math.abs(fr - tr) + Math.abs(fc - tc) === 1;
+  if (!d) return adj;
+  if (d.h || d.c === a.c) return false;
+  if (a.k === 'C') {
+    // 炮:同一直線、中間剛好隔一顆棋(翻開或沒翻開都算)才能吃
+    if (fr !== tr && fc !== tc) return false;
+    const step = fr === tr ? Math.sign(tc - fc) : Math.sign(tr - fr) * CHESS_COLS;
+    let between = 0;
+    for (let i = from + step; i !== to; i += step) if (cells[i]) between++;
+    return between === 1;
+  }
+  if (!adj) return false;
+  if (a.k === 'K' && d.k === 'P') return false;
+  if (a.k === 'P' && d.k === 'K') return true;
+  return CHESS_RANK[a.k] >= CHESS_RANK[d.k];
+}
+const chessTargets = (cells, from) => cells.map((_, i) => i).filter(i => chessCan(cells, from, i));
+const chessHasAction = (cells, color) =>
+  cells.some(x => x && x.h) || cells.some((x, i) => x && !x.h && x.c === color && chessTargets(cells, i).length > 0);
+
+function hChess(H) {
+  const fighters = shuffle(H.players).slice(0, 2); // 超過 2 人就抽籤
+  const KINDS = ['K', 'A', 'A', 'E', 'E', 'R', 'R', 'N', 'N', 'C', 'C', 'P', 'P', 'P', 'P', 'P'];
+  const board = shuffle(['r', 'b'].flatMap(c => KINDS.map(k => ({ c, k, up: false }))));
+  const color = {};
+  let turnI = 0, idle = 0, last = null, over = false;
+
+  const view = () => board.map(p => (!p ? null : p.up ? { c: p.c, k: p.k } : { h: 1 }));
+  const left = c => board.filter(p => p && p.c === c).length;
+  const bc = () => H.bc({
+    t: 'g', e: 'board', cells: view(), turn: fighters[turnI], fighters, color, last,
+    left: { r: left('r'), b: left('b') }, idle,
+  });
+  function end(winner, reason) {
+    over = true;
+    if (winner != null) H.scores[winner] = 1;
+    H.bc({ t: 'score', scores: H.scores });
+    H.bc({ t: 'g', e: 'over', winner, reason });
+    H.s.after(3000, H.finish);
+  }
+  function afterAction(slot) {
+    const opp = fighters[1 - turnI];
+    if (left(color[opp]) === 0) { bc(); return end(slot, '吃光對方的棋子!'); }
+    turnI = 1 - turnI;
+    if (!chessHasAction(view(), color[opp])) { bc(); return end(slot, '對方沒有棋可以走了!'); }
+    bc();
+    if (idle >= 50) end(null, '連續 50 步沒有翻棋或吃子,平手!');
+  }
+
+  return {
+    start() { H.bc({ t: 'g', e: 'intro', fighters }); H.s.after(1800, bc); },
+    input(slot, m) {
+      if (over || slot !== fighters[turnI]) return;
+      if (m.e === 'flip') {
+        const i = +m.i, p = board[i];
+        if (!p || p.up) return;
+        p.up = true;
+        if (!color[slot]) { // 第一個翻的棋決定顏色
+          color[slot] = p.c;
+          color[fighters[1 - turnI]] = p.c === 'r' ? 'b' : 'r';
+        }
+        idle = 0;
+        last = { type: 'flip', to: i, slot };
+        afterAction(slot);
+      } else if (m.e === 'move') {
+        const from = +m.from, to = +m.to;
+        if (!(from >= 0 && from < 32 && to >= 0 && to < 32)) return;
+        const p = board[from];
+        if (!p || !p.up || p.c !== color[slot] || !chessCan(view(), from, to)) return;
+        const cap = board[to];
+        board[to] = p;
+        board[from] = null;
+        idle = cap ? 0 : idle + 1;
+        last = { type: cap ? 'cap' : 'move', from, to, slot, cap: cap ? { c: cap.c, k: cap.k } : null };
+        afterAction(slot);
+      }
+    },
+    presence() {
+      if (over) return;
+      const gone = fighters.find(s => !H.online(s));
+      if (gone != null) end(fighters.find(s => s !== gone), '對手離開了');
+    },
+  };
+}
+
+function vChess(V) {
+  let st = null, sel = null, targets = [], over = false, lastTurn = null;
+  const boardEl = el('div', 'cboard');
+  const cells = Array.from({ length: CHESS_COLS * CHESS_ROWS }, (_, i) => {
+    const c = el('div', 'cell');
+    c.dataset.i = i;
+    boardEl.appendChild(c);
+    return c;
+  });
+  V.pad.innerHTML = '';
+  V.pad.appendChild(boardEl);
+  V.stage('<div class="big">♟️</div><div>擺棋中…</div>');
+
+  const fighting = () => st && st.fighters.includes(V.me);
+  const myTurn = () => st && !over && st.turn === V.me;
+  const who = s => (s === V.me ? '你' : esc(pinfo(s).name));
+
+  function renderStage() {
+    const side = s => {
+      const p = pinfo(s), c = st.color[s];
+      return `<div class="side${st.turn === s && !over ? ' now' : ''}" style="--c:${p.color}">
+        <span>${p.emoji}</span><b>${who(s)}</b><span class="cl">${c ? COLOR_LABEL[c] + ` ×${st.left[c]}` : '❔ 未定'}</span></div>`;
+    };
+    let msg;
+    if (myTurn()) msg = sel != null ? '選要走去哪一格 ✨' : (st.color[V.me] ? '輪到你了!翻棋或走棋' : '輪到你了!先翻一顆棋');
+    else msg = (fighting() ? '' : '👀 觀戰中 — ') + `輪到 ${pinfo(st.turn).emoji} ${who(st.turn)}…`;
+    let note = '';
+    if (st.last && st.last.type === 'cap') note = `${pinfo(st.last.slot).emoji} ${who(st.last.slot)} 吃掉了 ${CHESS_NAME[st.last.cap.c][st.last.cap.k]}!`;
+    else if (st.idle >= 40) note = `再 ${50 - st.idle} 步沒吃子就平手`;
+    V.stage(`<div class="sides">${st.fighters.map(side).join('<span class="vs">VS</span>')}</div>
+      <div class="turn">${msg}</div>${note ? `<div class="small">${note}</div>` : ''}`);
+  }
+  function render() {
+    targets = sel != null && myTurn() ? chessTargets(st.cells, sel) : [];
+    const lastFrom = st.last ? st.last.from : -1, lastTo = st.last ? st.last.to : -1;
+    cells.forEach((c, i) => {
+      const x = st.cells[i];
+      c.className = 'cell' + (sel === i ? ' sel' : '') + (targets.includes(i) ? ' tgt' : '')
+        + (i === lastTo ? ' last' : '') + (i === lastFrom ? ' from' : '')
+        + (i === lastTo && st.last.type === 'flip' ? ' flipped' : '');
+      c.innerHTML = !x ? '' : x.h ? '<div class="pc hid">🐾</div>' : `<div class="pc ${x.c}">${CHESS_NAME[x.c][x.k]}</div>`;
+    });
+    V.root.classList.toggle('myturn', myTurn());
+    renderStage();
+  }
+
+  V.onTap = e => {
+    const c = e.target.closest('.cell');
+    if (!c || !myTurn()) return;
+    const i = +c.dataset.i, x = st.cells[i];
+    if (sel != null && targets.includes(i)) {
+      V.send({ e: 'move', from: sel, to: i });
+      sel = null;
+    } else if (x && x.h) {
+      sel = null;
+      V.send({ e: 'flip', i });
+    } else if (x && x.c === st.color[V.me]) {
+      sel = sel === i ? null : i;
+      SFX.tap();
+    } else {
+      sel = null;
+    }
+    render();
+  };
+  V.on = m => {
+    if (m.e === 'intro') {
+      const [a, b] = m.fighters.map(s => `${pinfo(s).emoji} ${who(s)}`);
+      V.stage(`<div class="small">${V.players.length > 2 ? '抽籤結果' : '對戰開始'}</div><div class="turn">${a} <span class="vs">VS</span> ${b}</div>
+        ${m.fighters.includes(V.me) ? '' : '<div class="small">你這局觀戰 👀</div>'}`);
+      SFX.go();
+    } else if (m.e === 'board') {
+      st = m;
+      sel = null;
+      render();
+      if (m.last) {
+        if (m.last.type === 'cap') {
+          if (m.last.slot === V.me) SFX.good(); else if (fighting()) { SFX.bad(); buzz(80); } else SFX.tap();
+        } else SFX.tap();
+      }
+      if (myTurn() && lastTurn !== V.me) buzz(60);
+      lastTurn = m.turn;
+    } else if (m.e === 'over') {
+      over = true;
+      sel = null;
+      if (st) render();
+      V.stage(m.winner == null
+        ? `<div class="big">🤝</div><div>${m.reason}</div>`
+        : `<div class="big">${pinfo(m.winner).emoji}</div><div>${who(m.winner)} 獲勝!</div><div class="small">${m.reason}</div>`);
+    }
   };
 }
 
