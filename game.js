@@ -415,38 +415,40 @@ const GAMES = [
 const GAME = Object.fromEntries(GAMES.map(g => [g.id, g]));
 
 /* =========================================================
-   畫面:首頁
+   畫面:首頁(手遊風格的開始選單)
    ========================================================= */
+const ribbon = (text, cls = '') => `<div class="ribbon ${cls}"><span>${text}</span></div>`;
+
 function home() {
   resetView();
   app.innerHTML = '';
   const roomParam = new URLSearchParams(location.search).get('room') || '';
   const h = el('div', 'screen home');
   h.innerHTML = `
-    <header class="hero">
-      <div class="hero-emo"><span>🐰</span><span>🐻</span><span>🐸</span><span>🐱</span></div>
-      <h1>萌萌派對</h1>
-      <p>每人一支手機,2~4 人連線同樂!</p>
+    <div class="hbar">
+      <label class="profile"><span class="ava">🐣</span>
+        <input id="name" maxlength="8" placeholder="輸入你的暱稱" value="${esc(myName())}"></label>
+      <div class="coin" title="累計勝場"><span>⭐</span><b>${store.get('wins', 0)}</b></div>
+      <button class="iconbtn" id="mute" aria-label="音效">${S.muted ? '🔇' : '🔊'}</button>
+    </div>
+    <header class="logo">
+      <div class="logo-t"><span class="l1">萌萌</span><span class="l2">派對</span></div>
+      ${ribbon('PARTY GAMES')}
     </header>
-    <section class="panel">
-      <h2>你的暱稱</h2>
-      <input class="field" id="name" maxlength="8" placeholder="輸入暱稱(可不填)" value="${esc(myName())}">
-    </section>
-    <section class="panel">
-      <button class="btn wide" id="create">🏠 建立房間(找朋友玩)</button>
-      <button class="btn wide alt solo" id="solo">🤖 單人玩(對電腦)</button>
-      <div class="or"><span>或</span></div>
-      <div class="join">
-        <input class="field" id="code" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="4 位數房號" value="${esc(roomParam)}">
-        <button class="btn" id="join">加入</button>
+    <div class="mascots"><span>🐰</span><span>🐻</span><span>🐸</span><span>🐱</span></div>
+    <nav class="menu">
+      <button class="btn big green" id="solo"><span class="bi">▶</span><span class="bt">單人遊戲<small>對戰電腦</small></span></button>
+      <button class="btn big yellow" id="create"><span class="bi">🏠</span><span class="bt">建立房間<small>邀請朋友一起玩</small></span></button>
+      <div class="joinbox">
+        <input class="field" id="code" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="輸入房號" value="${esc(roomParam)}">
+        <button class="btn blue" id="join">加入</button>
       </div>
-      <p class="tip">📱 一人建立房間,其他人輸入房號加入<br>建議大家連同一個 Wi-Fi,連線最穩喔!</p>
+    </nav>
+    <section class="gstrip">
+      <div class="gs-t">🎮 ${GAMES.length} 款小遊戲</div>
+      <div class="gs-row">${GAMES.map(g => `<div class="gs-i" style="--g:${g.color}"><span>${g.emoji}</span><b>${g.name}</b></div>`).join('')}</div>
     </section>
-    <section class="panel">
-      <h2>遊戲列表</h2>
-      <div class="glist">${GAMES.map(g => `<div class="gitem" style="--g:${g.color}"><span>${g.emoji}</span><b>${g.name}</b><span class="tag">${g.tag}</span></div>`).join('')}</div>
-    </section>
-    <footer class="foot"><button class="mini" id="mute">${S.muted ? '🔇 靜音中' : '🔊 音效開'}</button></footer>`;
+    <p class="tip">每人一支手機 · 2~4 人連線 · 建議連同一個 Wi-Fi</p>`;
   app.appendChild(h);
 
   const nameIn = $('#name', h), codeIn = $('#code', h);
@@ -456,16 +458,21 @@ function home() {
   $('#solo', h).addEventListener('click', () => { saveName(); createSolo(); });
   $('#join', h).addEventListener('click', () => { saveName(); joinRoom(codeIn.value); });
   codeIn.addEventListener('keydown', e => { if (e.key === 'Enter') { saveName(); joinRoom(codeIn.value); } });
-  $('#mute', h).addEventListener('click', () => { S.muted = !S.muted; store.set('muted', S.muted); home(); });
+  $('#mute', h).addEventListener('click', e => {
+    S.muted = !S.muted;
+    store.set('muted', S.muted);
+    e.currentTarget.textContent = S.muted ? '🔇' : '🔊';
+  });
 }
 
-function showWait(msg) {
+function waitCard(icon, html, btnText) {
   resetView();
   app.innerHTML = '';
-  const d = el('div', 'screen wait', `<div class="spin">🐾</div><p>${esc(msg)}</p><button class="mini">取消</button>`);
+  const d = el('div', 'screen wait', `<div class="panel wcard"><div class="spin">${icon}</div><p>${html}</p><button class="btn white sm">${btnText}</button></div>`);
   app.appendChild(d);
   $('button', d).addEventListener('click', () => leaveRoom());
 }
+function showWait(msg) { waitCard('🐾', esc(msg), '取消'); }
 
 function playerChipsHTML(withStars) {
   return NET.players.map(p => {
@@ -477,49 +484,58 @@ function playerChipsHTML(withStars) {
   }).join('');
 }
 
-/* ---------- 房間大廳 ---------- */
+/* ---------- 房間大廳:四個座位 + 關卡選擇 ---------- */
+function seatHTML(slot) {
+  const isHost = NET.role === 'host';
+  const p = NET.players.find(x => x.slot === slot);
+  if (!p) {
+    return `<div class="seat empty${isHost ? ' can' : ''}" data-slot="${slot}">
+      <div class="ava-big">${isHost ? '➕' : '💤'}</div><b class="sname">${isHost ? '加電腦' : '等待中'}</b></div>`;
+  }
+  const P = PLAYERS[slot];
+  const tags = (p.bot ? '<span class="ptag">電腦</span>' : '') + (slot === 0 ? '<span class="ptag">房主</span>' : '') + (slot === NET.mySlot ? '<span class="ptag me">我</span>' : '');
+  return `<div class="seat${p.online ? '' : ' off'}" style="--c:${P.color};--soft:${P.soft}">
+    ${isHost && p.bot ? `<button class="kick" data-slot="${slot}" aria-label="移除電腦">✕</button>` : ''}
+    <div class="ava-big">${P.emoji}</div><b class="sname">${esc(p.name)}</b>
+    <div class="stags">${tags}</div><div class="sstar">⭐ ${NET.stars[slot] || 0}</div></div>`;
+}
+
 function lobbyView() {
   resetView();
   app.innerHTML = '';
   const isHost = NET.role === 'host';
   const enough = NET.players.filter(p => p.online).length >= 2;
+  const hasBot = NET.players.some(p => p.bot);
   const d = el('div', 'screen lobby');
   d.innerHTML = `
-    <section class="panel room">
-      ${NET.solo ? '<div class="code solo-t">🤖 單人模式</div>' : `<div class="small">房號</div>
-      <div class="code">${esc(NET.code)}</div>
-      <button class="mini" id="share">📤 邀請朋友</button>`}
-    </section>
-    <section class="panel">
-      <h2>玩家 ${NET.players.length} / 4</h2>
-      <div class="players">${playerChipsHTML(true)}</div>
-      ${NET.players.length < 4 && !NET.solo ? '<p class="tip">等朋友輸入房號加入… 🐾</p>' : ''}
-    </section>
-    ${isHost ? `<section class="panel botbar">
-      <div class="brow"><button class="mini" id="addbot" ${NET.players.length >= 4 ? 'disabled' : ''}>🤖 加入電腦</button>
-      <button class="mini" id="rmbot" ${NET.players.some(p => p.bot) ? '' : 'disabled'}>➖ 移除電腦</button></div>
-      ${NET.players.some(p => p.bot) ? `<div class="lvl">電腦強度 ${BOT_LEVELS.map((n, i) => `<button class="lv${i === NET.level ? ' on' : ''}" data-l="${i}">${n}</button>`).join('')}</div>` : ''}
-    </section>` : ''}
-    ${isHost ? `
-      <h2 class="sect">${enough ? '選一個遊戲開始吧!' : '至少 2 人才能開始喔'}</h2>
+    <div class="lbar">
+      <button class="iconbtn" id="leave" aria-label="離開房間">◀</button>
+      <div class="roomtag">${NET.solo ? '🤖 單人模式' : `房號<b>${esc(NET.code)}</b>`}</div>
+      ${NET.solo ? '<span class="iconbtn ghost"></span>' : '<button class="iconbtn" id="share" aria-label="邀請朋友">📤</button>'}
+    </div>
+    <section class="panel seats">${[0, 1, 2, 3].map(seatHTML).join('')}</section>
+    ${isHost && hasBot ? `<div class="lvl">電腦強度<div class="seg">${BOT_LEVELS.map((n, i) => `<button class="lv${i === NET.level ? ' on' : ''}" data-l="${i}">${n}</button>`).join('')}</div></div>` : ''}
+    ${isHost ? `${ribbon(enough ? '選擇遊戲' : '至少 2 人才能開始', 'blue')}
       <section class="games">${GAMES.map(g => `
         <button class="gcard" data-g="${g.id}" style="--g:${g.color}" ${enough ? '' : 'disabled'}>
-          <span class="gemo">${g.emoji}</span><b>${g.name}</b>
-          <span class="tag">${g.tag}</span><span class="gdesc">${g.desc}</span>
+          <span class="gico">${g.emoji}</span><b>${g.name}</b><span class="tag">${g.tag}</span>
         </button>`).join('')}
       </section>` : `
       <section class="panel waiting"><div class="spin">🎲</div><p>等房主選遊戲…</p></section>`}
-    <footer class="foot"><button class="mini" id="leave">🚪 離開房間</button></footer>`;
+    ${!NET.solo && NET.players.length < 4 ? '<p class="tip">把房號告訴朋友,或按 📤 分享邀請連結</p>' : ''}`;
   app.appendChild(d);
 
   const sh = $('#share', d);
   if (sh) sh.addEventListener('click', shareRoom);
-  const ab = $('#addbot', d), rb = $('#rmbot', d);
-  if (ab) ab.addEventListener('click', () => { addBot(); hostToLobby(); });
-  if (rb) rb.addEventListener('click', () => { removeBot(); hostToLobby(); });
+  $$('.seat.can', d).forEach(s => s.addEventListener('click', () => { addBot(); hostToLobby(); }));
+  $$('.kick', d).forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    NET.players = NET.players.filter(p => !(p.bot && p.slot === +b.dataset.slot));
+    hostToLobby();
+  }));
   $$('.lv', d).forEach(b => b.addEventListener('click', () => { NET.level = +b.dataset.l; hostToLobby(); }));
   $('#leave', d).addEventListener('click', () => {
-    if (!isHost || confirm('你是房主,離開後房間會解散,確定嗎?')) leaveRoom();
+    if (!isHost || NET.solo || confirm('你是房主,離開後房間會解散,確定嗎?')) leaveRoom();
   });
   $$('.gcard', d).forEach(b => b.addEventListener('click', () => hostPickGame(b.dataset.g)));
 }
@@ -534,13 +550,7 @@ async function shareRoom() {
   catch (e) { toast('房號:' + NET.code); }
 }
 
-function busyView() {
-  resetView();
-  app.innerHTML = '';
-  const d = el('div', 'screen wait', `<div class="spin">🎮</div><p>大家正在玩一局<br>下一局就能一起玩囉!</p><button class="mini">🚪 離開房間</button>`);
-  app.appendChild(d);
-  $('button', d).addEventListener('click', () => leaveRoom());
-}
+function busyView() { waitCard('🎮', '大家正在玩一局<br>下一局就能一起玩囉!', '🚪 離開房間'); }
 
 /* ---------- 規則說明 ---------- */
 function introView(g) {
@@ -551,19 +561,19 @@ function introView(g) {
   d.style.setProperty('--g', g.color);
   d.innerHTML = `
     <div class="icard">
-      <div class="iemo">${g.emoji}</div>
-      <h1>${g.name}</h1>
+      ${ribbon(g.name)}
+      <div class="iico"><span>${g.emoji}</span></div>
       <span class="tag">${g.tag}</span>
-      <ul>${g.rules.map(r => `<li>${r}</li>`).join('')}</ul>
+      <ol class="rules">${g.rules.map((r, i) => `<li><i>${i + 1}</i><span>${r}</span></li>`).join('')}</ol>
       <div class="players small-chips"></div>
-      ${isHost ? '<button class="btn go">開始遊戲!</button><button class="mini back">← 換遊戲</button>'
+      ${isHost ? '<button class="btn big green go"><span class="bi">▶</span><span class="bt">開始遊戲</span></button><button class="btn white sm toback">◀ 換遊戲</button>'
     : '<p class="waittxt"><span class="spin-s">⏳</span> 等房主按開始…</p>'}
     </div>`;
   app.appendChild(d);
   introPlayers();
   if (isHost) {
     $('.go', d).addEventListener('click', () => hostStartGame(g));
-    $('.back', d).addEventListener('click', hostToLobby);
+    $('.toback', d).addEventListener('click', hostToLobby);
   }
 }
 function introPlayers() {
@@ -638,7 +648,7 @@ function playView(m) {
       if (chip) chip.classList.add('bump');
     },
     countdown(n) {
-      v.stage(n > 0 ? `<div class="big pulse">${n}</div>` : '<div class="big">開始!</div>');
+      v.stage(n > 0 ? `<div class="big cdn pulse">${n}</div>` : '<div class="big cdn go">GO!</div>');
       if (n > 0) SFX.tick(); else SFX.go();
     },
     pop(text, neg) {
@@ -673,14 +683,16 @@ function resultsView(m) {
   const order = m.players.map(s => ({ s, v: m.scores[s] })).sort((a, b) => b.v - a.v);
   const medal = v => ['🥇', '🥈', '🥉', '🎀'][sc.filter(x => x > v).length];
   const iWon = m.winners.includes(NET.mySlot);
+  if (iWon) store.set('wins', store.get('wins', 0) + 1);
   const title = m.winners.length === 0 ? '沒有贏家 😆'
     : m.winners.length > 1 ? `平手!${m.winners.map(s => PLAYERS[s].emoji).join(' ')} 都贏了`
       : `${PLAYERS[m.winners[0]].emoji} ${esc(pinfo(m.winners[0]).name)} 獲勝!`;
 
   const d = el('div', 'screen result');
   d.innerHTML = `
-    <div class="trophy">${iWon ? '🏆' : m.winners.length ? '👏' : '🤪'}</div>
-    <h1>${title}</h1>
+    <div class="rhead"><div class="sunburst${iWon ? '' : ' dim'}"></div><div class="trophy">${iWon ? '🏆' : m.winners.length ? '👏' : '🤪'}</div></div>
+    ${ribbon(iWon ? '勝利!' : '遊戲結束', iWon ? 'gold' : 'blue')}
+    <h1 class="rtitle">${title}</h1>
     ${iWon ? '<p class="youwin">你好棒!獲得一顆 ⭐</p>' : ''}
     <div class="ranks">${order.map(({ s, v }, k) => {
     const p = pinfo(s);
@@ -691,10 +703,10 @@ function resultsView(m) {
   }).join('')}
     </div>
     <div class="rbtns">${isHost ? `
-      <button class="btn again">🔁 再玩一次</button>
-      <button class="btn alt other">🎲 選其他遊戲</button>` : `
+      <button class="btn big green again"><span class="bi">🔁</span><span class="bt">再玩一次</span></button>
+      <button class="btn big blue other"><span class="bi">🎲</span><span class="bt">選其他遊戲</span></button>` : `
       <p class="waittxt"><span class="spin-s">⏳</span> 等房主決定下一局…</p>
-      <button class="mini leave">🚪 離開房間</button>`}
+      <button class="btn white sm leave">🚪 離開房間</button>`}
     </div>`;
   app.appendChild(d);
   if (isHost) {
@@ -1803,7 +1815,7 @@ function vTank(V) {
   fit();
 
   V.countdown = n => {
-    ov.innerHTML = n > 0 ? `<div class="big pulse">${n}</div>` : '<div class="big">出發!</div>';
+    ov.innerHTML = n > 0 ? `<div class="big cdn pulse">${n}</div>` : '<div class="big cdn">出發!</div>';
     ov.classList.add('on');
     if (n > 0) SFX.tick();
     else { SFX.go(); setTimeout(() => ov.classList.remove('on'), 700); }
@@ -1858,7 +1870,8 @@ function vTank(V) {
     if (!hidden || e.target.closest('.exit, .hidebtn, .chips')) return;
     e.preventDefault();
     try { V.root.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
-    if (e.clientX < innerWidth / 2) {
+    const rr = V.root.getBoundingClientRect();
+    if (e.clientX < rr.left + rr.width / 2) {
       if (stickId == null) { stickId = e.pointerId; stickX = e.clientX; stickY = e.clientY; }
     } else if (fireId == null) { fireId = e.pointerId; setFire(true); }
   });
