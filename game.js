@@ -118,6 +118,7 @@ function resetView() {
   viewT.stop();
   viewT = makeTimers();
   V = null;
+  document.body.classList.remove('wide');
   return viewT;
 }
 
@@ -410,6 +411,16 @@ const GAMES = [
     id: 'tank', emoji: '🪖', name: '坦克大戰', tag: '反應+合作', color: '#4f9d69', desc: '一起守護基地!',
     rules: ['大家同一隊!一起保護地圖下方的基地 🦅', '左邊方向鍵移動(可以滑動),右邊按鈕發射砲彈', '磚牆打得破、鐵牆打不破、水過不去、草叢可以躲', '打倒敵人得分:👾 1 分、👻 2 分、🤖 3 分(要打 3 下)', '每人 3 條命;打到隊友會讓他暫停一下,也別打到自己的基地喔!'],
     host: hTank, view: vTank,
+  },
+  {
+    id: 'shaft', emoji: '🪜', name: '小朋友下樓梯', tag: '反應', color: '#f2994a', desc: '一直往下跳!',
+    rules: ['平台會一直往上升,要往下跳到平台上,別被天花板的尖刺刺到', '按住 ◀ ▶ 左右移動', '綠色平台回血、尖刺平台扣血;還有輸送帶、彈簧和會碎掉的平台', '血量歸零或掉出畫面就出局', '下到最深樓層的人獲勝!'],
+    host: hShaft, view: vShaft,
+  },
+  {
+    id: 'volley', emoji: '🏐', name: '萌寵打排球', tag: '反應+對戰', color: '#f6c445', desc: '橫向畫面大對決!',
+    rules: ['手機橫著拿!(直拿時畫面會自動轉向)', '◀ ▶ 移動、按「跳」跳起來,在空中靠近球時按「殺」可以殺球', '球落在哪一邊的地上,另一邊就得 1 分', '2 人是 1 對 1,3~4 人分成左右兩隊', '先拿到 9 分的一隊獲勝!'],
+    host: hVolley, view: vVolley,
   },
 ];
 const GAME = Object.fromEntries(GAMES.map(g => [g.id, g]));
@@ -766,6 +777,17 @@ function hostStartGame(g) {
       else { n--; T.after(800, tick); }
     };
     tick();
+  };
+
+  // 即時遊戲的主迴圈:依真實經過的時間補跑物理,手機卡頓時速度也不會變慢
+  H.loop = (ms, fn) => {
+    let acc = 0, last = performance.now();
+    T.every(ms, () => {
+      const now = performance.now();
+      acc += Math.min(1500, now - last);
+      last = now;
+      for (let n = 0; acc >= ms && n < 40; n++) { fn(); acc -= ms; }
+    });
   };
 
   NET.game = H;
@@ -1748,7 +1770,7 @@ function hTank(H) {
   H.bc(state());
 
   return {
-    start() { H.s.every(TANK.TICK, step); },
+    start() { H.loop(TANK.TICK, step); },
     input(slot, m) {
       if (m.e === 'dir') ctrl[slot].dir = [0, 1, 2, 3].includes(m.d) ? m.d : -1;
       else if (m.e === 'f') ctrl[slot].fire = !!m.on;
@@ -1911,6 +1933,7 @@ function vTank(V) {
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.font = `${Math.round(size * sc)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+    ctx.fillStyle = '#000'; // 彩色 emoji 會吃到填色的透明度,先設成不透明
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(ch, x * sc + ox, y * sc + oy);
@@ -2095,6 +2118,662 @@ function vTank(V) {
 }
 
 /* =========================================================
+   共用:畫布遊戲的舞台(依比例縮放、倒數蓋板、按住按鈕、鍵盤)
+   ========================================================= */
+function canvasStage(V, aspect, fill) {
+  const sin = $('.sin', V.root), stageEl = $('.stage', V.root);
+  sin.innerHTML = '<div class="twrap"><canvas class="tcv"></canvas><div class="tov"></div></div><div class="hud"></div>';
+  const wrap = $('.twrap', sin), cv = $('.tcv', sin), ov = $('.tov', sin), hud = $('.hud', sin);
+  const C = { cv, ctx: cv.getContext('2d'), ov, hud, sc: 1, ox: 0, oy: 0 };
+  C.fit = () => {
+    const w = stageEl.clientWidth - 10, h = stageEl.clientHeight - 10 - hud.offsetHeight - 4;
+    if (fill) { // 撐滿整個舞台(畫面比例不同時,背景往兩側延伸)
+      wrap.style.width = Math.max(60, Math.floor(w)) + 'px';
+      wrap.style.height = Math.max(40, Math.floor(h)) + 'px';
+      return;
+    }
+    let cw = w, ch = w / aspect;
+    if (ch > h) { ch = h; cw = h * aspect; }
+    wrap.style.width = Math.max(60, Math.floor(cw)) + 'px';
+    wrap.style.height = Math.max(40, Math.floor(ch)) + 'px';
+  };
+  const ro = new ResizeObserver(C.fit);
+  ro.observe(stageEl);
+  C.fit();
+  C.alive = () => { if (cv.isConnected) return true; ro.disconnect(); return false; };
+  C.size = worldW => { // 依實際像素調整畫布大小,之後用世界座標畫圖
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const pw = Math.round(cv.clientWidth * dpr), ph = Math.round(cv.clientHeight * dpr);
+    if (pw && ph && (cv.width !== pw || cv.height !== ph)) { cv.width = pw; cv.height = ph; }
+    C.sc = cv.width / worldW;
+    C.ox = C.oy = 0;
+    C.ctx.setTransform(C.sc, 0, 0, C.sc, 0, 0);
+  };
+  C.emoji = (ch, x, y, size, rot) => {
+    const ctx = C.ctx;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, x * C.sc + C.ox, y * C.sc + C.oy);
+    if (rot) ctx.rotate(rot);
+    ctx.font = `${Math.round(size * C.sc)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+    ctx.fillStyle = '#000'; // 彩色 emoji 會吃到填色的透明度,先設成不透明
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(ch, 0, 0);
+    ctx.restore();
+  };
+  C.rr = (x, y, w, h, r) => {
+    const ctx = C.ctx;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h);
+    ctx.fill();
+  };
+  let ovTok = 0;
+  C.overlay = (html, ms) => {
+    const tok = ++ovTok;
+    ov.innerHTML = html;
+    ov.classList.add('on');
+    if (ms) setTimeout(() => { if (tok === ovTok) ov.classList.remove('on'); }, ms);
+  };
+  V.countdown = n => {
+    C.overlay(n > 0 ? `<div class="big cdn pulse">${n}</div>` : '<div class="big cdn go">GO!</div>', n > 0 ? 0 : 700);
+    if (n > 0) SFX.tick(); else SFX.go();
+  };
+  return C;
+}
+
+function holdBtn(btn, on, off) {
+  btn.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    try { btn.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    btn.classList.add('on');
+    on();
+  });
+  const up = () => {
+    if (!btn.classList.contains('on')) return;
+    btn.classList.remove('on');
+    if (off) off();
+  };
+  btn.addEventListener('pointerup', up);
+  btn.addEventListener('pointercancel', up);
+}
+
+function keyCtl(cv, map) {
+  const h = e => {
+    if (!cv.isConnected) { removeEventListener('keydown', h); removeEventListener('keyup', h); return; }
+    const f = map[e.key];
+    if (!f) return;
+    e.preventDefault();
+    if (e.repeat) return;
+    const fn = e.type === 'keydown' ? f[0] : f[1];
+    if (fn) fn();
+  };
+  addEventListener('keydown', h);
+  addEventListener('keyup', h);
+}
+
+/* 橫向遊戲:手機直拿時把整個遊戲畫面轉 90 度,撐滿螢幕 */
+function landscape(V) {
+  document.body.classList.add('wide');
+  const apply = () => {
+    if (!V.root.isConnected) { removeEventListener('resize', apply); return; }
+    const portrait = innerHeight > innerWidth;
+    V.root.classList.toggle('rot', portrait);
+    V.root.style.width = portrait ? innerHeight + 'px' : '';
+    V.root.style.height = portrait ? innerWidth + 'px' : '';
+  };
+  addEventListener('resize', apply);
+  apply();
+}
+
+/* =========================================================
+   8. 小朋友下樓梯 🪜(大家在同一個豎井裡往下跳)
+   座標:寬 240 x 高 320;平台種類 0 一般 1 尖刺 2 左輸送帶 3 右輸送帶 4 彈簧 5 會碎
+   ========================================================= */
+const SHAFT = { W: 240, H: 320, PW: 16, PH: 20, LW: 60, LH: 8, TICK: 40 };
+
+function hShaft(H) {
+  const { W, PW, PH, LW, LH } = SHAFT, VH = SHAFT.H, dt = SHAFT.TICK / 1000;
+  const r1 = v => Math.round(v * 10) / 10;
+  let plats = [], nextId = 1, t = 0, dist = 0, over = false, lastY = 0, fx = [];
+
+  function addPlat(y, type) {
+    if (type == null) {
+      const r = Math.random();
+      type = r < 0.45 ? 0 : r < 0.6 ? 1 : r < 0.7 ? 2 : r < 0.8 ? 3 : r < 0.9 ? 4 : 5;
+    }
+    plats.push({ id: nextId++, x: rand(0, W - LW), y, w: LW, type, broke: false });
+    lastY = y;
+  }
+  plats.push({ id: nextId++, x: W / 2 - LW, y: 150, w: LW * 2, type: 0, broke: false }); // 起點
+  lastY = 150;
+  while (lastY < VH + 20) addPlat(lastY + rand(48, 66), Math.random() < 0.7 ? 0 : undefined);
+
+  const ps = H.players.map((s, i) => ({ s, x: W / 2 - LW + 8 + i * 30, y: 150 - PH, vy: 0, hp: 10, alive: true, on: null, drop: 0, stand: 0, ctl: 0 }));
+  ps.forEach(p => { p.on = plats[0]; });
+  const floorNow = () => Math.floor(dist / 55);
+
+  function kill(p) {
+    p.alive = false;
+    H.scores[p.s] = floorNow();
+    fx.push(['x', r1(p.x + PW / 2), r1(Math.min(VH - 12, Math.max(12, p.y + PH / 2)))]);
+  }
+  const state = () => ({
+    t: 'g', e: 's',
+    pl: plats.map(q => [q.id, r1(q.x), r1(q.y), q.type, q.w]),
+    ps: ps.map(p => [p.s, r1(p.x), r1(p.y), Math.max(0, p.hp), p.alive ? 1 : 0]),
+    fl: floorNow(), fx,
+  });
+  function end(reason) {
+    over = true;
+    ps.forEach(p => { if (p.alive) H.scores[p.s] = floorNow(); });
+    H.bc({ t: 'score', scores: H.scores });
+    H.bc({ t: 'g', e: 'over', reason, fl: floorNow() });
+    H.s.after(2800, H.finish);
+  }
+
+  function step() {
+    if (over) return;
+    fx = [];
+    t += dt;
+    const rise = Math.min(100, 42 + t * 0.7) * dt; // 越來越快
+    dist += rise;
+    plats.forEach(q => { q.y -= rise; });
+    lastY -= rise;
+    plats = plats.filter(q => !q.broke && q.y > -LH);
+    while (lastY < VH + 20) addPlat(lastY + rand(48, 68));
+
+    for (const p of ps) {
+      if (!p.alive) continue;
+      if (!H.online(p.s)) { kill(p); continue; }
+      let push = 0;
+      if (p.on && (p.on.broke || !plats.includes(p.on) || p.x + PW <= p.on.x || p.x >= p.on.x + p.on.w)) p.on = null;
+      if (p.on) {
+        p.y = p.on.y - PH;
+        p.vy = 0;
+        if (p.on.type === 2) push = -55;
+        else if (p.on.type === 3) push = 55;
+        else if (p.on.type === 5 && (p.stand += dt) > 0.35) {
+          p.on.broke = true;
+          fx.push(['c', r1(p.on.x + p.on.w / 2), r1(p.on.y)]);
+          p.on = null;
+        }
+      } else {
+        p.vy = Math.min(380, p.vy + 900 * dt);
+        let ny = p.y + p.vy * dt;
+        if (p.drop <= 0 && p.vy >= 0) {
+          for (const q of plats) {
+            if (q.broke || p.x + PW <= q.x + 2 || p.x >= q.x + q.w - 2) continue;
+            if (p.y + PH <= q.y + rise + 1 && ny + PH >= q.y) { // 這一步剛好落到平台上
+              ny = q.y - PH;
+              p.vy = 0;
+              p.on = q;
+              p.stand = 0;
+              if (q.type === 1) { p.hp -= 4; fx.push(['h', r1(p.x + PW / 2), r1(q.y)]); }
+              else p.hp = Math.min(10, p.hp + 1);
+              if (q.type === 4) { p.vy = -310; p.on = null; fx.push(['s', r1(p.x + PW / 2), r1(q.y)]); }
+              break;
+            }
+          }
+        }
+        p.y = ny;
+      }
+      p.x = Math.max(0, Math.min(W - PW, p.x + (p.ctl * 130 + push) * dt));
+      if (p.drop > 0) p.drop -= dt;
+      if (p.y < 14) { // 撞到天花板的尖刺,會從平台上掉下去
+        p.hp -= 4;
+        p.y = 16;
+        p.vy = 60;
+        p.on = null;
+        p.drop = 0.35;
+        fx.push(['h', r1(p.x + PW / 2), 16]);
+      }
+      if (p.hp <= 0 || p.y > VH) kill(p);
+    }
+    H.bc(state());
+    if (ps.every(p => !p.alive)) end('大家都掉下去了!');
+    else if (t > 180) end('時間到!');
+  }
+
+  H.bc(state());
+  return {
+    start() {
+      H.loop(SHAFT.TICK, step);
+      H.s.every(1000, () => {
+        if (over) return;
+        ps.forEach(p => { if (p.alive) H.scores[p.s] = floorNow(); });
+        H.bc({ t: 'score', scores: H.scores });
+      });
+    },
+    input(slot, m) {
+      const p = ps.find(x => x.s === slot);
+      if (p && m.e === 'mv') p.ctl = [-1, 0, 1].includes(m.d) ? m.d : 0;
+    },
+  };
+}
+
+function vShaft(V) {
+  const { W, PW, PH, TICK } = SHAFT, VH = SHAFT.H;
+  const C = canvasStage(V, W / VH), ctx = C.ctx;
+  V.pad.innerHTML = '<button class="hbtn" data-d="-1">◀</button><button class="hbtn" data-d="1">▶</button>';
+  const held = new Set();
+  let dir = 0;
+  const upd = () => {
+    const d = (held.has(1) ? 1 : 0) - (held.has(-1) ? 1 : 0);
+    if (d !== dir) { dir = d; V.send({ e: 'mv', d }); }
+  };
+  $$('.hbtn', V.pad).forEach(b => {
+    const d = +b.dataset.d;
+    holdBtn(b, () => { held.add(d); upd(); }, () => { held.delete(d); upd(); });
+  });
+  const k = d => [() => { held.add(d); upd(); }, () => { held.delete(d); upd(); }];
+  keyCtl(C.cv, { ArrowLeft: k(-1), ArrowRight: k(1), a: k(-1), d: k(1) });
+
+  let prev = new Map(), cur = new Map(), prevP = new Map(), st = null, curAt = 0, hudTxt = '';
+  const fxs = [];
+
+  function drawPlat(x, y, w, type, now) {
+    if (type === 0) {
+      ctx.fillStyle = '#5fc46a'; C.rr(x, y, w, 8, 3);
+      ctx.fillStyle = '#a5ec9b'; ctx.fillRect(x + 3, y + 1.5, w - 6, 2);
+    } else if (type === 1) {
+      ctx.fillStyle = '#9aa3b8'; C.rr(x, y + 2, w, 6, 2);
+      ctx.fillStyle = '#e8ecf5'; ctx.strokeStyle = '#1f3864'; ctx.lineWidth = 0.8;
+      for (let i = 0; i + 6 <= w; i += 6) {
+        ctx.beginPath(); ctx.moveTo(x + i, y + 3); ctx.lineTo(x + i + 3, y - 5); ctx.lineTo(x + i + 6, y + 3); ctx.closePath(); ctx.fill(); ctx.stroke();
+      }
+    } else if (type === 2 || type === 3) {
+      ctx.fillStyle = '#4f5a78'; C.rr(x, y, w, 8, 4);
+      ctx.fillStyle = '#ffd23f';
+      const s = type === 2 ? -1 : 1, off = ((now / 25) % 10) * s;
+      ctx.save(); ctx.beginPath(); ctx.rect(x + 2, y, w - 4, 8); ctx.clip();
+      for (let i = -10; i < w + 10; i += 10) {
+        const cx = x + i + off;
+        ctx.beginPath(); ctx.moveTo(cx - 2 * s, y + 1.5); ctx.lineTo(cx + 2 * s, y + 4); ctx.lineTo(cx - 2 * s, y + 6.5); ctx.lineTo(cx - 0.5 * s, y + 4); ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
+    } else if (type === 4) {
+      ctx.strokeStyle = '#c47400'; ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      for (let i = 0; i <= w; i += 6) { ctx.moveTo(x + i, y + 4); ctx.lineTo(x + i + 3, y + 10); ctx.lineTo(x + i + 6, y + 4); }
+      ctx.stroke();
+      ctx.fillStyle = '#ffd23f'; C.rr(x, y, w, 5, 2);
+    } else {
+      ctx.fillStyle = '#d9a066'; C.rr(x, y, w, 8, 2);
+      ctx.strokeStyle = '#8a5a2b'; ctx.lineWidth = 0.9;
+      ctx.beginPath(); ctx.moveTo(x + w * 0.3, y); ctx.lineTo(x + w * 0.38, y + 4); ctx.lineTo(x + w * 0.3, y + 8);
+      ctx.moveTo(x + w * 0.7, y); ctx.lineTo(x + w * 0.62, y + 4); ctx.lineTo(x + w * 0.7, y + 8); ctx.stroke();
+    }
+  }
+  function draw() {
+    C.size(W);
+    const now = performance.now();
+    const g = ctx.createLinearGradient(0, 0, 0, VH);
+    g.addColorStop(0, '#ffeacc'); g.addColorStop(1, '#ffd9a8');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, VH);
+    ctx.fillStyle = 'rgba(255,255,255,.35)';
+    for (let y = 0; y < VH; y += 24) for (let x = (y / 24) % 2 ? 0 : 20; x < W; x += 40) ctx.fillRect(x, y, 18, 10);
+    if (!st) return;
+    const a = Math.min(1, (now - curAt) / TICK);
+    cur.forEach(q => {
+      const p = prev.get(q[0]);
+      const y = p ? p[2] + (q[2] - p[2]) * a : q[2];
+      drawPlat(q[1], y, q[4], q[3], now);
+    });
+    st.ps.forEach(q => {
+      if (!q[4]) return;
+      const p = prevP.get(q[0]);
+      let x = q[1], y = q[2];
+      if (p && Math.abs(p[1] - x) + Math.abs(p[2] - y) < 30) { x = p[1] + (x - p[1]) * a; y = p[2] + (y - p[2]) * a; }
+      const P = PLAYERS[q[0]];
+      if (q[0] === V.me) {
+        ctx.fillStyle = 'rgba(255,214,60,.45)';
+        ctx.beginPath(); ctx.arc(x + PW / 2, y + PH / 2, 14, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.fillStyle = P.color;
+      ctx.beginPath(); ctx.ellipse(x + PW / 2, y + PH - 1, 8, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+      C.emoji(P.emoji, x + PW / 2, y + PH / 2 - 1, 21);
+    });
+    // 天花板尖刺
+    ctx.fillStyle = '#7d879f';
+    ctx.fillRect(0, 0, W, 5);
+    ctx.fillStyle = '#c7cfde'; ctx.strokeStyle = '#1f3864'; ctx.lineWidth = 0.8;
+    for (let x = 0; x < W; x += 10) {
+      ctx.beginPath(); ctx.moveTo(x, 4); ctx.lineTo(x + 5, 14); ctx.lineTo(x + 10, 4); ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+    for (let i = fxs.length - 1; i >= 0; i--) {
+      const f = fxs[i], age = now - f.t;
+      if (age > 600) { fxs.splice(i, 1); continue; }
+      ctx.save();
+      ctx.globalAlpha = 1 - age / 600;
+      C.emoji({ x: '💫', h: '💢', s: '✨', c: '💨' }[f.k] || '✨', f.x, f.y - age / 30, 14 + age / 60);
+      ctx.restore();
+    }
+  }
+  const loop = () => { if (!C.alive()) return; draw(); requestAnimationFrame(loop); };
+  requestAnimationFrame(loop);
+
+  function updateHud() {
+    const me = st.ps.find(p => p[0] === V.me);
+    let txt = `<span class="floor">B${st.fl}</span>`;
+    if (me && me[4]) txt += `<span>${PLAYERS[V.me].emoji}<span class="hpbar"><i style="width:${me[3] * 10}%"></i></span></span>`;
+    else if (me) txt += '<span class="dead">👻 你掉下去了,幫大家加油!</span>';
+    const alive = st.ps.filter(p => p[4]).length;
+    if (st.ps.length > 1) txt += `<span>存活 ${alive}/${st.ps.length}</span>`;
+    if (txt !== hudTxt) { hudTxt = txt; C.hud.innerHTML = txt; }
+  }
+
+  let wasAlive = true;
+  V.on = m => {
+    if (m.e === 's') {
+      prev = cur;
+      cur = new Map(m.pl.map(q => [q[0], q]));
+      prevP = st ? new Map(st.ps.map(p => [p[0], p])) : new Map();
+      st = m;
+      curAt = performance.now();
+      m.fx.forEach(f => {
+        fxs.push({ k: f[0], x: f[1], y: f[2], t: performance.now() });
+        if (f[0] === 'h') { beep(200, 0.15, 'square', 0.06); }
+        else if (f[0] === 's') beep(880, 0.12, 'sine', 0.1);
+      });
+      const me = m.ps.find(p => p[0] === V.me);
+      if (me && wasAlive && !me[4]) { wasAlive = false; SFX.bad(); buzz(200); }
+      updateHud();
+    } else if (m.e === 'over') {
+      C.overlay(`<div class="big">🏁</div><div>${m.reason}</div><div class="small">最深到 B${m.fl}</div>`);
+      held.clear(); upd();
+    }
+  };
+}
+
+/* =========================================================
+   9. 萌寵打排球 🏐(橫向畫面;靈感來自經典排球小遊戲,角色是我們自己的萌寵)
+   座標:寬 432 x 高 304,地面 y = 262,網子在正中間
+   ========================================================= */
+const VB = { W: 432, H: 304, G: 262, NET_X: 216, NET_TOP: 172, NET_W: 10, PR: 28, BR: 18, TICK: 40, WIN: 9 };
+
+function hVolley(H) {
+  const { W, G, NET_X, NET_TOP, NET_W, PR, BR, WIN } = VB, dt = VB.TICK / 1000;
+  const r1 = v => Math.round(v * 10) / 10;
+  const nx0 = NET_X - NET_W / 2, nx1 = NET_X + NET_W / 2;
+  const ps = H.players.map((s, i) => ({ s, side: i % 2, x: 0, y: G, vy: 0, mv: 0, jumpQ: false, spikeT: 0, hitCd: 0 }));
+  const homeX = p => {
+    const mates = ps.filter(q => q.side === p.side), k = mates.indexOf(p);
+    const d = mates.length > 1 ? [60, 150][k] : 100;
+    return p.side === 0 ? d : W - d;
+  };
+  const ball = { x: 0, y: 0, vx: 0, vy: 0, rot: 0 };
+  const score = [0, 0];
+  let phase = 'ready', over = false, fx = [], serveTok = 0;
+  const startAt = Date.now();
+
+  function reset(side) {
+    ps.forEach(p => { p.x = homeX(p); p.y = G; p.vy = 0; p.spikeT = 0; });
+    const server = ps.find(p => p.side === side) || ps[0];
+    Object.assign(ball, { x: server.x, y: 70, vx: 0, vy: 0 });
+    phase = 'ready';
+    const tok = ++serveTok;
+    H.s.after(900, () => { if (tok === serveTok && phase === 'ready') phase = 'play'; });
+  }
+  const state = () => ({
+    t: 'g', e: 's',
+    p: ps.map(p => [p.s, r1(p.x), r1(p.y), p.spikeT > 0 ? 1 : 0, p.side]),
+    b: [r1(ball.x), r1(ball.y), Math.round(ball.rot * 100) / 100],
+    sc: score, ph: phase, fx,
+  });
+  function end(side, reason) {
+    over = true;
+    H.bc(state());
+    H.bc({ t: 'g', e: 'over', side, reason, sc: score });
+    H.s.after(2800, H.finish);
+  }
+  function point(winSide) {
+    phase = 'point';
+    score[winSide]++;
+    ps.filter(p => p.side === winSide).forEach(p => H.add(p.s, 1));
+    fx.push(['pt', winSide]);
+    if (score[winSide] >= WIN) return end(winSide, `${winSide === 0 ? '左隊' : '右隊'}先拿到 ${WIN} 分!`);
+    H.s.after(1600, () => { if (!over) reset(winSide); });
+  }
+
+  function physics(sdt) {
+    for (const p of ps) {
+      if (p.jumpQ && p.y >= G - 0.5) p.vy = -470;
+      p.jumpQ = false;
+      p.vy += 1350 * sdt;
+      p.y += p.vy * sdt;
+      if (p.y > G) { p.y = G; p.vy = 0; }
+      p.x += p.mv * 240 * sdt;
+      p.x = p.side === 0 ? Math.max(PR, Math.min(nx0 - PR, p.x)) : Math.max(nx1 + PR, Math.min(W - PR, p.x));
+      if (p.hitCd > 0) p.hitCd -= sdt;
+      if (p.spikeT > 0) p.spikeT -= sdt;
+    }
+    if (phase !== 'play') return;
+    ball.vy += 560 * sdt;
+    ball.x += ball.vx * sdt;
+    ball.y += ball.vy * sdt;
+    ball.rot += ball.vx * sdt * 0.04;
+    if (ball.x < BR) { ball.x = BR; ball.vx = Math.abs(ball.vx); }
+    if (ball.x > W - BR) { ball.x = W - BR; ball.vx = -Math.abs(ball.vx); }
+    if (ball.y < BR) { ball.y = BR; ball.vy = Math.abs(ball.vy) * 0.6; }
+    if (ball.x + BR > nx0 && ball.x - BR < nx1 && ball.y + BR > NET_TOP) { // 網子
+      if (ball.y < NET_TOP) {
+        if (ball.vy > 0) { ball.y = NET_TOP - BR; ball.vy = -Math.abs(ball.vy) * 0.75; }
+      } else if (ball.x < NET_X) { ball.x = nx0 - BR; ball.vx = -Math.abs(ball.vx) * 0.75; }
+      else { ball.x = nx1 + BR; ball.vx = Math.abs(ball.vx) * 0.75; }
+    }
+    for (const p of ps) {
+      if (p.hitCd > 0 || !H.online(p.s)) continue;
+      const cx = p.x, cy = p.y - PR, dx = ball.x - cx, dy = ball.y - cy, d = Math.hypot(dx, dy);
+      if (d >= PR + BR) continue;
+      const dir = p.side === 0 ? 1 : -1;
+      if (p.y < G - 8 && p.spikeT > 0) { // 在空中殺球
+        ball.vx = dir * 600;
+        ball.vy = 260;
+        fx.push(['spike', r1(ball.x), r1(ball.y)]);
+      } else {
+        ball.vx = Math.max(-330, Math.min(330, dx * 8 + dir * 110));
+        ball.vy = -540;
+        fx.push(['hit', r1(ball.x), r1(ball.y)]);
+      }
+      const k = (PR + BR + 1) / (d || 1);
+      ball.x = cx + dx * k;
+      ball.y = Math.min(G - BR - 2, cy + dy * k);
+      p.hitCd = 0.22;
+      p.spikeT = 0;
+    }
+    if (ball.y + BR >= G) { ball.y = G - BR; point(ball.x < NET_X ? 1 : 0); }
+  }
+
+  function step() {
+    if (over) return;
+    fx = [];
+    physics(dt / 2);
+    physics(dt / 2);
+    H.bc(state());
+    if (!over && Date.now() - startAt > 300000) end(score[0] === score[1] ? -1 : score[0] > score[1] ? 0 : 1, '時間到!');
+  }
+
+  reset(0);
+  H.bc(state());
+  return {
+    start() { reset(0); H.loop(VB.TICK, step); },
+    input(slot, m) {
+      const p = ps.find(x => x.s === slot);
+      if (!p) return;
+      if (m.e === 'mv') p.mv = [-1, 0, 1].includes(m.d) ? m.d : 0;
+      else if (m.e === 'jump') p.jumpQ = true;
+      else if (m.e === 'spike') p.spikeT = 0.35;
+    },
+  };
+}
+
+function vVolley(V) {
+  const { W, G, NET_X, NET_TOP, NET_W, PR, BR, TICK } = VB, VH = VB.H;
+  landscape(V);
+  const C = canvasStage(V, W / VH, true), ctx = C.ctx;
+  V.pad.innerHTML = `
+    <div class="vgrp"><button class="vb" data-d="-1">◀</button><button class="vb" data-d="1">▶</button></div>
+    <div class="vgrp"><button class="vb jump">跳</button><button class="vb spike">殺</button></div>`;
+  const held = new Set();
+  let dir = 0;
+  const upd = () => {
+    const d = (held.has(1) ? 1 : 0) - (held.has(-1) ? 1 : 0);
+    if (d !== dir) { dir = d; V.send({ e: 'mv', d }); }
+  };
+  $$('.vb[data-d]', V.pad).forEach(b => {
+    const d = +b.dataset.d;
+    holdBtn(b, () => { held.add(d); upd(); }, () => { held.delete(d); upd(); });
+  });
+  holdBtn($('.vb.jump', V.pad), () => V.send({ e: 'jump' }));
+  holdBtn($('.vb.spike', V.pad), () => V.send({ e: 'spike' }));
+  const k = d => [() => { held.add(d); upd(); }, () => { held.delete(d); upd(); }];
+  const jump = [() => V.send({ e: 'jump' })], spike = [() => V.send({ e: 'spike' })];
+  keyCtl(C.cv, { ArrowLeft: k(-1), ArrowRight: k(1), a: k(-1), d: k(1), ArrowUp: jump, w: jump, ' ': spike, Enter: spike, z: spike });
+
+  let st = null, prevSt = null, curAt = 0;
+  const fxs = [];
+  const mySide = () => (st ? (st.p.find(p => p[0] === V.me) || [])[4] : 0);
+
+  function draw() {
+    C.size(W);
+    const now = performance.now(), cv = C.cv;
+    // 球場依高度放到最大、水平置中,多出來的部分畫天空和沙灘
+    const sc = Math.min(cv.width / W, cv.height / VH);
+    C.sc = sc; C.ox = (cv.width - W * sc) / 2; C.oy = cv.height - VH * sc;
+    const gy = C.oy + G * sc;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const g = ctx.createLinearGradient(0, 0, 0, gy);
+    g.addColorStop(0, '#3e6fb8'); g.addColorStop(0.75, '#6d9bd6'); g.addColorStop(1, '#a9c8ec');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, cv.width, gy);
+    // 地面:紅色場邊 + 沙色球場(延伸到整個畫面寬度)
+    ctx.fillStyle = '#c95f6a'; ctx.fillRect(0, gy - 10 * sc, cv.width, 10 * sc);
+    ctx.fillStyle = '#8f3a45'; ctx.fillRect(0, gy - 10 * sc, cv.width, 2 * sc);
+    ctx.fillStyle = '#f7e7a6'; ctx.fillRect(0, gy, cv.width, cv.height - gy);
+    ctx.setTransform(sc, 0, 0, sc, C.ox, C.oy);
+    const ex = C.ox / sc; // 球場兩側多出來的寬度(世界座標)
+    // 遠方白雲帶 + 綠色山丘
+    ctx.fillStyle = 'rgba(255,255,255,.85)';
+    for (let x = -ex - 20; x < W + ex + 20; x += 34) {
+      ctx.beginPath(); ctx.ellipse(x, G - 34 + Math.sin(x * 0.07) * 4, 26, 12, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.fillStyle = '#4f9a4a';
+    ctx.beginPath(); ctx.moveTo(-ex, G - 10);
+    for (let x = -ex; x <= W + ex; x += 8) ctx.lineTo(x, G - 22 - Math.max(0, Math.sin((x + 40) / 70) * 16) - Math.max(0, Math.sin((x - 120) / 45) * 9));
+    ctx.lineTo(W + ex, G - 10); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#3d8040';
+    for (let x = -ex; x < W + ex; x += 13) ctx.fillRect(x, G - 18 + (x % 3), 3, 2);
+    // 黑邊灰白雲朵(會慢慢飄)
+    const drift = (now / 120) % (W + 2 * ex + 120);
+    [[40, 26, 1], [160, 8, .8], [240, 60, 1.1], [330, 40, .9], [110, 100, .8], [380, 112, .7], [270, 120, .7]].forEach(([x, y, s], i) => {
+      let cx = x + (i % 2 ? drift * 0.5 : drift * 0.3);
+      cx = ((cx + ex + 60) % (W + 2 * ex + 120)) - ex - 60;
+      ctx.lineWidth = 1.4; ctx.strokeStyle = '#2a3550'; ctx.fillStyle = '#e4e8f0';
+      ctx.beginPath();
+      ctx.ellipse(cx, y, 26 * s, 9 * s, 0, 0, Math.PI * 2);
+      ctx.ellipse(cx - 10 * s, y - 6 * s, 12 * s, 8 * s, 0, 0, Math.PI * 2);
+      ctx.ellipse(cx + 9 * s, y - 7 * s, 14 * s, 9 * s, 0, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#c9d0de';
+      ctx.beginPath(); ctx.ellipse(cx, y + 3 * s, 22 * s, 4 * s, 0, 0, Math.PI * 2); ctx.fill();
+    });
+    // 白色球場框線
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(14, G + 8); ctx.lineTo(W - 14, G + 8); ctx.lineTo(W - 2, G + 30); ctx.lineTo(2, G + 30); ctx.closePath(); ctx.stroke();
+    if (!st) return;
+    const a = Math.min(1, (now - curAt) / TICK);
+    const lerp = (p, c, i) => (p ? p[i] + (c[i] - p[i]) * a : c[i]);
+
+    // 網子(細桿 + 頂端圓球)
+    ctx.fillStyle = '#8a6a5a'; ctx.fillRect(NET_X - 2.5, NET_TOP, 5, G + 18 - NET_TOP);
+    ctx.fillStyle = '#c99c86'; ctx.fillRect(NET_X - 2.5, NET_TOP, 1.6, G + 18 - NET_TOP);
+    ctx.fillStyle = '#fff3d6'; ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.arc(NET_X, NET_TOP - 2, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+    // 影子
+    const bx = lerp(prevSt && prevSt.b, st.b, 0), by = lerp(prevSt && prevSt.b, st.b, 1);
+    ctx.fillStyle = 'rgba(31,56,100,.18)';
+    st.p.forEach(q => {
+      const p = prevSt && prevSt.p.find(x => x[0] === q[0]);
+      ctx.beginPath(); ctx.ellipse(lerp(p, q, 1), G + 4, 22, 5, 0, 0, Math.PI * 2); ctx.fill();
+    });
+    ctx.beginPath(); ctx.ellipse(bx, G + 4, 14 * Math.max(.4, by / G), 4, 0, 0, Math.PI * 2); ctx.fill();
+
+    // 角色
+    st.p.forEach(q => {
+      const p = prevSt && prevSt.p.find(x => x[0] === q[0]);
+      const x = lerp(p, q, 1), y = lerp(p, q, 2);
+      const P = PLAYERS[q[0]];
+      ctx.strokeStyle = P.color; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.ellipse(x, y + 2, 20, 5, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.save();
+      ctx.shadowColor = 'rgba(20,30,60,.95)';
+      ctx.shadowBlur = 4 * C.sc;
+      C.emoji(P.emoji, x, y - PR + 2, PR * 2.3);
+      ctx.restore();
+      if (q[3]) C.emoji('💢', x + 18, y - PR * 2 + 4, 16);
+      if (q[0] === V.me) {
+        ctx.fillStyle = '#ffd23f';
+        ctx.beginPath(); ctx.moveTo(x - 7, y - PR * 2 - 14); ctx.lineTo(x + 7, y - PR * 2 - 14); ctx.lineTo(x, y - PR * 2 - 5); ctx.closePath(); ctx.fill(); ctx.stroke();
+      }
+    });
+    // 球
+    C.emoji('🏐', bx, by, BR * 2.2, lerp(prevSt && prevSt.b, st.b, 2));
+
+    // 比分(紅色斜體、黑邊)
+    ctx.save();
+    ctx.font = 'italic 900 40px Fredoka, "Noto Sans TC", sans-serif';
+    ctx.textBaseline = 'top'; ctx.lineJoin = 'round';
+    [[34, st.sc[0], 'left', 0], [W - 34, st.sc[1], 'right', 1]].forEach(([x, s, al, side]) => {
+      ctx.textAlign = al;
+      ctx.lineWidth = 7; ctx.strokeStyle = '#1b1b2b'; ctx.strokeText(s, x, 4);
+      ctx.fillStyle = side === mySide() ? '#ff3b30' : '#e0303a';
+      ctx.fillText(s, x, 4);
+      ctx.lineWidth = 1.5; ctx.strokeStyle = '#ffd9d9'; ctx.strokeText(s, x, 4);
+    });
+    ctx.restore();
+
+    for (let i = fxs.length - 1; i >= 0; i--) {
+      const f = fxs[i], age = now - f.t;
+      if (age > 350) { fxs.splice(i, 1); continue; }
+      ctx.save(); ctx.globalAlpha = 1 - age / 350;
+      C.emoji(f.k === 'spike' ? '💥' : '✨', f.x, f.y, (f.k === 'spike' ? 30 : 18) + age / 20);
+      ctx.restore();
+    }
+  }
+  const loop = () => { if (!C.alive()) return; draw(); requestAnimationFrame(loop); };
+  requestAnimationFrame(loop);
+
+  let hudDone = false;
+  V.on = m => {
+    if (m.e === 's') {
+      prevSt = st;
+      st = m;
+      curAt = performance.now();
+      if (!hudDone) {
+        hudDone = true;
+        const team = side => m.p.filter(p => p[4] === side).map(p => PLAYERS[p[0]].emoji).join('');
+        C.overlay(`<div class="vsline">${team(0)} <span class="vs">VS</span> ${team(1)}</div><div>你在${mySide() === 0 ? '左' : '右'}隊 · 先拿 ${VB.WIN} 分獲勝</div>`, 2200);
+      }
+      m.fx.forEach(f => {
+        if (f[0] === 'pt') {
+          const mine = f[1] === mySide();
+          C.overlay(`<div class="big">${mine ? '🎉' : '😣'}</div><div>${mine ? '得分!' : '失分…'}</div>`, 1100);
+          if (mine) { SFX.good(); buzz(40); } else { SFX.bad(); }
+          return;
+        }
+        fxs.push({ k: f[0], x: f[1], y: f[2], t: performance.now() });
+        if (f[0] === 'spike') { beep(140, 0.2, 'sawtooth', 0.08); buzz(30); } else beep(520, 0.06, 'triangle', 0.1);
+      });
+    } else if (m.e === 'over') {
+      const win = m.side === mySide();
+      C.overlay(`<div class="big">${m.side < 0 ? '🤝' : win ? '🏆' : '👏'}</div><div>${m.reason}</div><div class="small">${m.sc[0]} : ${m.sc[1]}</div>`);
+      held.clear(); upd();
+    }
+  };
+}
+
+/* =========================================================
    電腦玩家的行為:聽到房主的廣播,就像真人一樣送出操作
    ========================================================= */
 function botsHear(H, m) {
@@ -2256,6 +2935,75 @@ const BOTS = {
     if (dir !== st.dir) { st.dir = dir; botSend(H, s, { e: 'dir', d: dir }); }
     if (fire !== st.fire) { st.fire = fire; botSend(H, s, { e: 'f', on: fire }); }
   },
+};
+
+/* 下樓梯的電腦:找下面安全的平台跳下去,站太高就趕快離開 */
+BOTS.shaft = (H, s, m) => {
+  if (m.t !== 'g' || m.e !== 's') return;
+  const st = H.bs[s] || (H.bs[s] = { t: 0, d: 0 });
+  const now = Date.now();
+  if (now - st.t < [260, 160, 90][NET.level]) return;
+  st.t = now;
+  const me = m.ps.find(p => p[0] === s);
+  if (!me || !me[4]) return;
+  const { PW, PH } = SHAFT;
+  const x = me[1], cx = x + PW / 2, foot = me[2] + PH;
+  const plats = m.pl.map(q => ({ x: q[1], y: q[2], t: q[3], w: q[4] }));
+  const on = plats.find(q => Math.abs(q.y - foot) < 3 && x + PW > q.x && x < q.x + q.w);
+  let target = null;
+  if (on && on.y > 110 && on.t !== 1 && on.t !== 5) target = on;
+  else {
+    let best = Infinity;
+    plats.forEach(q => {
+      if (q === on || q.y <= foot + 4 || q.y > foot + 220) return;
+      const sc = (q.y - foot) * 0.4 + Math.abs(q.x + q.w / 2 - cx) + (q.t === 1 ? 400 : 0) + (q.t === 5 ? 60 : 0);
+      if (sc < best) { best = sc; target = q; }
+    });
+  }
+  let d = 0;
+  if (target) {
+    const tc = target.x + target.w / 2;
+    if (Math.abs(tc - cx) > 6) d = Math.sign(tc - cx);
+    if (target !== on && on && Math.abs(tc - cx) <= 6) d = cx < on.x + on.w / 2 ? -1 : 1; // 目標在正下方:先走到邊緣
+  }
+  if (Math.random() > botSkill().sk) d = rand(-1, 1);
+  if (d !== st.d) { st.d = d; botSend(H, s, { e: 'mv', d }); }
+};
+
+/* 排球的電腦:預測球的落點跑過去,球下來時跳起來,在空中靠近球就殺球 */
+BOTS.volley = (H, s, m) => {
+  if (m.t !== 'g' || m.e !== 's') return;
+  const st = H.bs[s] || (H.bs[s] = { t: 0, d: 0, pb: null });
+  const now = Date.now();
+  const pb = st.pb;
+  st.pb = { x: m.b[0], y: m.b[1], at: now };
+  if (now - st.t < [140, 90, 50][NET.level]) return;
+  st.t = now;
+  const me = m.p.find(p => p[0] === s);
+  if (!me) return;
+  const { W, G, NET_X, PR, BR } = VB;
+  const side = me[4], x = me[1], y = me[2], dir = side === 0 ? 1 : -1;
+  const sk = botSkill().sk;
+  const bx = m.b[0], by = m.b[1];
+  let vx = 0, vy = 0;
+  if (pb && now > pb.at) { const dtt = (now - pb.at) / 1000; vx = (bx - pb.x) / dtt; vy = (by - pb.y) / dtt; }
+  let px = bx, py = by, pvx = vx, pvy = vy;
+  for (let i = 0; i < 150 && py < G - PR * 1.6; i++) {
+    pvy += 560 * 0.02; px += pvx * 0.02; py += pvy * 0.02;
+    if (px < BR) { px = BR; pvx = -pvx; }
+    if (px > W - BR) { px = W - BR; pvx = -pvx; }
+  }
+  const home = side === 0 ? 100 : W - 100;
+  const onMine = v => (side === 0 ? v < NET_X : v > NET_X);
+  let tx = home;
+  if (m.ph === 'play' && onMine(px)) tx = px - dir * 16;
+  else if (m.ph === 'ready' && onMine(bx)) tx = bx - dir * 6;
+  if (Math.random() > sk) tx += rand(-40, 40);
+  const d = Math.abs(tx - x) > 6 ? Math.sign(tx - x) : 0;
+  if (d !== st.d) { st.d = d; botSend(H, s, { e: 'mv', d }); }
+  if (m.ph !== 'play') return;
+  if (onMine(bx) && Math.abs(bx - x) < 46 && y >= G - 1 && by < G - 120 && by > G - 230 && vy > 0 && Math.random() < 0.5 + sk / 2) botSend(H, s, { e: 'jump' });
+  if (y < G - 20 && Math.hypot(bx - x, by - (y - PR)) < 80 && Math.random() < sk * 0.7) botSend(H, s, { e: 'spike' });
 };
 
 /* ---------- 防止雙指縮放 / 長按選單 ---------- */

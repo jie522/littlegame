@@ -996,6 +996,63 @@ button:disabled { cursor: not-allowed; }
 .hideCtl .zhint.zr { right: 14px; text-align: right; }
 .hideCtl .hidebtn { top: 50%; transform: translate(-50%, -50%); opacity: .8; }
 
+/* 小朋友下樓梯 */
+.play-shaft .stage, .play-volley .stage { flex: 1; padding: 5px; }
+.play-shaft .sin, .play-volley .sin { height: 100%; justify-content: center; gap: 4px; }
+.play-shaft .pad { flex: 0 0 19%; padding: 10px 14px; justify-content: space-between; gap: 14px; }
+.hbtn {
+  flex: 1;
+  height: 100%;
+  border-radius: 22px;
+  background: linear-gradient(#fff, #e3ecf7);
+  border: 3px solid var(--ink);
+  box-shadow: inset 0 -6px 0 rgba(0,0,0,.08), 0 5px 0 var(--ink);
+  color: var(--ink);
+  font-size: 2.2rem;
+  touch-action: none;
+}
+.hbtn.on { background: var(--c); color: #fff; transform: translateY(4px); box-shadow: inset 0 -4px 0 rgba(0,0,0,.12), 0 1px 0 var(--ink); }
+.floor { font-family: "Fredoka", var(--font); font-weight: 700; background: var(--ink); color: #fff; border-radius: 999px; padding: 0 10px; }
+.hpbar { display: inline-block; width: 90px; height: 13px; margin-left: 4px; vertical-align: middle; background: #fff; border: 2px solid var(--ink); border-radius: 999px; overflow: hidden; }
+.hpbar i { display: block; height: 100%; background: linear-gradient(#ff9a9a, #ee4b4b); transition: width .2s; }
+
+/* 萌寵打排球(橫向) */
+body.wide #app, body.wide .sky { left: 0; width: 100%; transform: none; }
+.play.rot { right: auto; bottom: auto; transform-origin: top left; transform: rotate(90deg) translateY(-100%); animation: none; }
+.play-volley { padding: 4px; }
+.play-volley .topbar { position: absolute; top: 10px; left: 10px; z-index: 6; padding: 0; background: none; border: none; }
+.play-volley .chips, .play-volley .hud { display: none; }
+.play-volley .stage { padding: 0; border-width: 2px; overflow: hidden; }
+.play-volley .tcv { border: none; border-radius: 20px; }
+.play-volley .tov { border-radius: 20px; }
+.vsline { font-size: 2rem; }
+.play-volley .pad {
+  position: absolute;
+  left: 10px; right: 10px; bottom: 12px;
+  flex: none;
+  padding: 0 8px;
+  background: none; border: none; box-shadow: none;
+  overflow: visible;
+  justify-content: space-between; align-items: flex-end;
+  pointer-events: none;
+}
+.vgrp { display: flex; gap: 12px; pointer-events: auto; }
+.vb {
+  width: clamp(54px, 15vmin, 84px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: rgba(255,255,255,.6);
+  border: 3px solid var(--ink);
+  box-shadow: 0 4px 0 var(--ink);
+  color: var(--ink);
+  font-size: 1.5rem;
+  font-weight: 900;
+  touch-action: none;
+}
+.vb.jump { background: rgba(146,234,110,.85); color: #fff; text-shadow: var(--ol-sm); }
+.vb.spike { background: rgba(255,140,140,.9); color: #fff; text-shadow: var(--ol-sm); }
+.vb.on { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink); filter: brightness(.92); }
+
 /* ---------- 結算 ---------- */
 .result { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
 .result > :first-child { margin-top: auto; }
