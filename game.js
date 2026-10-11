@@ -66,7 +66,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.10.12';
+const APP_VERSION = '2026.10.12b';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -451,6 +451,11 @@ const GAMES = [
     id: 'shaft', emoji: '🪜', name: '小朋友下樓梯', tag: '反應', color: '#f2994a', desc: '一直往下跳!',
     rules: ['平台會一直往上升,要往下跳到平台上,別被天花板的尖刺刺到', '在畫面任何地方按住左右滑動就能移動(沒有按鍵)', '綠色平台回血、尖刺平台扣血;還有輸送帶、彈簧和會碎掉的平台', '血量歸零或掉出畫面就出局', '下到最深樓層的人獲勝!'],
     host: hShaft, view: vShaft,
+  },
+  {
+    id: 'morris', emoji: '⭕', name: '九子棋', tag: '益智', color: '#a0703f', desc: '連成三顆就能吃子',
+    rules: ['2 人對戰,每人 9 顆棋;房間超過 2 人時抽籤上場、其他人觀戰', '先輪流把棋子放到交叉點上', '同一條線連成三顆(成三)就能吃掉對方一顆棋;已經成三的棋受保護,不能吃', '棋子都放完後,沿著線把棋子移到旁邊的空點;只剩 3 顆時可以飛到任何空點!', '對方剩 2 顆或被困住沒路走,你就贏了!'],
+    host: hMorris, view: vMorris, noCountdown: true,
   },
 ];
 const GAME = Object.fromEntries(GAMES.map(g => [g.id, g]));
@@ -2500,6 +2505,265 @@ function vShaft(V) {
 }
 
 /* =========================================================
+   九子棋 ⭕(2 人回合制:放子 → 走子 → 只剩 3 顆時飛子)
+   24 個交叉點,座標是 7 x 7 的格子;成三(同一條線三顆)就吃對方一顆
+   ========================================================= */
+const NMM_XY = [[0, 0], [3, 0], [6, 0], [1, 1], [3, 1], [5, 1], [2, 2], [3, 2], [4, 2], [0, 3], [1, 3], [2, 3], [4, 3], [5, 3], [6, 3], [2, 4], [3, 4], [4, 4], [1, 5], [3, 5], [5, 5], [0, 6], [3, 6], [6, 6]];
+const NMM_ADJ = [[1, 9], [0, 2, 4], [1, 14], [4, 10], [1, 3, 5, 7], [4, 13], [7, 11], [4, 6, 8], [7, 12], [0, 10, 21], [3, 9, 11, 18], [6, 10, 15], [8, 13, 17], [5, 12, 14, 20], [2, 13, 23], [11, 16], [15, 17, 19], [12, 16], [10, 19], [16, 18, 20, 22], [13, 19], [9, 22], [19, 21, 23], [14, 22]];
+const NMM_MILLS = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11], [12, 13, 14], [15, 16, 17], [18, 19, 20], [21, 22, 23], [0, 9, 21], [3, 10, 18], [6, 11, 15], [1, 4, 7], [16, 19, 22], [8, 12, 17], [5, 13, 20], [2, 14, 23]];
+const nmmMillsAt = i => NMM_MILLS.filter(m => m.includes(i));
+const nmmInMill = (b, i) => b[i] != null && nmmMillsAt(i).some(m => m.every(k => b[k] === b[i]));
+// 如果 who 把棋放到 i(i 可以是空的),會不會成三
+const nmmMakesMill = (b, i, who) => nmmMillsAt(i).some(m => m.every(k => k === i || b[k] === who));
+// 可以被吃的棋:不在「三」裡面的;如果全部都在三裡,就都可以吃
+function nmmRemovable(b, owner) {
+  const mine = b.map((x, i) => (x === owner ? i : -1)).filter(i => i >= 0);
+  const free = mine.filter(i => !nmmInMill(b, i));
+  return free.length ? free : mine;
+}
+function nmmMoves(b, who, fly) {
+  const out = [];
+  b.forEach((x, f) => {
+    if (x !== who) return;
+    (fly ? b.map((_, i) => i) : NMM_ADJ[f]).forEach(t => { if (b[t] == null) out.push([f, t]); });
+  });
+  return out;
+}
+
+function hMorris(H) {
+  const fighters = shuffle(H.players).slice(0, 2); // 超過 2 人就抽籤
+  const b = Array(24).fill(null);
+  const hand = {}, lost = {};
+  fighters.forEach(s => { hand[s] = 9; lost[s] = 0; });
+  let turnI = 0, rm = false, last = null, over = false, idle = 0;
+  const cnt = s => b.filter(x => x === s).length;
+  const fly = s => hand[s] === 0 && cnt(s) === 3;
+  const state = () => ({
+    t: 'g', e: 'board', b, turn: fighters[turnI], fighters, hand, lost,
+    cnt: Object.fromEntries(fighters.map(s => [s, cnt(s)])), rm, last, idle,
+  });
+  const bc = () => H.bc(state());
+  function end(winner, reason) {
+    over = true;
+    if (winner != null) H.scores[winner] = 1;
+    H.bc({ t: 'score', scores: H.scores });
+    H.bc({ t: 'g', e: 'over', winner, reason });
+    H.s.after(3000, H.finish);
+  }
+  function nextTurn() {
+    const prev = fighters[turnI];
+    turnI = 1 - turnI;
+    const s = fighters[turnI];
+    bc();
+    if (hand[s] === 0 && cnt(s) < 3) return end(prev, '對方只剩 2 顆棋了!');
+    if (hand[s] === 0 && !fly(s) && !nmmMoves(b, s, false).length) return end(prev, '對方被困住,沒有棋可以走了!');
+    if (idle >= 60) end(null, '連續 60 步沒有吃子,平手!');
+  }
+  function afterAction(i) {
+    const o = fighters[1 - turnI];
+    if (nmmInMill(b, i) && nmmRemovable(b, o).length) { // 成三:同一個人接著選要吃哪一顆
+      rm = true;
+      last.mill = true;
+      bc();
+    } else nextTurn();
+  }
+
+  return {
+    start() { H.bc({ t: 'g', e: 'intro', fighters }); H.s.after(1800, bc); },
+    input(slot, m) {
+      if (over || slot !== fighters[turnI]) return;
+      const o = fighters[1 - turnI];
+      if (rm) {
+        const i = +m.i;
+        if (m.e !== 'remove' || !nmmRemovable(b, o).includes(i)) return;
+        b[i] = null;
+        lost[o]++;
+        rm = false;
+        idle = 0;
+        last = { ...last, rm: i };
+        return nextTurn();
+      }
+      if (hand[slot] > 0) {
+        const i = +m.i;
+        if (m.e !== 'place' || !(i >= 0 && i < 24) || b[i] != null) return;
+        b[i] = slot;
+        hand[slot]--;
+        last = { type: 'place', to: i, slot };
+        return afterAction(i);
+      }
+      const f = +m.from, t = +m.to;
+      if (m.e !== 'move' || b[f] !== slot || !(t >= 0 && t < 24) || b[t] != null) return;
+      if (!fly(slot) && !NMM_ADJ[f].includes(t)) return;
+      b[f] = null;
+      b[t] = slot;
+      idle++;
+      last = { type: 'move', from: f, to: t, slot };
+      afterAction(t);
+    },
+    presence() {
+      if (over) return;
+      const gone = fighters.find(s => !H.online(s));
+      if (gone != null) end(fighters.find(s => s !== gone), '對手離開了');
+    },
+  };
+}
+
+function vMorris(V) {
+  let st = null, sel = null, targets = [], over = false, lastTurn = null, coverT = null;
+  const me = V.me;
+  const chipsEl = $('.chips', V.root);
+  chipsEl.className = 'cstatus'; // 上方只留一條狀態列
+  chipsEl.innerHTML = '<span class="cs">對局準備中…</span>';
+  V.renderChips = () => {};
+
+  // 棋盤:三個同心正方形 + 四條中線(SVG 畫刻線),24 個交叉點用 HTML 疊在上面
+  const P = v => 6 + v * (88 / 6);
+  const sq = [0, 1, 2].map(k => `<rect x="${P(k)}" y="${P(k)}" width="${P(6 - k) - P(k)}" height="${P(6 - k) - P(k)}" rx=".6"/>`).join('');
+  const mid = `<path d="M${P(3)} ${P(0)}V${P(2)}M${P(3)} ${P(4)}V${P(6)}M${P(0)} ${P(3)}H${P(2)}M${P(4)} ${P(3)}H${P(6)}"/>`;
+  const board = el('div', 'mboard');
+  board.innerHTML = `<svg viewBox="0 0 100 100" class="mlines"><g class="ln-hi">${sq}${mid}</g><g class="ln">${sq}${mid}</g><g class="mills"></g></svg>`;
+  const millsEl = $('.mills', board);
+  const pts = NMM_XY.map(([x, y], i) => {
+    const p = el('div', 'pt');
+    p.dataset.i = i;
+    p.style.left = P(x) + '%';
+    p.style.top = P(y) + '%';
+    board.appendChild(p);
+    return p;
+  });
+  const cover = el('div', 'cover');
+  board.appendChild(cover);
+  V.pad.innerHTML = '';
+  V.pad.appendChild(board);
+  const fit = () => {
+    if (!board.isConnected) { ro.disconnect(); return; }
+    const s = Math.floor(Math.min(V.pad.clientWidth, V.pad.clientHeight));
+    board.style.width = board.style.height = Math.max(120, s) + 'px';
+  };
+  const ro = new ResizeObserver(fit);
+  ro.observe(V.pad);
+  fit();
+  const showCover = (html, ms) => {
+    cover.innerHTML = html;
+    cover.classList.add('on');
+    clearTimeout(coverT);
+    if (ms) coverT = setTimeout(() => cover.classList.remove('on'), ms);
+  };
+  V.stage('<div class="cinfo"></div>');
+  showCover('<div class="big">⭕</div><div>擺好棋盤…</div>');
+
+  const fighting = () => st && st.fighters.includes(me);
+  const myTurn = () => st && !over && st.turn === me;
+  const who = s => (s === me ? '你' : esc(pinfo(s).name));
+
+  function renderStage() {
+    const order = fighting() ? [me, st.fighters.find(s => s !== me)] : st.fighters;
+    const card = s => {
+      const p = pinfo(s), h = st.hand[s];
+      const tray = h
+        ? Array.from({ length: h }, () => `<i class="hd" style="--pc:${p.color}"></i>`).join('') + `<span class="hn">手上 ${h}</span>`
+        : `<span class="gnone">${st.cnt[s] === 3 ? '只剩 3 顆:可以飛!' : '棋子都上場了'}</span>`;
+      return `<div class="pcard${st.turn === s && !over ? ' now' : ''}" style="--c:${p.color}">
+        <div class="pav">${p.emoji}</div>
+        <div class="pinfo"><b>${who(s)}</b><span class="pcnt">場上 ${st.cnt[s]} · 被吃 ${st.lost[s]}</span></div>
+        <div class="ptro mhand">${tray}</div>
+      </div>`;
+    };
+    V.stage(`<div class="cinfo">${order.map(card).join('')}</div>`);
+
+    let msg;
+    if (over) msg = '對局結束';
+    else if (myTurn()) {
+      if (st.rm) msg = '成三了!點一顆對方的棋吃掉';
+      else if (st.hand[me] > 0) msg = `輪到你!放一顆棋(手上 ${st.hand[me]})`;
+      else if (st.cnt[me] === 3) msg = sel != null ? '飛到任何一個空位!' : '只剩 3 顆:選一顆棋,可以飛!';
+      else msg = sel != null ? '選要走去哪一點' : '輪到你!選一顆棋移動';
+    } else {
+      msg = (fighting() ? '' : '👀 觀戰 · ') + (st.rm ? `${who(st.turn)} 成三了,正在選要吃哪顆…` : `輪到 ${pinfo(st.turn).emoji} ${who(st.turn)}…`);
+    }
+    if (!over && st.idle >= 50) msg += ` · 再 ${60 - st.idle} 步平手`;
+    chipsEl.innerHTML = `<span class="cs${myTurn() ? ' on' : ''}">${msg}</span>`;
+  }
+
+  function render(isNew) {
+    const b = st.b, myT = myTurn();
+    const o = st.fighters.find(s => s !== st.turn);
+    const removable = st.rm && myT ? nmmRemovable(b, o) : [];
+    const fly = st.hand[me] === 0 && st.cnt[me] === 3;
+    targets = [];
+    if (myT && !st.rm) {
+      if (st.hand[me] > 0) targets = b.map((x, i) => (x == null ? i : -1)).filter(i => i >= 0);
+      else if (sel != null) targets = nmmMoves(b, me, fly).filter(([f]) => f === sel).map(([, t]) => t);
+    }
+    const movable = myT && !st.rm && st.hand[me] === 0 ? new Set(nmmMoves(b, me, fly).map(([f]) => f)) : new Set();
+    const L = st.last || {};
+    pts.forEach((p, i) => {
+      const x = b[i];
+      p.className = 'pt' + (targets.includes(i) ? ' tgt' : '') + (L.from === i ? ' from' : '') + (L.to === i ? ' last' : '');
+      if (x == null) { p.innerHTML = ''; return; }
+      const cls = 'mp' + (sel === i ? ' sel' : '') + (removable.includes(i) ? ' rmable' : '')
+        + (nmmInMill(b, i) ? ' inmill' : '') + (movable.has(i) ? ' can' : '') + (isNew && L.to === i ? ' fresh' : '');
+      p.innerHTML = `<div class="${cls}" style="--pc:${PLAYERS[x].color}">${PLAYERS[x].emoji}</div>`;
+    });
+    // 已經成三的線:金色發光
+    const P2 = i => NMM_XY[i].map(P);
+    millsEl.innerHTML = NMM_MILLS.filter(m => b[m[0]] != null && m.every(k => b[k] === b[m[0]])).map(m => {
+      const [x1, y1] = P2(m[0]), [x2, y2] = P2(m[2]);
+      return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" style="stroke:${PLAYERS[b[m[0]]].color}"/>`;
+    }).join('');
+    V.root.classList.toggle('myturn', myT);
+    renderStage();
+  }
+
+  V.onTap = e => {
+    const p = e.target.closest('.pt');
+    if (!p || !myTurn()) return;
+    const i = +p.dataset.i, b = st.b;
+    if (st.rm) {
+      if (b[i] != null && b[i] !== me) V.send({ e: 'remove', i });
+      return;
+    }
+    if (st.hand[me] > 0) {
+      if (b[i] == null) V.send({ e: 'place', i });
+      return;
+    }
+    if (sel != null && targets.includes(i)) { V.send({ e: 'move', from: sel, to: i }); sel = null; }
+    else if (b[i] === me) { sel = sel === i ? null : i; SFX.tap(); }
+    else sel = null;
+    render(false);
+  };
+  V.on = m => {
+    if (m.e === 'intro') {
+      const [a, b] = m.fighters.map(s => `<span class="vsp">${pinfo(s).emoji}<b>${who(s)}</b></span>`);
+      showCover(`<div class="small">${V.players.length > 2 ? '抽籤結果' : '對戰開始'}</div><div class="vsrow">${a}<span class="vs">VS</span>${b}</div>
+        ${m.fighters.includes(me) ? '' : '<div class="small">你這局觀戰 👀</div>'}`, 1700);
+      SFX.go();
+    } else if (m.e === 'board') {
+      const prevLast = st && st.last;
+      st = m;
+      sel = null;
+      cover.classList.remove('on');
+      render(true);
+      const L = m.last;
+      if (L && L !== prevLast) {
+        if (m.rm) { if (L.slot === me) { SFX.good(); buzz(40); } else if (fighting()) SFX.bad(); else SFX.tap(); }
+        else if (L.rm != null) { beep(220, 0.18, 'triangle', 0.12); if (fighting() && L.slot !== me) buzz(90); }
+        else beep(rand(380, 460), 0.07, 'sine', 0.14);
+      }
+      if (myTurn() && lastTurn !== me) buzz(60);
+      lastTurn = m.turn;
+    } else if (m.e === 'over') {
+      over = true;
+      sel = null;
+      if (st) render(false);
+      showCover(m.winner == null
+        ? `<div class="big">🤝</div><div>${m.reason}</div>`
+        : `<div class="big">🏆</div><div class="vsrow"><span class="vsp">${pinfo(m.winner).emoji}<b>${who(m.winner)} 獲勝!</b></span></div><div class="small">${m.reason}</div>`);
+    }
+  };
+}
+
+/* =========================================================
    電腦玩家的行為:聽到房主的廣播,就像真人一樣送出操作
    ========================================================= */
 function botsHear(H, m) {
@@ -2683,6 +2947,51 @@ BOTS.shaft = (H, s, m) => {
   }
   if (Math.random() > botSkill().sk) d = rand(-1, 1);
   if (d !== st.d) { st.d = d; botSend(H, s, { e: 'mv', d }); }
+};
+
+/* 九子棋的電腦:能成三就成三、擋住對方快成三的點、吃對方最有威脅的棋 */
+BOTS.morris = (H, s, m, k) => {
+  if (m.t !== 'g' || m.e !== 'board' || m.turn !== s) return;
+  H.s.after(rand(700, 1300) * k.spd, () => {
+    const b = m.b, o = m.fighters.find(x => x !== s), sk = k.sk;
+    const act = obj => botSend(H, s, obj);
+    const noise = () => Math.random() * (1 - sk) * 120;
+    const oFly = m.hand[o] === 0 && m.cnt[o] === 3;
+    // 對方下一步能不能走到 i(擺子階段或飛子時任何空點都可以)
+    const oReach = (bb, i) => m.hand[o] > 0 || oFly || NMM_ADJ[i].some(n => bb[n] === o);
+    const best = list => list.sort((x, y) => y.sc - x.sc)[0];
+    if (m.rm) {
+      const cand = nmmRemovable(b, o).map(i => {
+        let sc = noise() + NMM_ADJ[i].filter(n => b[n] == null).length * 3;
+        nmmMillsAt(i).forEach(ml => { if (ml.filter(q => b[q] === o).length === 2 && ml.some(q => b[q] == null)) sc += 40; });
+        return { i, sc };
+      });
+      if (cand.length) act({ e: 'remove', i: best(cand).i });
+      return;
+    }
+    const empties = b.map((x, i) => (x == null ? i : -1)).filter(i => i >= 0);
+    if (m.hand[s] > 0) {
+      const cand = empties.map(i => ({
+        i,
+        sc: (nmmMakesMill(b, i, s) ? 100 : 0) + (nmmMakesMill(b, i, o) ? 60 : 0) + NMM_ADJ[i].length * 4
+          + nmmMillsAt(i).filter(ml => ml.every(q => q === i || b[q] == null || b[q] === s)).length * 6 + noise(),
+      }));
+      act({ e: 'place', i: best(cand).i });
+      return;
+    }
+    const fly = m.cnt[s] === 3;
+    const cand = nmmMoves(b, s, fly).map(([f, t]) => {
+      const bb = b.slice(); bb[f] = null;
+      let sc = noise();
+      if (nmmMakesMill(bb, t, s)) sc += 100;
+      if (nmmMakesMill(b, t, o) && oReach(b, t)) sc += 55; // 擋住對方
+      bb[t] = s;
+      if (nmmMakesMill(bb, f, o) && oReach(bb, f)) sc -= 45; // 走開會讓對方成三
+      sc += NMM_ADJ[t].filter(n => bb[n] == null).length * 2;
+      return { f, t, sc };
+    });
+    if (cand.length) { const c = best(cand); act({ e: 'move', from: c.f, to: c.t }); }
+  });
 };
 
 /* ---------- 防止雙指縮放 / 長按選單 ---------- */
