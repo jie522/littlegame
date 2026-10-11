@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.10.13b';
+const APP_VERSION = '2026.10.13c';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -456,7 +456,7 @@ const GAMES = [
   },
   {
     id: 'morris', emoji: '⭕', name: '九子棋', tag: '益智', color: '#a0703f', desc: '連成三顆就能吃子',
-    rules: ['2 人對戰,每人 9 顆棋;房間超過 2 人時抽籤上場、其他人觀戰', '先輪流把棋子放到交叉點上', '同一條線連成三顆(成三)就能吃掉對方一顆棋;已經成三的棋受保護,不能吃', '棋子都放完後,沿著線把棋子移到旁邊的空點;只剩 3 顆時可以飛到任何空點!', '對方剩 2 顆或被困住沒路走,你就贏了!'],
+    rules: ['2 人對戰,每人 9 顆棋;房間超過 2 人時抽籤上場、其他人觀戰', '棋子顏色可以自己選(點自己卡片上的「換色」),先輪流把棋子放到交叉點上', '同一條線連成三顆(成三)就能吃掉對方一顆棋;已經成三的棋受保護,不能吃', '棋子都放完後,沿著線把棋子移到旁邊的空點;只剩 3 顆時可以飛到任何空點!', '對方剩 2 顆或被困住沒路走,你就贏了!'],
     host: hMorris, view: vMorris, noCountdown: true,
   },
 ];
@@ -2517,6 +2517,11 @@ function vShaft(V) {
 const NMM_XY = [[0, 0], [3, 0], [6, 0], [1, 1], [3, 1], [5, 1], [2, 2], [3, 2], [4, 2], [0, 3], [1, 3], [2, 3], [4, 3], [5, 3], [6, 3], [2, 4], [3, 4], [4, 4], [1, 5], [3, 5], [5, 5], [0, 6], [3, 6], [6, 6]];
 const NMM_ADJ = [[1, 9], [0, 2, 4], [1, 14], [4, 10], [1, 3, 5, 7], [4, 13], [7, 11], [4, 6, 8], [7, 12], [0, 10, 21], [3, 9, 11, 18], [6, 10, 15], [8, 13, 17], [5, 12, 14, 20], [2, 13, 23], [11, 16], [15, 17, 19], [12, 16], [10, 19], [16, 18, 20, 22], [13, 19], [9, 22], [19, 21, 23], [14, 22]];
 const NMM_MILLS = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11], [12, 13, 14], [15, 16, 17], [18, 19, 20], [21, 22, 23], [0, 9, 21], [3, 10, 18], [6, 11, 15], [1, 4, 7], [16, 19, 22], [8, 12, 17], [5, 13, 20], [2, 14, 23]];
+/* 九子棋的棋子顏色(玩家可以自己選;兩人不能選同一個) */
+const NMM_COLORS = [
+  { n: '紅', c: '#e8444f' }, { n: '藍', c: '#3f7de8' }, { n: '綠', c: '#2fb36b' }, { n: '黃', c: '#f2b800' },
+  { n: '紫', c: '#8c5be8' }, { n: '橘', c: '#ff8a3d' }, { n: '黑', c: '#34344a' }, { n: '白', c: '#f4f1ea' },
+];
 const nmmMillsAt = i => NMM_MILLS.filter(m => m.includes(i));
 const nmmInMill = (b, i) => b[i] != null && nmmMillsAt(i).some(m => m.every(k => b[k] === b[i]));
 // 如果 who 把棋放到 i(i 可以是空的),會不會成三
@@ -2539,13 +2544,14 @@ function nmmMoves(b, who, fly) {
 function hMorris(H) {
   const fighters = shuffle(H.players).slice(0, 2); // 超過 2 人就抽籤
   const b = Array(24).fill(null);
-  const hand = {}, lost = {};
-  fighters.forEach(s => { hand[s] = 9; lost[s] = 0; });
+  const hand = {}, lost = {}, colors = {};
+  fighters.forEach((s, k) => { hand[s] = 9; lost[s] = 0; colors[s] = k; }); // 預設:先紅後藍,之後各自可以改
+  let live = false;
   let turnI = 0, rm = false, last = null, over = false, idle = 0;
   const cnt = s => b.filter(x => x === s).length;
   const fly = s => hand[s] === 0 && cnt(s) === 3;
   const state = () => ({
-    t: 'g', e: 'board', b, turn: fighters[turnI], fighters, hand, lost,
+    t: 'g', e: 'board', b, turn: fighters[turnI], fighters, hand, lost, colors,
     cnt: Object.fromEntries(fighters.map(s => [s, cnt(s)])), rm, last, idle,
   });
   const bc = () => H.bc(state());
@@ -2575,8 +2581,16 @@ function hMorris(H) {
   }
 
   return {
-    start() { H.bc({ t: 'g', e: 'intro', fighters }); H.s.after(1800, bc); },
+    start() { H.bc({ t: 'g', e: 'intro', fighters }); H.s.after(1800, () => { live = true; bc(); }); },
     input(slot, m) {
+      if (m.e === 'color') { // 換棋子顏色:隨時可以換,但不能和對手同色
+        const ci = +m.c;
+        if (!over && Number.isInteger(ci) && ci >= 0 && ci < NMM_COLORS.length && fighters.includes(slot) && !fighters.some(s => s !== slot && colors[s] === ci)) {
+          colors[slot] = ci;
+          if (live) bc();
+        }
+        return;
+      }
       if (over || slot !== fighters[turnI]) return;
       const o = fighters[1 - turnI];
       if (rm) {
@@ -2617,6 +2631,7 @@ function hMorris(H) {
 function vMorris(V) {
   let st = null, sel = null, targets = [], over = false, lastTurn = null, coverT = null;
   const me = V.me;
+  const colorOf = s => NMM_COLORS[st && st.colors && st.colors[s] != null ? st.colors[s] : 0].c;
   const chipsEl = $('.chips', V.root);
   chipsEl.className = 'cstatus'; // 上方只留一條狀態列
   chipsEl.innerHTML = '<span class="cs">對局準備中…</span>';
@@ -2667,11 +2682,12 @@ function vMorris(V) {
     const card = s => {
       const p = pinfo(s), h = st.hand[s];
       const tray = h
-        ? Array.from({ length: h }, () => `<i class="hd" style="--pc:${p.color}"></i>`).join('') + `<span class="hn">手上 ${h}</span>`
+        ? Array.from({ length: h }, () => `<i class="hd" style="--pc:${colorOf(s)}"></i>`).join('') + `<span class="hn">手上 ${h}</span>`
         : `<span class="gnone">${st.cnt[s] === 3 ? '只剩 3 顆:可以飛!' : '棋子都上場了'}</span>`;
       return `<div class="pcard${st.turn === s && !over ? ' now' : ''}" style="--c:${p.color}">
         <div class="pav">${p.emoji}</div>
         <div class="pinfo"><b>${who(s)}</b><span class="pcnt">場上 ${st.cnt[s]} · 被吃 ${st.lost[s]}</span></div>
+        ${s === me && !over ? `<button class="cpick" style="--pc:${colorOf(s)}" aria-label="換棋子顏色"><i></i>換色</button>` : `<i class="cdot" style="--pc:${colorOf(s)}"></i>`}
         <div class="ptro mhand">${tray}</div>
       </div>`;
     };
@@ -2709,17 +2725,45 @@ function vMorris(V) {
       if (x == null) { p.innerHTML = ''; return; }
       const cls = 'mp' + (sel === i ? ' sel' : '') + (removable.includes(i) ? ' rmable' : '')
         + (nmmInMill(b, i) ? ' inmill' : '') + (movable.has(i) ? ' can' : '') + (isNew && L.to === i ? ' fresh' : '');
-      p.innerHTML = `<div class="${cls}" style="--pc:${PLAYERS[x].color}">${PLAYERS[x].emoji}</div>`;
+      p.innerHTML = `<div class="${cls}" style="--pc:${colorOf(x)}"></div>`;
     });
     // 已經成三的線:金色發光
     const P2 = i => NMM_XY[i].map(P);
     millsEl.innerHTML = NMM_MILLS.filter(m => b[m[0]] != null && m.every(k => b[k] === b[m[0]])).map(m => {
       const [x1, y1] = P2(m[0]), [x2, y2] = P2(m[2]);
-      return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" style="stroke:${PLAYERS[b[m[0]]].color}"/>`;
+      return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" style="stroke:${colorOf(b[m[0]])}"/>`;
     }).join('');
     V.root.classList.toggle('myturn', myT);
     renderStage();
   }
+
+  function openColors() {
+    if (!st || over) return;
+    const old = $('.sheetbg');
+    if (old) old.remove();
+    const mine = st.colors[me], opp = st.fighters.find(s => s !== me);
+    const bg = el('div', 'sheetbg');
+    bg.innerHTML = `<div class="sheet"><h3>選擇你的棋子顏色</h3><div class="swgrid">${NMM_COLORS.map((c, i) => {
+      const taken = opp != null && st.colors[opp] === i;
+      return `<button class="sw${i === mine ? ' on' : ''}${taken ? ' taken' : ''}" data-i="${i}" style="--sc:${c.c}" ${taken ? 'disabled' : ''}><i></i><b>${c.n}</b>${taken ? '<em>對手</em>' : ''}</button>`;
+    }).join('')}</div><button class="btn big green done"><span class="bt">完成</span></button></div>`;
+    app.appendChild(bg);
+    $$('.sw', bg).forEach(b => b.addEventListener('click', () => {
+      const i = +b.dataset.i;
+      store.set('nmmColor', i);
+      SFX.tap();
+      V.send({ e: 'color', c: i });
+      bg.remove();
+    }));
+    $('.done', bg).addEventListener('click', () => bg.remove());
+    bg.addEventListener('pointerdown', e => { if (e.target === bg) bg.remove(); });
+  }
+  $('.stage', V.root).addEventListener('pointerdown', e => {
+    if (!e.target.closest('.cpick')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    openColors();
+  });
 
   V.onTap = e => {
     const p = e.target.closest('.pt');
@@ -2742,8 +2786,10 @@ function vMorris(V) {
     if (m.e === 'intro') {
       const [a, b] = m.fighters.map(s => `<span class="vsp">${pinfo(s).emoji}<b>${who(s)}</b></span>`);
       showCover(`<div class="small">${V.players.length > 2 ? '抽籤結果' : '對戰開始'}</div><div class="vsrow">${a}<span class="vs">VS</span>${b}</div>
-        ${m.fighters.includes(me) ? '' : '<div class="small">你這局觀戰 👀</div>'}`, 1700);
+        ${m.fighters.includes(me) ? '<div class="small">點自己卡片上的「換色」可以選棋子顏色 🎨</div>' : '<div class="small">你這局觀戰 👀</div>'}`, 2000);
       SFX.go();
+      const pref = store.get('nmmColor', null);
+      if (pref != null && m.fighters.includes(me)) V.send({ e: 'color', c: pref });
     } else if (m.e === 'board') {
       const prevLast = st && st.last;
       st = m;

@@ -1333,3 +1333,36 @@ button:disabled { cursor: not-allowed; }
 .hpanel .tip .ver { opacity: .7; }
 .ava .pe { height: 26px; vertical-align: middle; }
 @media (max-height: 740px) { .hpanel { gap: 8px; } .hpanel .btn.big { padding-top: 8px; padding-bottom: 8px; } }
+
+/* 九子棋:純色寶石棋子 + 選色 */
+.mp .pe { display: none; }
+.mp::before { content: ""; position: absolute; left: 22%; top: 14%; width: 34%; height: 24%; border-radius: 50%; background: rgba(255,255,255,.65); filter: blur(1px); transform: rotate(-25deg); }
+.play-morris .pcard { position: relative; }
+.cpick {
+  position: absolute; right: 6px; top: 6px;
+  display: flex; align-items: center; gap: 4px;
+  padding: 2px 8px 2px 4px;
+  border-radius: 999px;
+  background: #fff;
+  border: 2px solid var(--ink);
+  box-shadow: 0 2px 0 var(--ink);
+  font-size: .7rem; font-weight: 900;
+}
+.cpick i, .cdot { display: block; width: 14px; height: 14px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.7), transparent 55%), var(--pc); border: 2px solid var(--ink); }
+.cdot { position: absolute; right: 8px; top: 8px; width: 16px; height: 16px; }
+.cpick:active { transform: translateY(2px); box-shadow: 0 0 0 var(--ink); }
+.swgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.sw {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 10px 2px 8px;
+  border-radius: 16px;
+  background: #fff;
+  border: 3px solid var(--ink);
+  box-shadow: 0 3px 0 var(--ink);
+  font-size: .8rem;
+}
+.sw i { width: 46px; height: 46px; border-radius: 50%; background: radial-gradient(circle at 33% 26%, rgba(255,255,255,.85) 0, rgba(255,255,255,0) 42%), radial-gradient(circle at 50% 62%, var(--sc) 0, var(--sc) 45%, rgba(0,0,0,.3) 100%), var(--sc); border: 2.5px solid rgba(20,25,45,.8); box-shadow: inset 0 0 0 3px rgba(255,255,255,.5), 0 3px 0 rgba(40,25,10,.4); }
+.sw.on { background: #fff5b8; box-shadow: 0 0 0 3px var(--sc), 0 3px 0 var(--ink); transform: translateY(-2px); }
+.sw.taken { opacity: .4; }
+.sw em { position: absolute; top: -8px; font-style: normal; font-size: .62rem; font-weight: 900; padding: 0 7px; border-radius: 999px; background: var(--ink); color: #fff; }
