@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.10.14';
+const APP_VERSION = '2026.10.15';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -467,6 +467,36 @@ const GAMES = [
 ];
 const GAME = Object.fromEntries(GAMES.map(g => [g.id, g]));
 
+/* ---------- 戰績(只存在這支手機裡):每款遊戲的場次、勝場、平手,加上連勝與最近紀錄 ---------- */
+const TIERS = [
+  { n: '新手', e: '🌱', w: 0 }, { n: '銅牌', e: '🥉', w: 5 }, { n: '銀牌', e: '🥈', w: 15 }, { n: '金牌', e: '🥇', w: 30 },
+  { n: '白金', e: '💠', w: 60 }, { n: '鑽石', e: '💎', w: 100 }, { n: '傳說', e: '👑', w: 200 },
+];
+const tierOf = w => { let k = 0; TIERS.forEach((t, i) => { if (w >= t.w) k = i; }); return k; };
+const emptyStats = () => ({ g: {}, log: [], streak: 0, best: 0 });
+const getStats = () => { const x = store.get('stats', null); return x && typeof x === 'object' && x.g ? x : emptyStats(); };
+const pct = (w, p) => (p ? Math.round(w / p * 100) + '%' : '—');
+function statsTotal(st) {
+  const t = { p: 0, w: 0, d: 0 };
+  Object.values(st.g).forEach(x => { t.p += x.p; t.w += x.w; t.d += x.d; });
+  return t;
+}
+function recordResult(m) {
+  if (!m.players.includes(NET.mySlot)) return null; // 觀戰不算
+  const win = m.winners.includes(NET.mySlot);
+  const r = win && (m.winners.length < m.players.length || m.players.length === 1) ? 'w' : win || !m.winners.length ? 'd' : 'l';
+  const st = getStats();
+  const x = st.g[m.g] || (st.g[m.g] = { p: 0, w: 0, d: 0 });
+  x.p++;
+  if (r === 'w') x.w++; else if (r === 'd') x.d++;
+  st.streak = r === 'w' ? st.streak + 1 : r === 'l' ? 0 : st.streak;
+  st.best = Math.max(st.best, st.streak);
+  st.log.unshift({ g: m.g, r, t: Date.now(), m: NET.solo ? 's' : 'r', n: m.players.length - 1 });
+  st.log.length = Math.min(st.log.length, 20);
+  store.set('stats', st);
+  return { r, x };
+}
+
 /* =========================================================
    畫面:首頁(手遊風格的開始選單)
    ========================================================= */
@@ -480,7 +510,7 @@ function home() {
   h.innerHTML = `
     <div class="art">
       <button class="iconbtn" id="mute" aria-label="音效">${S.muted ? '🔇' : '🔊'}</button>
-      <div class="coin" title="累計勝場"><span>⭐</span><b>${store.get('wins', 0)}</b></div>
+      <button class="coin" id="stats" title="我的戰績"><span>${TIERS[tierOf(statsTotal(getStats()).w)].e}</span><b>${statsTotal(getStats()).w}</b><i class="cgo">戰績 ›</i></button>
     </div>
     <div class="hpanel">
       <label class="profile"><span class="ava">${charHTML(CHARS[myChar()])}</span>
@@ -502,6 +532,7 @@ function home() {
   $('#solo', h).addEventListener('click', () => { saveName(); createSolo(); });
   $('#join', h).addEventListener('click', () => { saveName(); joinRoom(codeIn.value); });
   codeIn.addEventListener('keydown', e => { if (e.key === 'Enter') { saveName(); joinRoom(codeIn.value); } });
+  $('#stats', h).addEventListener('click', () => statsView());
   $('#mute', h).addEventListener('click', e => {
     S.muted = !S.muted;
     store.set('muted', S.muted);
@@ -761,6 +792,9 @@ function resultsView(m) {
   const medal = v => ['🥇', '🥈', '🥉', '🎀'][sc.filter(x => x > v).length];
   const iWon = m.winners.includes(NET.mySlot);
   if (iWon) store.set('wins', store.get('wins', 0) + 1);
+  const rec = recordResult(m);
+  const tb = statsTotal(getStats()).w - (rec && rec.r === 'w' ? 1 : 0);
+  const tierUp = rec && rec.r === 'w' && tierOf(tb + 1) > tierOf(tb) ? TIERS[tierOf(tb + 1)] : null;
   const title = m.winners.length === 0 ? '沒有贏家 😆'
     : m.winners.length > 1 ? `平手!${m.winners.map(s => PLAYERS[s].emoji).join(' ')} 都贏了`
       : `${PLAYERS[m.winners[0]].emoji} ${esc(pinfo(m.winners[0]).name)} 獲勝!`;
@@ -771,6 +805,8 @@ function resultsView(m) {
     ${ribbon(iWon ? '勝利!' : '遊戲結束', iWon ? 'gold' : 'blue')}
     <h1 class="rtitle">${title}</h1>
     ${iWon ? '<p class="youwin">你好棒!獲得一顆 ⭐</p>' : ''}
+    ${tierUp ? `<p class="tierup">🎉 升級為 ${tierUp.e} ${tierUp.n}!</p>` : ''}
+    ${rec ? `<p class="myrec">我的${g.emoji}${g.name}戰績:${rec.x.w} 勝 / ${rec.x.p} 場 · 勝率 ${pct(rec.x.w, rec.x.p)}</p>` : ''}
     <div class="ranks">${order.map(({ s, v }, k) => {
     const p = pinfo(s);
     return `<div class="rank${s === NET.mySlot ? ' mine' : ''}" style="--c:${p.color};animation-delay:${k * 0.12}s">
@@ -795,6 +831,54 @@ function resultsView(m) {
 
   SFX.win();
   if (iWon) { confetti(); buzz([60, 60, 120]); }
+}
+
+function statsView() {
+  resetView();
+  app.innerHTML = '';
+  const st = getStats(), tot = statsTotal(st), ti = tierOf(tot.w), tier = TIERS[ti], nx = TIERS[ti + 1];
+  const lost = tot.p - tot.w - tot.d;
+  const rows = GAMES.map(g => ({ g, x: st.g[g.id] || { p: 0, w: 0, d: 0 } }))
+    .sort((a, b) => (b.x.p > 0) - (a.x.p > 0) || (b.x.w / (b.x.p || 1)) - (a.x.w / (a.x.p || 1)) || b.x.w - a.x.w);
+  const medals = ['🥇', '🥈', '🥉'];
+  const mark = { w: ['勝', 'w'], l: ['敗', 'l'], d: ['平', 'd'] };
+  const d = el('div', 'screen stats');
+  d.innerHTML = `
+    ${ribbon('我的戰績', 'gold')}
+    <div class="tiercard">
+      <div class="tem">${tier.e}</div>
+      <div class="tinfo"><b>${tier.n}</b>
+        <div class="tbarx"><i style="width:${nx ? Math.min(100, (tot.w - tier.w) / (nx.w - tier.w) * 100) : 100}%"></i></div>
+        <small>${nx ? `再贏 ${nx.w - tot.w} 場升 ${nx.e} ${nx.n}` : '已經是最高等級!'}</small></div>
+    </div>
+    <div class="sgrid">
+      <div><b>${tot.p}</b><small>總場次</small></div>
+      <div><b>${tot.w}</b><small>勝場</small></div>
+      <div><b>${pct(tot.w, tot.p)}</b><small>勝率</small></div>
+      <div><b>${st.best}</b><small>最高連勝</small></div>
+    </div>
+    <p class="ssub">${tot.w} 勝 · ${lost} 敗 · ${tot.d} 平手${st.streak > 1 ? ` · 目前連勝 🔥${st.streak}` : ''}</p>
+    <h2 class="shead">🏆 遊戲排名(依勝率)</h2>
+    <div class="glist">${rows.map(({ g, x }, k) => `
+      <div class="grow${x.p ? '' : ' none'}">
+        <span class="gk">${x.p ? medals[k] || k + 1 : '·'}</span>
+        <span class="ge">${g.emoji}</span><span class="gn">${g.name}</span>
+        <span class="gw">${x.p ? `${x.w}勝 / ${x.p}場` : '還沒玩過'}</span>
+        <b class="gp">${pct(x.w, x.p)}</b>
+      </div>`).join('')}</div>
+    <h2 class="shead">📜 最近紀錄</h2>
+    <div class="llist">${st.log.length ? st.log.slice(0, 10).map(e => {
+    const g = GAME[e.g], dt = new Date(e.t);
+    return `<div class="lrow"><i class="lm ${mark[e.r][1]}">${mark[e.r][0]}</i><span>${g ? g.emoji + g.name : e.g}</span>
+        <small>${e.m === 's' ? '對電腦' : e.n ? `${e.n + 1} 人房` : '房間'} · ${dt.getMonth() + 1}/${dt.getDate()}</small></div>`;
+  }).join('') : '<p class="lempty">還沒有紀錄,去玩一場吧!</p>'}</div>
+    <p class="snote">戰績只存在這支手機裡;換手機或清除瀏覽器資料就會歸零。</p>
+    <div class="sbtns"><button class="btn big blue back"><span class="bi">◀</span><span class="bt">回首頁</span></button>
+      ${tot.p ? '<button class="btn white sm reset">清除戰績</button>' : ''}</div>`;
+  app.appendChild(d);
+  $('.back', d).addEventListener('click', () => home());
+  const rs = $('.reset', d);
+  if (rs) rs.addEventListener('click', () => { if (confirm('確定要清除所有戰績嗎?')) { store.set('stats', emptyStats()); store.set('wins', 0); statsView(); } });
 }
 
 function confetti() {
@@ -2939,17 +3023,24 @@ function vTri(V) {
   });
   const winSvg = el('div', 'twin');
   const cover = el('div', 'cover');
+  const scene = el('div', 'tscene'); // 棋盤往後傾斜成立體;蓋板放在外層,不跟著傾斜
   board.appendChild(winSvg);
-  board.appendChild(cover);
+  scene.appendChild(board);
+  scene.appendChild(cover);
   const bar = el('div', 'tbar');
-  wrap.appendChild(board);
+  wrap.appendChild(scene);
   wrap.appendChild(bar);
   V.pad.innerHTML = '';
   V.pad.appendChild(wrap);
   const fit = () => {
     if (!board.isConnected) { ro.disconnect(); return; }
-    const s = Math.floor(Math.min(V.pad.clientWidth, V.pad.clientHeight - bar.offsetHeight - 12));
-    board.style.width = board.style.height = Math.max(140, s) + 'px';
+    // 傾斜後畫面上的高度(含前側厚邊)約為寬度的 0.95 倍,所以高度可以多給一點
+    const s = Math.max(140, Math.floor(Math.min(V.pad.clientWidth * 0.96, (V.pad.clientHeight - bar.offsetHeight - 12) / 0.95)));
+    board.style.width = board.style.height = s + 'px';
+    board.style.marginTop = Math.round(-s * 0.55) + 'px'; // 透視讓近的一邊變大,往上挪一點才置中
+    board.style.setProperty('--cs', (s * 0.2).toFixed(1) + 'px');
+    scene.style.width = s + 'px';
+    scene.style.height = Math.round(s * 0.9) + 'px';
   };
   const ro = new ResizeObserver(fit);
   ro.observe(V.pad);
@@ -2964,6 +3055,8 @@ function vTri(V) {
 
   const myTurn = () => st && !over && !st.done && st.turn === me;
   const playing = () => st && st.order.includes(me);
+  // 一顆立體籌碼:幾片薄片疊成側面,最上面一片是正面
+  const chip = (pc, lv, cls) => `<i class="td${cls}" style="--pc:${pc};--lv:${lv}">${[0, 1, 2, 3, 4, 5, 6].map(k => `<b style="--k:${k}"></b>`).join('')}<em class="tf"></em></i>`;
   const who = s => (s === me ? '你' : esc(pinfo(s).name));
 
   function renderStage() {
@@ -3011,8 +3104,10 @@ function vTri(V) {
     const lastCells = L.type === 'place' ? L.cells : L.type === 'move' ? [L.to] : [];
     cells.forEach((c, i) => {
       const stack = bd[i], ghosts = pend.filter(x => x === i).length, h = stack.length + ghosts;
-      let html = stack.map((s, lv) => `<i class="td${lv === stack.length - 1 && !ghosts ? ' top' : ''}${isNew && lv === stack.length - 1 && lastCells.includes(i) ? ' fresh' : ''}" style="--pc:${colorOf(s)};--lv:${lv}"></i>`).join('');
-      for (let g = 0; g < ghosts; g++) html += `<i class="td ghost${g === ghosts - 1 ? ' top' : ''}" style="--pc:${colorOf(me)};--lv:${stack.length + g}"></i>`;
+      const winTop = st.win && st.win.includes(i);
+      let html = stack.map((s, lv) => chip(colorOf(s), lv, (lv === stack.length - 1 && !ghosts ? ' top' + (winTop ? ' win' : '') : '')
+        + (isNew && lv === stack.length - 1 && lastCells.includes(i) ? ' fresh' : ''))).join('');
+      for (let g = 0; g < ghosts; g++) html += chip(colorOf(me), stack.length + g, ' ghost' + (g === ghosts - 1 ? ' top' : ''));
       if (h) html += `<span class="th">${'<i class="on"></i>'.repeat(h)}${'<i></i>'.repeat(3 - h)}</span>`;
       c.innerHTML = html;
       c.className = 'tc' + (targets.includes(i) ? ' tgt' : '') + (sel === i ? ' sel' : '') + (movable.has(i) ? ' can' : '')
@@ -3021,6 +3116,7 @@ function vTri(V) {
     winSvg.innerHTML = st.win ? (() => {
       const [a, , b] = st.win, xy = i => [(i % 4) + 0.5, Math.floor(i / 4) + 0.5];
       const [x1, y1] = xy(a), [x2, y2] = xy(b);
+      winSvg.style.setProperty('--wz', Math.max(...st.win.map(k => st.bd[k].length)));
       return `<svg viewBox="0 0 4 4"><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" style="stroke:${colorOf(triTop(st.bd, a))}"/></svg>`;
     })() : '';
     V.root.classList.toggle('myturn', myT);
@@ -3037,8 +3133,20 @@ function vTri(V) {
     else if (t.classList.contains('tundo')) pend = [];
     render(false);
   });
+  // 棋盤是傾斜的,點在格子間的縫也算:找畫面上離手指最近的那一格
+  const cellAt = e => {
+    const hit = e.target.closest('.tc');
+    if (hit) return hit;
+    if (!e.target.closest('.tboard')) return null;
+    let best = null, bd = Infinity;
+    for (const c of cells) {
+      const r = c.getBoundingClientRect(), d = Math.hypot(e.clientX - (r.left + r.right) / 2, e.clientY - (r.top + r.bottom) / 2);
+      if (d < bd) { bd = d; best = c; }
+    }
+    return best;
+  };
   V.onTap = e => {
-    const c = e.target.closest('.tc');
+    const c = cellAt(e);
     if (!c || !myTurn()) return;
     const i = +c.dataset.i;
     if (mode === 'place') {

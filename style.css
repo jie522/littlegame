@@ -1402,25 +1402,45 @@ button:disabled { cursor: not-allowed; }
 .tvs .pe { height: 2.6rem; }
 
 .tbwrap { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; height: 100%; justify-content: center; }
+/* 立體場景:棋盤往後倒,棋子用薄片疊出厚度 */
+.tscene { position: relative; flex: none; }
+.tscene::before { content: ""; position: absolute; left: 2%; right: 2%; bottom: -7%; height: 22%; border-radius: 50%; background: radial-gradient(ellipse at 50% 40%, rgba(5,10,30,.55), transparent 70%); pointer-events: none; }
+.tscene .cover { border-radius: 22px; }
 .tboard {
-  position: relative;
-  flex: none;
+  --ch: calc(var(--cs) * .17);
+  position: absolute;
+  left: 0; top: 50%;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   grid-template-rows: repeat(4, 1fr);
   gap: 3.2%;
   padding: 5%;
-  border-radius: 24px;
+  border-radius: 16px;
   border: 3px solid var(--ink);
   background:
     repeating-linear-gradient(45deg, rgba(255,255,255,.018) 0 2px, transparent 2px 6px),
     radial-gradient(circle at 50% 32%, #36548a 0%, #1f305a 62%, #162243 100%);
-  box-shadow: inset 0 0 0 4px #c9a24a, inset 0 0 0 6px rgba(0,0,0,.5), inset 0 0 0 8px #e9cd7f, inset 0 10px 40px rgba(0,0,0,.5), 0 6px 0 var(--ink), 0 14px 26px rgba(10,20,50,.35);
+  box-shadow: inset 0 0 0 4px #c9a24a, inset 0 0 0 6px rgba(0,0,0,.5), inset 0 0 0 8px #e9cd7f, inset 0 10px 40px rgba(0,0,0,.5);
+  transform: perspective(calc(var(--cs) * 13)) rotateX(33deg);
+  transform-style: preserve-3d;
   touch-action: none;
+}
+/* 棋盤的前側厚邊(金色鑲邊) */
+.tboard::before {
+  content: "";
+  position: absolute;
+  left: -3px; right: -3px; top: calc(100% + 3px);
+  height: calc(var(--cs) * .45);
+  border: 3px solid var(--ink); border-top: none;
+  border-radius: 0 0 14px 14px;
+  background: linear-gradient(#e9cd7f 0 12%, #a5802e 14%, #c9a24a 40%, #7a5a1c 100%);
+  transform-origin: top;
+  transform: rotateX(-90deg);
 }
 .tc {
   position: relative;
   border-radius: 18%;
+  transform-style: preserve-3d;
   background: radial-gradient(circle at 50% 38%, rgba(255,255,255,.11), rgba(255,255,255,.02) 72%);
   box-shadow: inset 0 4px 10px rgba(0,0,0,.6), inset 0 -1px 0 rgba(255,255,255,.14), 0 1px 0 rgba(255,255,255,.08);
   transition: box-shadow .15s, background .15s;
@@ -1429,31 +1449,48 @@ button:disabled { cursor: not-allowed; }
 .tc.sel { box-shadow: inset 0 0 0 3px #ffd23f, inset 0 0 18px rgba(255,210,63,.6); }
 .tc.last { background: radial-gradient(circle at 50% 45%, rgba(255,210,63,.22), rgba(255,255,255,.02) 72%); }
 .tc.from { box-shadow: inset 0 0 0 2px rgba(255,210,63,.55), inset 0 4px 10px rgba(0,0,0,.6); }
-.play-tri.myturn .tc.can::after { content: ""; position: absolute; inset: 6%; border-radius: 50%; border: 2px dashed rgba(255,255,255,.9); animation: spin 6s linear infinite; pointer-events: none; z-index: 5; }
+/* 籌碼:.td 是整顆(往上抬到第幾層),b 是側面薄片,.tf 是正面 */
 .td {
   position: absolute;
-  left: 14%; top: 16%;
-  width: 72%; height: 72%;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 34% 28%, rgba(255,255,255,.8) 0, rgba(255,255,255,0) 40%),
-    radial-gradient(circle at 50% 65%, var(--pc) 0, var(--pc) 50%, rgba(0,0,0,.35) 100%),
-    var(--pc);
-  border: 2px solid rgba(10,15,30,.7);
-  box-shadow: inset 0 0 0 3px rgba(255,255,255,.3), 0 5px 0 rgba(0,0,0,.5), 0 8px 10px rgba(0,0,0,.45);
-  transform: translateY(calc(var(--lv) * -12%)) scale(calc(1 - var(--lv) * .035));
-  filter: brightness(.78) saturate(.9);
+  left: 13%; top: 13%;
+  width: 74%; height: 74%;
+  transform-style: preserve-3d;
+  transform: translateZ(calc(var(--lv) * var(--ch) + var(--lift, 0px)));
+  pointer-events: none;
 }
-.td.top { filter: none; }
-.td.top::after { content: ""; position: absolute; inset: 20%; border-radius: 50%; border: 2px dashed rgba(255,255,255,.5); }
-.td.ghost { opacity: .62; border-style: dashed; animation: ghostblink .6s ease-in-out infinite alternate; }
-@keyframes ghostblink { from { opacity: .4; } to { opacity: .8; } }
-.td.fresh { animation: stackdrop .32s ease-out; }
-@keyframes stackdrop { from { opacity: .2; margin-top: -30%; } to { opacity: 1; margin-top: 0; } }
-.th { position: absolute; left: 6%; bottom: 5%; display: flex; gap: 2px; z-index: 4; }
+.td b, .td .tf { position: absolute; inset: 0; border-radius: 50%; }
+.td b {
+  background: linear-gradient(90deg, rgba(0,0,0,.5), rgba(0,0,0,.08) 35%, rgba(255,255,255,.12) 50%, rgba(0,0,0,.15) 65%, rgba(0,0,0,.55)), var(--pc);
+  transform: translateZ(calc(var(--k) * var(--ch) / 7));
+}
+/* 側面中間那幾片加上籌碼的白色條紋 */
+.td b:nth-child(n+3):nth-child(-n+5) {
+  background: linear-gradient(90deg, rgba(0,0,0,.5), rgba(0,0,0,.08) 35%, rgba(255,255,255,.12) 50%, rgba(0,0,0,.15) 65%, rgba(0,0,0,.55)),
+    repeating-conic-gradient(#fff 0 9deg, var(--pc) 9deg 30deg);
+}
+.td:first-child b:first-child { box-shadow: 0 0 calc(var(--cs) * .1) calc(var(--cs) * .02) rgba(0,0,0,.7); }
+.td .tf {
+  transform: translateZ(var(--ch));
+  background:
+    radial-gradient(circle at 34% 28%, rgba(255,255,255,.6), rgba(255,255,255,0) 42%),
+    radial-gradient(circle, var(--pc) 0 55%, rgba(0,0,0,.28) 56% 59%, transparent 60%),
+    repeating-conic-gradient(rgba(255,255,255,.92) 0 9deg, var(--pc) 9deg 30deg);
+  box-shadow: inset 0 0 0 1.5px rgba(0,0,0,.35), inset 0 -3px 6px rgba(0,0,0,.25);
+}
+.td .tf::after { content: ""; position: absolute; inset: 27%; border-radius: 50%; border: 2px dashed rgba(255,255,255,.5); }
+.td.ghost b, .td.ghost .tf { animation: ghostblink .6s ease-in-out infinite alternate; }
+@keyframes ghostblink { from { opacity: .3; } to { opacity: .7; } }
+.td.fresh { animation: stackdrop .34s cubic-bezier(.5, 0, .75, 1.3); }
+@keyframes stackdrop { from { transform: translateZ(calc(var(--lv) * var(--ch) + var(--cs) * 1.4)); } }
+.tc.sel .td.top { --lift: calc(var(--cs) * .3); }
+.tc.sel .td.top .tf { box-shadow: inset 0 0 0 2px #ffd23f, 0 0 calc(var(--cs) * .2) #ffd23f; }
+.play-tri.myturn .tc.can .td.top .tf::after { border-color: #fff; border-width: 3px; animation: spin 6s linear infinite; }
+.td.win .tf { animation: winglow .7s ease-in-out infinite alternate; }
+@keyframes winglow { from { box-shadow: 0 0 calc(var(--cs) * .08) #fff; } to { box-shadow: 0 0 calc(var(--cs) * .35) #ffd23f, 0 0 0 3px #fff; } }
+.th { position: absolute; left: 6%; bottom: 5%; display: flex; gap: 2px; transform: translateZ(1px); }
 .th i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.18); }
 .th i.on { background: #ffd56b; box-shadow: 0 0 4px rgba(255,213,107,.8); }
-.twin { position: absolute; inset: 5%; pointer-events: none; z-index: 6; }
+.twin { position: absolute; inset: 5%; pointer-events: none; transform: translateZ(calc(var(--wz, 3) * var(--ch) + 3px)); }
 .twin svg { width: 100%; height: 100%; overflow: visible; }
 .twin line { stroke-width: .16; stroke-linecap: round; filter: drop-shadow(0 0 .06px #fff) drop-shadow(0 0 .12px #ffd23f); animation: millglow .8s ease-in-out infinite alternate; }
 
@@ -1467,4 +1504,42 @@ button:disabled { cursor: not-allowed; }
 .tbar .btn:disabled { opacity: .45; }
 .tlegend { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 12px; font-size: .82rem; font-weight: 800; color: #fff; text-shadow: var(--ol-sm); }
 .tlegend span { display: flex; align-items: center; gap: 4px; }
-.tboard .cover { border-radius: 22px; }
+
+/* 戰績與排名 */
+.coin { color: #fff; }
+.coin .cgo { font-style: normal; font-size: .72rem; opacity: .9; margin-left: 2px; }
+.myrec { color: #fff; font-size: .85rem; font-weight: 800; text-shadow: var(--ol-sm); }
+.tierup { color: #ffe066; font-size: 1.1rem; font-weight: 900; text-shadow: var(--ol-sm); animation: popin .4s ease-out; }
+.screen.stats { display: flex; flex-direction: column; align-items: center; gap: 12px; padding-bottom: 24px; }
+.stats > * { width: 100%; max-width: 420px; }
+.stats > .ribbon { width: auto; margin-top: 4px; }
+.tiercard, .sgrid, .glist, .llist { background: var(--cream); border: 3px solid var(--ink); border-radius: 18px; box-shadow: 0 4px 0 var(--ink); }
+.tiercard { display: flex; align-items: center; gap: 12px; padding: 10px 14px; }
+.tem { font-size: 2.8rem; }
+.tinfo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; font-weight: 800; }
+.tinfo b { font-size: 1.3rem; }
+.tinfo small { font-size: .78rem; opacity: .8; }
+.tbarx { height: 12px; border: 2px solid var(--ink); border-radius: 999px; background: #dde9f8; overflow: hidden; }
+.tbarx i { display: block; height: 100%; background: linear-gradient(#ffe066, #ffa800); }
+.sgrid { display: grid; grid-template-columns: repeat(4, 1fr); padding: 8px 4px; text-align: center; }
+.sgrid div { display: flex; flex-direction: column; }
+.sgrid b { font-size: 1.35rem; font-family: "Fredoka", var(--font); }
+.sgrid small { font-size: .7rem; font-weight: 800; opacity: .75; }
+.ssub { color: #fff; font-weight: 800; font-size: .85rem; text-align: center; text-shadow: var(--ol-sm); margin-top: -4px; }
+.shead { color: #fff; font-size: 1.05rem; text-shadow: var(--ol-sm); margin: 4px 0 -4px; }
+.glist, .llist { padding: 4px 10px; }
+.grow, .lrow { display: flex; align-items: center; gap: 7px; padding: 6px 0; font-weight: 800; font-size: .92rem; border-bottom: 2px dashed rgba(31,56,100,.18); }
+.grow:last-child, .lrow:last-child { border-bottom: none; }
+.grow.none { opacity: .5; }
+.gk { width: 1.6rem; text-align: center; font-size: 1.2rem; }
+.gn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gw { font-size: .72rem; opacity: .75; white-space: nowrap; }
+.gp { min-width: 3rem; text-align: center; background: var(--ink); color: #fff; border-radius: 999px; padding: 1px 8px; font-family: "Fredoka", var(--font); font-size: .85rem; }
+.lrow span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lrow small { font-size: .72rem; opacity: .7; white-space: nowrap; }
+.lm { font-style: normal; width: 1.7rem; height: 1.7rem; border-radius: 50%; border: 2px solid var(--ink); display: flex; align-items: center; justify-content: center; color: #fff; font-size: .8rem; }
+.lm.w { background: #2fb36b; } .lm.l { background: #e8444f; } .lm.d { background: #8a97ad; }
+.lempty { text-align: center; padding: 10px; font-weight: 700; opacity: .7; }
+.snote { color: #fff; font-size: .72rem; text-align: center; text-shadow: var(--ol-sm); }
+.sbtns { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.sbtns .btn.big { justify-content: center; }
