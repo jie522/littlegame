@@ -752,37 +752,6 @@ button:disabled { cursor: not-allowed; }
 }
 .pop.neg { color: #ff6b6b; }
 
-/* 拔蘿蔔 */
-.carrot-box {
-  position: relative;
-  height: 90%;
-  aspect-ratio: 3 / 4;
-  max-width: 50%;
-  border-radius: 20px;
-  background: linear-gradient(#bfe9ff, #e9f8ff);
-  border: 3px solid var(--ink);
-  overflow: hidden;
-  pointer-events: none;
-}
-.carrot {
-  position: absolute;
-  left: 50%; bottom: var(--b, 22%);
-  font-size: min(13vh, 24vw);
-  line-height: 1;
-  transform: translateX(-50%) rotate(-45deg);
-  transition: bottom .1s;
-  z-index: 1;
-}
-.dirt { position: absolute; z-index: 2; left: 0; right: 0; bottom: 0; height: 45%; background: #b07a4f; border-top: 6px solid #8f5f3a; }
-.taps { font-size: min(11vh, 18vw); font-weight: 900; color: #fff; text-shadow: var(--ol), 0 6px 0 var(--ink); min-width: 1.6em; text-align: center; pointer-events: none; font-family: "Fredoka", var(--font); }
-.timer { font-size: min(8vh, 14vw); line-height: 1; font-family: "Fredoka", var(--font); }
-.race { width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
-.rrow { display: flex; align-items: center; gap: 8px; font-size: 1.05rem; }
-.rrow span { font-size: 1.4rem; }
-.rrow b { min-width: 2em; text-align: right; }
-.rbar { flex: 1; height: 18px; background: #e3ecf7; border: 2px solid var(--ink); border-radius: 999px; overflow: hidden; }
-.rbar i { display: block; height: 100%; background: var(--c); transition: width .3s; }
-
 /* 算數 */
 .opts { display: flex; gap: 5%; width: 100%; height: 100%; align-items: center; justify-content: center; }
 .opt {
@@ -1061,36 +1030,7 @@ button:disabled { cursor: not-allowed; }
 .hpbar { display: inline-block; width: 90px; height: 13px; margin-left: 4px; vertical-align: middle; background: #fff; border: 2px solid var(--ink); border-radius: 999px; overflow: hidden; }
 .hpbar i { display: block; height: 100%; background: linear-gradient(#ff9a9a, #ee4b4b); transition: width .2s; }
 
-/* 萌寵打排球(橫向) */
-body.wide #app, body.wide .sky { left: 0; width: 100%; transform: none; }
-.play.rot { right: auto; bottom: auto; transform-origin: top left; transform: rotate(90deg) translateY(-100%); animation: none; }
-.play-volley { padding: 4px; }
-.play-volley .topbar { position: absolute; top: 10px; left: 10px; z-index: 6; padding: 0; background: none; border: none; }
-.play-volley .chips, .play-volley .hud { display: none; }
-.play-volley .stage { padding: 0; border-width: 2px; overflow: hidden; }
-.play-volley .tcv { border: none; border-radius: 20px; }
-.play-volley .tov { border-radius: 20px; }
-.vsline { font-size: 2rem; }
-.play-volley .pad {
-  position: absolute;
-  left: 10px; right: 10px; bottom: 12px;
-  flex: none;
-  padding: 0 8px;
-  background: none; border: none; box-shadow: none;
-  overflow: visible;
-  justify-content: space-between; align-items: flex-end;
-  pointer-events: none;
-}
-.vgrp { display: flex; gap: 12px; pointer-events: auto; margin-left: auto; }
-.vhint {
-  position: absolute; left: 14px; bottom: 22px;
-  color: #fff; text-shadow: var(--ol-sm);
-  font-size: .85rem; font-weight: 800;
-  opacity: .85;
-  pointer-events: none;
-  animation: hop 1.6s ease-in-out infinite;
-}
-.play.used .vhint { display: none; }
+/* 下樓梯的虛擬搖桿圓環 */
 .vring {
   position: absolute;
   width: 84px; height: 84px;
@@ -1105,21 +1045,6 @@ body.wide #app, body.wide .sky { left: 0; width: 100%; transform: none; }
 }
 .vring.on { display: block; }
 .vring i { position: absolute; left: 50%; top: 50%; width: 34px; height: 34px; margin: -17px; border-radius: 50%; background: #fff; border: 3px solid var(--ink); transform: translateX(var(--dx, 0)); }
-.vb {
-  width: clamp(54px, 15vmin, 84px);
-  aspect-ratio: 1;
-  border-radius: 50%;
-  background: rgba(255,255,255,.6);
-  border: 3px solid var(--ink);
-  box-shadow: 0 4px 0 var(--ink);
-  color: var(--ink);
-  font-size: 1.5rem;
-  font-weight: 900;
-  touch-action: none;
-}
-.vb.jump { background: rgba(146,234,110,.85); color: #fff; text-shadow: var(--ol-sm); }
-.vb.spike { background: rgba(255,140,140,.9); color: #fff; text-shadow: var(--ol-sm); }
-.vb.on { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink); filter: brightness(.92); }
 
 /* ---------- 結算 ---------- */
 .result { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }

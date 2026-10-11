@@ -123,7 +123,6 @@ function resetView() {
   viewT.stop();
   viewT = makeTimers();
   V = null;
-  document.body.classList.remove('wide');
   return viewT;
 }
 
@@ -388,11 +387,6 @@ const GAMES = [
     host: hReaction, view: vReaction,
   },
   {
-    id: 'tap', emoji: '🥕', name: '狂點拔蘿蔔', tag: '反應', color: '#ff9147', desc: '拼手速拔蘿蔔!',
-    rules: ['倒數後瘋狂點擊下方的區域', '每點一下蘿蔔就被拔高一點', '上方可以看到大家的進度', '8 秒內點最多下的人獲勝!'],
-    host: hTap, view: vTap, noCountdown: true,
-  },
-  {
     id: 'math', emoji: '🧮', name: '算數小天才', tag: '益智', color: '#3fbf78', desc: '搶答算數題!',
     rules: ['每台手機會同時出現一道算式', '選出正確答案,最快答對的人得 1 分', '每題只能答一次,答錯就沒機會囉', '共 7 題,越後面越難!'],
     host: hMath, view: vMath,
@@ -421,11 +415,6 @@ const GAMES = [
     id: 'shaft', emoji: '🪜', name: '小朋友下樓梯', tag: '反應', color: '#f2994a', desc: '一直往下跳!',
     rules: ['平台會一直往上升,要往下跳到平台上,別被天花板的尖刺刺到', '在畫面任何地方按住左右滑動就能移動(沒有按鍵)', '綠色平台回血、尖刺平台扣血;還有輸送帶、彈簧和會碎掉的平台', '血量歸零或掉出畫面就出局', '下到最深樓層的人獲勝!'],
     host: hShaft, view: vShaft,
-  },
-  {
-    id: 'volley', emoji: '🏐', name: '萌寵打排球', tag: '反應+對戰', color: '#f6c445', desc: '橫向畫面大對決!',
-    rules: ['手機橫著拿!(直拿時畫面會自動轉向)', '左半邊螢幕按住左右滑動 = 移動;右下角按「跳」跳起來,在空中靠近球時按「殺」可以殺球', '球落在哪一邊的地上,另一邊就得 1 分', '2 人是 1 對 1,3~4 人分成左右兩隊', '先拿到 9 分的一隊獲勝!'],
-    host: hVolley, view: vVolley,
   },
 ];
 const GAME = Object.fromEntries(GAMES.map(g => [g.id, g]));
@@ -946,101 +935,6 @@ function vReaction(V) {
         const p = pinfo(m.winner);
         V.stage(`<div class="big">${p.emoji}</div><div>${m.winner === V.me ? '你' : esc(p.name)} 最快!</div><div class="small">${m.rt} 毫秒</div>`);
       }
-    }
-  };
-}
-
-/* =========================================================
-   2. 狂點拔蘿蔔 🥕
-   ========================================================= */
-const TAP_FULL = 60;
-
-function hTap(H) {
-  const T = 8;
-  const counts = {}, finals = new Set();
-  let ended = false;
-  function end() {
-    if (ended) return;
-    ended = true;
-    H.players.forEach(s => { H.scores[s] = counts[s] || 0; });
-    H.bc({ t: 'score', scores: H.scores });
-    H.finish();
-  }
-  return {
-    start() {
-      H.bc({ t: 'g', e: 'start', T });
-      H.s.every(400, () => { if (!ended) H.bc({ t: 'g', e: 'prog', counts }); });
-      H.s.after((3 + T) * 1000 + 4000, end); // 保險:等不到某人的最終成績也會結束
-    },
-    input(slot, m) {
-      if (m.e !== 'count' || ended) return;
-      counts[slot] = Math.max(counts[slot] || 0, Math.min(400, +m.n || 0));
-      if (m.final) {
-        finals.add(slot);
-        if (H.active().every(s => finals.has(s))) end();
-      }
-    },
-    presence() { if (!ended && H.active().every(s => finals.has(s))) end(); },
-  };
-}
-
-function vTap(V) {
-  let count = 0, on = false, over = false, left = 0, sentN = -1, others = {};
-  V.pad.innerHTML = `
-    <div class="carrot-box"><div class="carrot">🥕</div><div class="dirt"></div></div>
-    <div class="taps">0</div>`;
-  const carrot = $('.carrot', V.pad), taps = $('.taps', V.pad);
-  V.stage('<div class="big">🥕</div><div>準備拔蘿蔔!</div>');
-
-  function race() {
-    const rows = V.players.map(s => {
-      const p = pinfo(s);
-      const n = s === V.me ? count : (others[s] || 0);
-      return `<div class="rrow" style="--c:${p.color}"><span>${p.emoji}</span><div class="rbar"><i style="width:${Math.min(100, n / TAP_FULL * 100)}%"></i></div><b>${n}</b></div>`;
-    }).join('');
-    V.stage(`<div class="timer${left <= 3 && on ? ' pulse' : ''}">${on ? left : '⏰'}</div><div class="race">${rows}</div>`);
-  }
-  function sendCount(final) {
-    if (!final && count === sentN) return;
-    sentN = count;
-    V.send({ e: 'count', n: count, final: !!final });
-  }
-
-  V.onTap = () => {
-    if (!on) return;
-    count++;
-    taps.textContent = count;
-    carrot.style.setProperty('--b', (22 + 38 * Math.min(1, count / TAP_FULL)) + '%');
-    if (count === TAP_FULL) { V.pop('拔出來了!'); SFX.good(); }
-    V.fx('tapped');
-    SFX.tap();
-  };
-  V.on = m => {
-    if (m.e === 'start') {
-      // 倒數在每台手機上各自進行,網路延遲不影響可點擊的時間
-      let n = 3;
-      const cd = () => {
-        V.countdown(n);
-        if (n > 0) { n--; V.T.after(800, cd); return; }
-        on = true;
-        left = m.T;
-        race();
-        V.T.every(250, () => { if (on) sendCount(false); });
-        V.T.every(1000, () => {
-          if (!on) return;
-          left--;
-          if (left > 0) { SFX.tick(); race(); return; }
-          on = false;
-          over = true;
-          sendCount(true);
-          SFX.go();
-          race();
-        });
-      };
-      cd();
-    } else if (m.e === 'prog') {
-      others = m.counts;
-      if (on || over) race();
     }
   };
 }
@@ -2237,20 +2131,6 @@ function keyCtl(cv, map) {
   addEventListener('keyup', h);
 }
 
-/* 橫向遊戲:手機直拿時把整個遊戲畫面轉 90 度,撐滿螢幕 */
-function landscape(V) {
-  document.body.classList.add('wide');
-  const apply = () => {
-    if (!V.root.isConnected) { removeEventListener('resize', apply); return; }
-    const portrait = innerHeight > innerWidth;
-    V.root.classList.toggle('rot', portrait);
-    V.root.style.width = portrait ? innerHeight + 'px' : '';
-    V.root.style.height = portrait ? innerWidth + 'px' : '';
-  };
-  addEventListener('resize', apply);
-  apply();
-}
-
 /* =========================================================
    8. 小朋友下樓梯 🪜(大家在同一個豎井裡往下跳)
    座標:寬 240 x 高 320;平台種類 0 一般 1 尖刺 2 左輸送帶 3 右輸送帶 4 彈簧 5 會碎
@@ -2544,329 +2424,6 @@ function vShaft(V) {
 }
 
 /* =========================================================
-   9. 萌寵打排球 🏐(橫向畫面;靈感來自經典排球小遊戲,角色是我們自己的萌寵)
-   座標:寬 432 x 高 304,地面 y = 262,網子在正中間
-   ========================================================= */
-const VB = { W: 432, H: 304, G: 262, NET_X: 216, NET_TOP: 172, NET_W: 10, PR: 30, BR: 18, TICK: 40, WIN: 9 };
-
-function hVolley(H) {
-  const { W, G, NET_X, NET_TOP, NET_W, PR, BR, WIN } = VB, dt = VB.TICK / 1000;
-  const r1 = v => Math.round(v * 10) / 10;
-  const nx0 = NET_X - NET_W / 2, nx1 = NET_X + NET_W / 2;
-  const ps = H.players.map((s, i) => ({ s, side: i % 2, x: 0, y: G, vy: 0, mv: 0, jumpQ: false, spikeT: 0, hitCd: 0 }));
-  const homeX = p => {
-    const mates = ps.filter(q => q.side === p.side), k = mates.indexOf(p);
-    const d = mates.length > 1 ? [60, 150][k] : 100;
-    return p.side === 0 ? d : W - d;
-  };
-  const ball = { x: 0, y: 0, vx: 0, vy: 0, rot: 0 };
-  const score = [0, 0];
-  let phase = 'ready', over = false, fx = [], serveTok = 0;
-  const startAt = Date.now();
-
-  function reset(side) {
-    ps.forEach(p => { p.x = homeX(p); p.y = G; p.vy = 0; p.spikeT = 0; });
-    const server = ps.find(p => p.side === side) || ps[0];
-    Object.assign(ball, { x: server.x, y: 70, vx: 0, vy: 0 });
-    phase = 'ready';
-    const tok = ++serveTok;
-    H.s.after(900, () => { if (tok === serveTok && phase === 'ready') phase = 'play'; });
-  }
-  const state = () => ({
-    t: 'g', e: 's',
-    p: ps.map(p => [p.s, r1(p.x), r1(p.y), p.spikeT > 0 ? 1 : 0, p.side]),
-    b: [r1(ball.x), r1(ball.y), Math.round(ball.rot * 100) / 100],
-    sc: score, ph: phase, fx,
-  });
-  function end(side, reason) {
-    over = true;
-    H.bc(state());
-    H.bc({ t: 'g', e: 'over', side, reason, sc: score });
-    H.s.after(2800, H.finish);
-  }
-  function point(winSide) {
-    phase = 'point';
-    score[winSide]++;
-    ps.filter(p => p.side === winSide).forEach(p => H.add(p.s, 1));
-    fx.push(['pt', winSide]);
-    if (score[winSide] >= WIN) return end(winSide, `${winSide === 0 ? '左隊' : '右隊'}先拿到 ${WIN} 分!`);
-    H.s.after(1600, () => { if (!over) reset(winSide); });
-  }
-
-  function physics(sdt) {
-    for (const p of ps) {
-      if (p.jumpQ && p.y >= G - 0.5) p.vy = -470;
-      p.jumpQ = false;
-      p.vy += 1350 * sdt;
-      p.y += p.vy * sdt;
-      if (p.y > G) { p.y = G; p.vy = 0; }
-      p.x += p.mv * 240 * sdt;
-      p.x = p.side === 0 ? Math.max(PR, Math.min(nx0 - PR, p.x)) : Math.max(nx1 + PR, Math.min(W - PR, p.x));
-      if (p.hitCd > 0) p.hitCd -= sdt;
-      if (p.spikeT > 0) p.spikeT -= sdt;
-    }
-    if (phase !== 'play') return;
-    ball.vy += 560 * sdt;
-    ball.x += ball.vx * sdt;
-    ball.y += ball.vy * sdt;
-    ball.rot += ball.vx * sdt * 0.04;
-    if (ball.x < BR) { ball.x = BR; ball.vx = Math.abs(ball.vx); }
-    if (ball.x > W - BR) { ball.x = W - BR; ball.vx = -Math.abs(ball.vx); }
-    if (ball.y < BR) { ball.y = BR; ball.vy = Math.abs(ball.vy) * 0.6; }
-    if (ball.x + BR > nx0 && ball.x - BR < nx1 && ball.y + BR > NET_TOP) { // 網子
-      if (ball.y < NET_TOP) {
-        if (ball.vy > 0) { ball.y = NET_TOP - BR; ball.vy = -Math.abs(ball.vy) * 0.75; }
-      } else if (ball.x < NET_X) { ball.x = nx0 - BR; ball.vx = -Math.abs(ball.vx) * 0.75; }
-      else { ball.x = nx1 + BR; ball.vx = Math.abs(ball.vx) * 0.75; }
-    }
-    for (const p of ps) {
-      if (p.hitCd > 0 || !H.online(p.s)) continue;
-      const cx = p.x, cy = p.y - PR, dx = ball.x - cx, dy = ball.y - cy, d = Math.hypot(dx, dy);
-      if (d >= PR + BR) continue;
-      const dir = p.side === 0 ? 1 : -1;
-      if (p.y < G - 8 && p.spikeT > 0) { // 在空中殺球
-        ball.vx = dir * 600;
-        ball.vy = 260;
-        fx.push(['spike', r1(ball.x), r1(ball.y)]);
-      } else {
-        ball.vx = Math.max(-330, Math.min(330, dx * 8 + dir * 110));
-        ball.vy = -540;
-        fx.push(['hit', r1(ball.x), r1(ball.y)]);
-      }
-      const k = (PR + BR + 1) / (d || 1);
-      ball.x = cx + dx * k;
-      ball.y = Math.min(G - BR - 2, cy + dy * k);
-      p.hitCd = 0.22;
-      p.spikeT = 0;
-    }
-    if (ball.y + BR >= G) { ball.y = G - BR; point(ball.x < NET_X ? 1 : 0); }
-  }
-
-  function step() {
-    if (over) return;
-    fx = [];
-    physics(dt / 2);
-    physics(dt / 2);
-    H.bc(state());
-    if (!over && Date.now() - startAt > 300000) end(score[0] === score[1] ? -1 : score[0] > score[1] ? 0 : 1, '時間到!');
-  }
-
-  reset(0);
-  H.bc(state());
-  return {
-    start() { reset(0); H.loop(VB.TICK, step); },
-    input(slot, m) {
-      const p = ps.find(x => x.s === slot);
-      if (!p) return;
-      if (m.e === 'mv') p.mv = [-1, 0, 1].includes(m.d) ? m.d : 0;
-      else if (m.e === 'jump') p.jumpQ = true;
-      else if (m.e === 'spike') p.spikeT = 0.35;
-    },
-  };
-}
-
-function vVolley(V) {
-  const { W, G, NET_X, NET_TOP, NET_W, PR, BR, TICK } = VB, VH = VB.H;
-  landscape(V);
-  const C = canvasStage(V, W / VH, true), ctx = C.ctx;
-  V.pad.innerHTML = `
-    <div class="vhint">👈 左半邊螢幕左右滑動 = 移動</div>
-    <div class="vgrp"><button class="vb jump">跳</button><button class="vb spike">殺</button></div>`;
-  const held = new Set();
-  let dir = 0;
-  const upd = () => {
-    const d = (held.has(1) ? 1 : 0) - (held.has(-1) ? 1 : 0);
-    if (d !== dir) { dir = d; V.send({ e: 'mv', d }); }
-  };
-  // 左半邊螢幕:按住後左右滑動就會移動(虛擬搖桿跟著手指走,不用回到原點就能換方向)
-  let stickId = null, sx0 = 0;
-  const ring = el('div', 'vring', '<i></i>');
-  V.root.appendChild(ring);
-  const gpos = e => { // 手機直拿時畫面轉了 90 度,要換算回遊戲座標
-    const r = V.root.getBoundingClientRect(), rot = V.root.classList.contains('rot');
-    return rot ? { x: e.clientY - r.top, y: r.right - e.clientX } : { x: e.clientX - r.left, y: e.clientY - r.top };
-  };
-  V.root.addEventListener('pointerdown', e => {
-    if (stickId != null || e.target.closest('.exit, .vb')) return;
-    const p = gpos(e);
-    if (p.x >= V.root.clientWidth / 2) return;
-    e.preventDefault();
-    try { V.root.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
-    stickId = e.pointerId; sx0 = p.x;
-    ring.style.left = p.x + 'px'; ring.style.top = p.y + 'px';
-    ring.style.setProperty('--dx', '0px');
-    ring.classList.add('on');
-    V.root.classList.add('used');
-  });
-  V.root.addEventListener('pointermove', e => {
-    if (e.pointerId !== stickId) return;
-    const x = gpos(e).x;
-    if (Math.abs(x - sx0) > 46) sx0 = x - Math.sign(x - sx0) * 46;
-    const dx = x - sx0;
-    ring.style.setProperty('--dx', Math.max(-26, Math.min(26, dx * 0.6)) + 'px');
-    const d = dx > 10 ? 1 : dx < -10 ? -1 : 0;
-    held.clear();
-    if (d) held.add(d);
-    upd();
-  });
-  const stickEnd = e => {
-    if (e.pointerId !== stickId) return;
-    stickId = null;
-    ring.classList.remove('on');
-    held.clear();
-    upd();
-  };
-  V.root.addEventListener('pointerup', stickEnd);
-  V.root.addEventListener('pointercancel', stickEnd);
-  holdBtn($('.vb.jump', V.pad), () => V.send({ e: 'jump' }));
-  holdBtn($('.vb.spike', V.pad), () => V.send({ e: 'spike' }));
-  const k = d => [() => { held.add(d); upd(); }, () => { held.delete(d); upd(); }];
-  const jump = [() => V.send({ e: 'jump' })], spike = [() => V.send({ e: 'spike' })];
-  keyCtl(C.cv, { ArrowLeft: k(-1), ArrowRight: k(1), a: k(-1), d: k(1), ArrowUp: jump, w: jump, ' ': spike, Enter: spike, z: spike });
-
-  let st = null, prevSt = null, curAt = 0;
-  const fxs = [];
-  const mySide = () => (st ? (st.p.find(p => p[0] === V.me) || [])[4] : 0);
-
-  function draw() {
-    C.size(W);
-    const now = performance.now(), cv = C.cv;
-    // 球場依高度放到最大、水平置中,多出來的部分畫天空和沙灘
-    const sc = Math.min(cv.width / W, cv.height / VH);
-    C.sc = sc; C.ox = (cv.width - W * sc) / 2; C.oy = cv.height - VH * sc;
-    const gy = C.oy + G * sc;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    const g = ctx.createLinearGradient(0, 0, 0, gy);
-    g.addColorStop(0, '#3e6fb8'); g.addColorStop(0.75, '#6d9bd6'); g.addColorStop(1, '#a9c8ec');
-    ctx.fillStyle = g; ctx.fillRect(0, 0, cv.width, gy);
-    // 地面:紅色場邊 + 沙色球場(延伸到整個畫面寬度)
-    ctx.fillStyle = '#c95f6a'; ctx.fillRect(0, gy - 10 * sc, cv.width, 10 * sc);
-    ctx.fillStyle = '#8f3a45'; ctx.fillRect(0, gy - 10 * sc, cv.width, 2 * sc);
-    ctx.fillStyle = '#f7e7a6'; ctx.fillRect(0, gy, cv.width, cv.height - gy);
-    ctx.setTransform(sc, 0, 0, sc, C.ox, C.oy);
-    const ex = C.ox / sc; // 球場兩側多出來的寬度(世界座標)
-    // 遠方白雲帶 + 綠色山丘
-    ctx.fillStyle = 'rgba(255,255,255,.85)';
-    for (let x = -ex - 20; x < W + ex + 20; x += 34) {
-      ctx.beginPath(); ctx.ellipse(x, G - 34 + Math.sin(x * 0.07) * 4, 26, 12, 0, 0, Math.PI * 2); ctx.fill();
-    }
-    ctx.fillStyle = '#4f9a4a';
-    ctx.beginPath(); ctx.moveTo(-ex, G - 10);
-    for (let x = -ex; x <= W + ex; x += 8) ctx.lineTo(x, G - 22 - Math.max(0, Math.sin((x + 40) / 70) * 16) - Math.max(0, Math.sin((x - 120) / 45) * 9));
-    ctx.lineTo(W + ex, G - 10); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#3d8040';
-    for (let x = -ex; x < W + ex; x += 13) ctx.fillRect(x, G - 18 + (x % 3), 3, 2);
-    // 黑邊灰白雲朵(會慢慢飄)
-    const drift = (now / 120) % (W + 2 * ex + 120);
-    [[40, 26, 1], [160, 8, .8], [240, 60, 1.1], [330, 40, .9], [110, 100, .8], [380, 112, .7], [270, 120, .7]].forEach(([x, y, s], i) => {
-      let cx = x + (i % 2 ? drift * 0.5 : drift * 0.3);
-      cx = ((cx + ex + 60) % (W + 2 * ex + 120)) - ex - 60;
-      ctx.lineWidth = 1.4; ctx.strokeStyle = '#2a3550'; ctx.fillStyle = '#e4e8f0';
-      ctx.beginPath();
-      ctx.ellipse(cx, y, 26 * s, 9 * s, 0, 0, Math.PI * 2);
-      ctx.ellipse(cx - 10 * s, y - 6 * s, 12 * s, 8 * s, 0, 0, Math.PI * 2);
-      ctx.ellipse(cx + 9 * s, y - 7 * s, 14 * s, 9 * s, 0, 0, Math.PI * 2);
-      ctx.fill(); ctx.stroke();
-      ctx.fillStyle = '#c9d0de';
-      ctx.beginPath(); ctx.ellipse(cx, y + 3 * s, 22 * s, 4 * s, 0, 0, Math.PI * 2); ctx.fill();
-    });
-    // 白色球場框線
-    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(14, G + 8); ctx.lineTo(W - 14, G + 8); ctx.lineTo(W - 2, G + 30); ctx.lineTo(2, G + 30); ctx.closePath(); ctx.stroke();
-    if (!st) return;
-    const a = Math.min(1, (now - curAt) / TICK);
-    const lerp = (p, c, i) => (p ? p[i] + (c[i] - p[i]) * a : c[i]);
-
-    // 網子(細桿 + 頂端圓球)
-    ctx.fillStyle = '#8a6a5a'; ctx.fillRect(NET_X - 2.5, NET_TOP, 5, G + 18 - NET_TOP);
-    ctx.fillStyle = '#c99c86'; ctx.fillRect(NET_X - 2.5, NET_TOP, 1.6, G + 18 - NET_TOP);
-    ctx.fillStyle = '#fff3d6'; ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 1.6;
-    ctx.beginPath(); ctx.arc(NET_X, NET_TOP - 2, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-
-    // 影子
-    const bx = lerp(prevSt && prevSt.b, st.b, 0), by = lerp(prevSt && prevSt.b, st.b, 1);
-    ctx.fillStyle = 'rgba(31,56,100,.18)';
-    st.p.forEach(q => {
-      const p = prevSt && prevSt.p.find(x => x[0] === q[0]);
-      ctx.beginPath(); ctx.ellipse(lerp(p, q, 1), G + 4, 22, 5, 0, 0, Math.PI * 2); ctx.fill();
-    });
-    ctx.beginPath(); ctx.ellipse(bx, G + 4, 14 * Math.max(.4, by / G), 4, 0, 0, Math.PI * 2); ctx.fill();
-
-    // 角色
-    st.p.forEach(q => {
-      const p = prevSt && prevSt.p.find(x => x[0] === q[0]);
-      const x = lerp(p, q, 1), y = lerp(p, q, 2);
-      const P = PLAYERS[q[0]];
-      ctx.strokeStyle = P.color; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.ellipse(x, y + 2, 20, 5, 0, 0, Math.PI * 2); ctx.stroke();
-      ctx.save();
-      ctx.shadowColor = 'rgba(20,30,60,.95)';
-      ctx.shadowBlur = 4 * C.sc;
-      C.char(q[0], x, y + 3, PR * 2.5, false, true);
-      ctx.restore();
-      if (q[3]) C.emoji('💢', x + 18, y - PR * 2 + 4, 16);
-      if (q[0] === V.me) {
-        ctx.fillStyle = '#ffd23f';
-        ctx.beginPath(); ctx.moveTo(x - 7, y - PR * 2 - 14); ctx.lineTo(x + 7, y - PR * 2 - 14); ctx.lineTo(x, y - PR * 2 - 5); ctx.closePath(); ctx.fill(); ctx.stroke();
-      }
-    });
-    // 球
-    C.emoji('🏐', bx, by, BR * 2.2, lerp(prevSt && prevSt.b, st.b, 2));
-
-    // 比分(紅色斜體、黑邊)
-    ctx.save();
-    ctx.font = 'italic 900 40px Fredoka, "Noto Sans TC", sans-serif';
-    ctx.textBaseline = 'top'; ctx.lineJoin = 'round';
-    [[34, st.sc[0], 'left', 0], [W - 34, st.sc[1], 'right', 1]].forEach(([x, s, al, side]) => {
-      ctx.textAlign = al;
-      ctx.lineWidth = 7; ctx.strokeStyle = '#1b1b2b'; ctx.strokeText(s, x, 4);
-      ctx.fillStyle = side === mySide() ? '#ff3b30' : '#e0303a';
-      ctx.fillText(s, x, 4);
-      ctx.lineWidth = 1.5; ctx.strokeStyle = '#ffd9d9'; ctx.strokeText(s, x, 4);
-    });
-    ctx.restore();
-
-    for (let i = fxs.length - 1; i >= 0; i--) {
-      const f = fxs[i], age = now - f.t;
-      if (age > 350) { fxs.splice(i, 1); continue; }
-      ctx.save(); ctx.globalAlpha = 1 - age / 350;
-      C.emoji(f.k === 'spike' ? '💥' : '✨', f.x, f.y, (f.k === 'spike' ? 30 : 18) + age / 20);
-      ctx.restore();
-    }
-  }
-  const loop = () => { if (!C.alive()) return; draw(); requestAnimationFrame(loop); };
-  requestAnimationFrame(loop);
-
-  let hudDone = false;
-  V.on = m => {
-    if (m.e === 's') {
-      prevSt = st;
-      st = m;
-      curAt = performance.now();
-      if (!hudDone) {
-        hudDone = true;
-        const team = side => m.p.filter(p => p[4] === side).map(p => PLAYERS[p[0]].emoji).join('');
-        C.overlay(`<div class="vsline">${team(0)} <span class="vs">VS</span> ${team(1)}</div><div>你在${mySide() === 0 ? '左' : '右'}隊 · 先拿 ${VB.WIN} 分獲勝</div>`, 2200);
-      }
-      m.fx.forEach(f => {
-        if (f[0] === 'pt') {
-          const mine = f[1] === mySide();
-          C.overlay(`<div class="big">${mine ? '🎉' : '😣'}</div><div>${mine ? '得分!' : '失分…'}</div>`, 1100);
-          if (mine) { SFX.good(); buzz(40); } else { SFX.bad(); }
-          return;
-        }
-        fxs.push({ k: f[0], x: f[1], y: f[2], t: performance.now() });
-        if (f[0] === 'spike') { beep(140, 0.2, 'sawtooth', 0.08); buzz(30); } else beep(520, 0.06, 'triangle', 0.1);
-      });
-    } else if (m.e === 'over') {
-      const win = m.side === mySide();
-      C.overlay(`<div class="big">${m.side < 0 ? '🤝' : win ? '🏆' : '👏'}</div><div>${m.reason}</div><div class="small">${m.sc[0]} : ${m.sc[1]}</div>`);
-      held.clear(); upd();
-    }
-  };
-}
-
-/* =========================================================
    電腦玩家的行為:聽到房主的廣播,就像真人一樣送出操作
    ========================================================= */
 function botsHear(H, m) {
@@ -2903,19 +2460,6 @@ const BOTS = {
       const rt = Math.round(rand(250, 520) * k.spd + Math.random() * 120);
       H.s.after(rt, () => botSend(H, s, { e: 'rt', rt }));
     } else st.phase = 'done';
-  },
-
-  tap(H, s, m) {
-    if (m.t !== 'g' || m.e !== 'start') return;
-    const rate = [4.5, 6, 8][NET.level] * (0.9 + Math.random() * 0.2);
-    const t0 = Date.now() + 2600;
-    const iv = H.s.every(250, () => {
-      const el = (Date.now() - t0) / 1000;
-      if (el < 0) return;
-      const fin = el >= m.T;
-      botSend(H, s, { e: 'count', n: Math.floor(Math.min(el, m.T) * rate), final: fin });
-      if (fin) clearInterval(iv);
-    });
   },
 
   math(H, s, m, k) {
@@ -3063,42 +2607,6 @@ BOTS.shaft = (H, s, m) => {
   }
   if (Math.random() > botSkill().sk) d = rand(-1, 1);
   if (d !== st.d) { st.d = d; botSend(H, s, { e: 'mv', d }); }
-};
-
-/* 排球的電腦:預測球的落點跑過去,球下來時跳起來,在空中靠近球就殺球 */
-BOTS.volley = (H, s, m) => {
-  if (m.t !== 'g' || m.e !== 's') return;
-  const st = H.bs[s] || (H.bs[s] = { t: 0, d: 0, pb: null });
-  const now = Date.now();
-  const pb = st.pb;
-  st.pb = { x: m.b[0], y: m.b[1], at: now };
-  if (now - st.t < [140, 90, 50][NET.level]) return;
-  st.t = now;
-  const me = m.p.find(p => p[0] === s);
-  if (!me) return;
-  const { W, G, NET_X, PR, BR } = VB;
-  const side = me[4], x = me[1], y = me[2], dir = side === 0 ? 1 : -1;
-  const sk = botSkill().sk;
-  const bx = m.b[0], by = m.b[1];
-  let vx = 0, vy = 0;
-  if (pb && now > pb.at) { const dtt = (now - pb.at) / 1000; vx = (bx - pb.x) / dtt; vy = (by - pb.y) / dtt; }
-  let px = bx, py = by, pvx = vx, pvy = vy;
-  for (let i = 0; i < 150 && py < G - PR * 1.6; i++) {
-    pvy += 560 * 0.02; px += pvx * 0.02; py += pvy * 0.02;
-    if (px < BR) { px = BR; pvx = -pvx; }
-    if (px > W - BR) { px = W - BR; pvx = -pvx; }
-  }
-  const home = side === 0 ? 100 : W - 100;
-  const onMine = v => (side === 0 ? v < NET_X : v > NET_X);
-  let tx = home;
-  if (m.ph === 'play' && onMine(px)) tx = px - dir * 16;
-  else if (m.ph === 'ready' && onMine(bx)) tx = bx - dir * 6;
-  if (Math.random() > sk) tx += rand(-40, 40);
-  const d = Math.abs(tx - x) > 6 ? Math.sign(tx - x) : 0;
-  if (d !== st.d) { st.d = d; botSend(H, s, { e: 'mv', d }); }
-  if (m.ph !== 'play') return;
-  if (onMine(bx) && Math.abs(bx - x) < 46 && y >= G - 1 && by < G - 120 && by > G - 230 && vy > 0 && Math.random() < 0.5 + sk / 2) botSend(H, s, { e: 'jump' });
-  if (y < G - 20 && Math.hypot(bx - x, by - (y - PR)) < 80 && Math.random() < sk * 0.7) botSend(H, s, { e: 'spike' });
 };
 
 /* ---------- 防止雙指縮放 / 長按選單 ---------- */
