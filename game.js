@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.10.15c';
+const APP_VERSION = '2026.10.16';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -426,7 +426,7 @@ const GAMES = [
   },
   {
     id: 'math', emoji: '🧮', name: '算數小天才', tag: '益智', color: '#3fbf78', desc: '搶答算數題!',
-    rules: ['每台手機會同時出現一道算式', '選出正確答案,最快答對的人得 1 分', '每題只能答一次,答錯就沒機會囉', '共 7 題,越後面越難!'],
+    rules: ['每台手機會同時出現一道算式', '選出正確答案,最快答對的人得 1 分', '每題只能答一次,答錯就沒機會囉', '共 10 題,越後面越難:會出現乘除、先乘除後加減、括號!'],
     host: hMath, view: vMath,
   },
   {
@@ -1080,29 +1080,44 @@ function vReaction(V) {
 /* =========================================================
    3. 算數小天才 🧮
    ========================================================= */
-function genQuestion(r) {
-  let a, b, op, ans;
-  if (r <= 2) {
-    a = rand(1, 9); b = rand(1, 9); op = '+'; ans = a + b;
-  } else if (r <= 4) {
-    if (Math.random() < 0.5) { a = rand(5, 19); b = rand(2, 9); op = '+'; ans = a + b; }
-    else { a = rand(8, 20); b = rand(2, a - 1); op = '−'; ans = a - b; }
-  } else if (Math.random() < 0.6) {
-    a = rand(2, 9); b = rand(2, 9); op = '×'; ans = a * b;
+function genQuestion(r) { // 1~10 題,越後面越難:兩位數加減 → 乘法 → 先乘除後加減 → 括號 → 兩個乘積相減
+  let text, ans;
+  const t = r <= 2 ? 0 : r <= 4 ? 1 : r <= 6 ? 2 : r <= 8 ? 3 : 4;
+  const kind = Math.random() < 0.5;
+  if (t === 0) {
+    if (kind) { const x = rand(23, 78), y = rand(14, 49); text = `${x} + ${y}`; ans = x + y; }
+    else { const x = rand(52, 99), y = rand(17, x - 12); text = `${x} − ${y}`; ans = x - y; }
+  } else if (t === 1) {
+    if (kind) { const x = rand(6, 12), y = rand(6, 12); text = `${x} × ${y}`; ans = x * y; }
+    else { const y = rand(4, 12), q = rand(6, 15); text = `${y * q} ÷ ${y}`; ans = q; }
+  } else if (t === 2) {
+    if (kind) { const x = rand(8, 40), y = rand(3, 9), w = rand(3, 9); text = `${x} + ${y} × ${w}`; ans = x + y * w; }
+    else { const y = rand(3, 9), w = rand(3, 9), x = rand(5, y * w - 1); text = `${y} × ${w} − ${x}`; ans = y * w - x; }
+  } else if (t === 3) {
+    if (kind) { const x = rand(3, 15), y = rand(3, 15), w = rand(3, 9); text = `(${x} + ${y}) × ${w}`; ans = (x + y) * w; }
+    else { const x = rand(12, 29), y = rand(3, 9); text = `${x} × ${y}`; ans = x * y; }
+  } else if (kind) {
+    const x = rand(4, 12), y = rand(4, 12), w = rand(3, 9), v = rand(3, 9);
+    text = `${x} × ${y} − ${w} × ${v}`; ans = x * y - w * v;
+    if (ans < 0) { text = `${w} × ${v} − ${x} × ${y}`; ans = -ans; }
   } else {
-    a = rand(12, 39); b = rand(3, 12); op = pick(['+', '−']); ans = op === '+' ? a + b : a - b;
+    const x = rand(6, 15), y = rand(2, 5), w = rand(3, 9), v = rand(2, 9);
+    text = `(${x * v} ÷ ${v} + ${y}) × ${w}`; ans = (x + y) * w;
   }
+  // 錯誤選項要「看起來很像」:差 1、差 2、差 10,或個位數一樣
   const opts = new Set([ans]);
-  while (opts.size < 3) {
-    const d = op === '×' ? pick([a, b, 1, 2]) : rand(1, 4);
-    const v = ans + (Math.random() < 0.5 ? -d : d);
+  const near = [1, -1, 2, -2, 10, -10, 3, -3, 5, -5, 20, -20];
+  let guard = 0;
+  while (opts.size < 3 && guard++ < 60) {
+    const v = ans + (guard < 20 ? pick(near.slice(0, 8)) : pick(near));
     if (v >= 0) opts.add(v);
   }
-  return { text: `${a} ${op} ${b}`, ans, opts: [...opts] };
+  while (opts.size < 3) opts.add(ans + opts.size * 7);
+  return { text, ans, opts: [...opts] };
 }
 
 function hMath(H) {
-  const R = 7;
+  const R = 10;
   let round = 0, phase = 'idle', q = null;
   const wrong = new Set(), right = new Map();
   const live = (r, fn) => () => { if (r === round) fn(); };
@@ -1116,7 +1131,7 @@ function hMath(H) {
     right.clear();
     phase = 'open';
     H.bc({ t: 'g', e: 'q', round, R, text: q.text, opts: q.opts });
-    H.s.after(12000, live(round, () => { if (phase === 'open') decide(); }));
+    H.s.after(15000, live(round, () => { if (phase === 'open') decide(); }));
   }
   function decide() {
     if (phase !== 'open') return;
@@ -2340,11 +2355,9 @@ const BOTS = {
 
   math(H, s, m, k) {
     if (m.t !== 'g' || m.e !== 'q') return;
-    const mm = m.text.match(/(\d+) (\S) (\d+)/);
-    const a = +mm[1], b = +mm[3], op = mm[2];
-    const ans = op === '+' ? a + b : op === '×' ? a * b : a - b;
+    const ans = Function('"use strict";return (' + m.text.replace(/×/g, '*').replace(/−/g, '-').replace(/÷/g, '/') + ')')();
     const v = Math.random() < k.sk ? ans : pick(m.opts.filter(x => x !== ans));
-    const rt = Math.round(rand(1800, 4800) * k.spd + m.round * 150);
+    const rt = Math.round(rand(2500, 6000) * k.spd + m.round * 350);
     H.s.after(rt, () => botSend(H, s, { e: 'ans', v, rt, round: m.round }));
   },
 
