@@ -51,6 +51,8 @@ const CHARS = [
 ];
 const loadImg = src => { const i = new Image(); i.src = src; return i; };
 const CHAR_IMGS = CHARS.map(c => ({ full: loadImg('assets/chars/' + c.id + '.png'), head: loadImg('assets/chars/head_' + c.id + '.png') }));
+/* 走路圖(下樓梯用):每個角色有向左跑、向右跑各一張 */
+const WALK_IMGS = CHARS.map(c => ({ l: loadImg('assets/chars/walk_' + c.id + '_l.png'), r: loadImg('assets/chars/walk_' + c.id + '_r.png') }));
 const charHTML = c => '<img class="pe" src="assets/chars/head_' + c.id + '.png" alt="">';
 /* PLAYERS[座位]:目前這個座位的玩家用的角色;emoji 欄位是文字裡用的小頭像(圖片),畫布遊戲用 CHAR_IMG */
 const PLAYERS = [0, 1, 2, 3].map(i => ({ slot: i, ch: i, ...CHARS[i], file: CHARS[i].id, emoji: charHTML(CHARS[i]) }));
@@ -66,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.10.13';
+const APP_VERSION = '2026.10.13b';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -449,7 +451,7 @@ const GAMES = [
   },
   {
     id: 'shaft', emoji: '🪜', name: '小朋友下樓梯', tag: '反應', color: '#f2994a', desc: '一直往下跳!',
-    rules: ['平台會一直往上升,要往下跳到平台上,別被天花板的尖刺刺到', '在畫面任何地方按住左右滑動就能移動(沒有按鍵)', '綠色平台回血、尖刺平台扣血;還有輸送帶、彈簧和會碎掉的平台', '血量歸零或掉出畫面就出局', '下到最深樓層的人獲勝!'],
+    rules: ['平台會一直往上升,要往下跳到平台上,別被天花板的尖刺刺到', '在畫面任何地方按住左右滑動就能移動(沒有按鍵),角色會跟著向左或向右跑', '綠色平台回血、尖刺平台扣血;還有輸送帶、彈簧和會碎掉的平台', '血量歸零或掉出畫面就出局', '下到最深樓層的人獲勝!'],
     host: hShaft, view: vShaft,
   },
   {
@@ -2152,6 +2154,15 @@ function canvasStage(V, aspect, fill) {
     ctx.drawImage(im, x * C.sc + C.ox - w * C.sc / 2, y * C.sc + C.oy - (bottom ? h * C.sc : h * C.sc / 2), w * C.sc, h * C.sc);
     ctx.restore();
   };
+  C.walk = (slot, face, x, footY, h) => { // 走路圖:腳底中心對準 (x, footY)
+    const im = WALK_IMGS[PLAYERS[slot].ch][face];
+    if (!im.complete || !im.naturalWidth) return;
+    const w = h * im.naturalWidth / im.naturalHeight, ctx = C.ctx;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(im, x * C.sc + C.ox - w * C.sc / 2, footY * C.sc + C.oy - h * C.sc, w * C.sc, h * C.sc);
+    ctx.restore();
+  };
   C.rr = (x, y, w, h, r) => {
     const ctx = C.ctx;
     ctx.beginPath();
@@ -2379,6 +2390,7 @@ function vShaft(V) {
   keyCtl(C.cv, { ArrowLeft: k(-1), ArrowRight: k(1), a: k(-1), d: k(1) });
 
   let prev = new Map(), cur = new Map(), prevP = new Map(), st = null, curAt = 0, hudTxt = '';
+  const faceOf = new Map(), moving = new Map(); // 每位玩家目前面向哪邊、是不是在走
   const fxs = [];
 
   function drawPlat(x, y, w, type, now) {
@@ -2441,7 +2453,10 @@ function vShaft(V) {
       }
       ctx.fillStyle = P.color;
       ctx.beginPath(); ctx.ellipse(x + PW / 2, y + PH - 1, 8, 2.5, 0, 0, Math.PI * 2); ctx.fill();
-      C.char(q[0], x + PW / 2, y + PH / 2 - 2, 25, true);
+      if (p && Math.abs(q[1] - p[1]) > 0.15) { faceOf.set(q[0], q[1] > p[1] ? 'r' : 'l'); moving.set(q[0], now); }
+      const walking = now - (moving.get(q[0]) || 0) < 140;
+      const bob = walking && q[2] === (p ? p[2] : q[2]) ? Math.abs(Math.sin(now / 75)) * 1.8 : 0; // 走路時輕輕跳動
+      C.walk(q[0], faceOf.get(q[0]) || 'r', x + PW / 2, y + PH + 3 - bob, 33);
     });
     // 天花板尖刺
     ctx.fillStyle = '#7d879f';
