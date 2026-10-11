@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.10.13c';
+const APP_VERSION = '2026.10.14';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -458,6 +458,11 @@ const GAMES = [
     id: 'morris', emoji: '⭕', name: '九子棋', tag: '益智', color: '#a0703f', desc: '連成三顆就能吃子',
     rules: ['2 人對戰,每人 9 顆棋;房間超過 2 人時抽籤上場、其他人觀戰', '棋子顏色可以自己選(點自己卡片上的「換色」),先輪流把棋子放到交叉點上', '同一條線連成三顆(成三)就能吃掉對方一顆棋;已經成三的棋受保護,不能吃', '棋子都放完後,沿著線把棋子移到旁邊的空點;只剩 3 顆時可以飛到任何空點!', '對方剩 2 顆或被困住沒路走,你就贏了!'],
     host: hMorris, view: vMorris, noCountdown: true,
+  },
+  {
+    id: 'tri', emoji: '🥞', name: '疊疊三連線', tag: '益智+對戰', color: '#3f5fbf', desc: '疊棋子,連成三!',
+    rules: ['2~4 人輪流,每人 5 顆棋,各自一種顏色', '輪到你時二選一:① 從手上放 1~3 顆棋到任何格子(可以疊在別人的棋上,最多疊 3 層);② 選一疊「最上面是你」的棋,把最上面那顆移到上下左右一格', '從正上方看,只算每一格最上面的顏色,被壓住的不算!', '最上面的顏色連成橫、直、斜 3 格就獲勝', '沒辦法行動時會自動跳過'],
+    host: hTri, view: vTri, noCountdown: true,
   },
 ];
 const GAME = Object.fromEntries(GAMES.map(g => [g.id, g]));
@@ -2816,6 +2821,267 @@ function vMorris(V) {
 }
 
 /* =========================================================
+   疊疊三連線 🥞(2~4 人輪流;4x4 棋盤,棋子最多疊 3 層,只看最上面的顏色)
+   每回合二選一:放 1~3 顆棋(可疊在別人上面),或移動最上面是自己的那顆到上下左右一格
+   ========================================================= */
+const TRI_COLORS = [{ n: '紅', c: '#e8444f' }, { n: '藍', c: '#3f7de8' }, { n: '綠', c: '#2fb36b' }, { n: '黃', c: '#f2b800' }];
+const TRI_LINES = (() => { // 所有「連三格」的線:橫 8、直 8、斜 8
+  const L = [];
+  for (let r = 0; r < 4; r++) for (let c = 0; c < 2; c++) L.push([r * 4 + c, r * 4 + c + 1, r * 4 + c + 2]);
+  for (let c = 0; c < 4; c++) for (let r = 0; r < 2; r++) L.push([r * 4 + c, (r + 1) * 4 + c, (r + 2) * 4 + c]);
+  for (let r = 0; r < 2; r++) for (let c = 0; c < 2; c++) L.push([r * 4 + c, (r + 1) * 4 + c + 1, (r + 2) * 4 + c + 2]);
+  for (let r = 0; r < 2; r++) for (let c = 2; c < 4; c++) L.push([r * 4 + c, (r + 1) * 4 + c - 1, (r + 2) * 4 + c - 2]);
+  return L;
+})();
+const triTop = (bd, i) => (bd[i].length ? bd[i][bd[i].length - 1] : null);
+const triAdj = (a, b) => Math.abs(Math.floor(a / 4) - Math.floor(b / 4)) + Math.abs((a % 4) - (b % 4)) === 1;
+function triMoves(bd, s) {
+  const out = [];
+  for (let f = 0; f < 16; f++) {
+    if (triTop(bd, f) !== s) continue;
+    for (const t of [f - 4, f + 4, f % 4 ? f - 1 : -1, f % 4 < 3 ? f + 1 : -1]) {
+      if (t >= 0 && t < 16 && bd[t].length < 3) out.push([f, t]);
+    }
+  }
+  return out;
+}
+const triLineOf = (bd, s) => TRI_LINES.find(l => l.every(i => triTop(bd, i) === s));
+
+function hTri(H) {
+  const P = shuffle(H.players); // 隨機決定順序
+  const bd = Array.from({ length: 16 }, () => []);
+  const hand = {};
+  P.forEach(s => { hand[s] = 5; });
+  let turnI = 0, over = false, turns = 0, last = null;
+  const canAct = s => H.online(s) && (hand[s] > 0 || triMoves(bd, s).length > 0);
+  const state = extra => ({ t: 'g', e: 'board', bd, hand, order: P, turn: P[turnI], last, turns, ...(extra || {}) });
+  const bc = extra => H.bc(state(extra));
+  function end(winner, reason, line) {
+    over = true;
+    if (winner != null) H.scores[winner] = 1;
+    bc({ win: line || null, done: true });
+    H.bc({ t: 'score', scores: H.scores });
+    H.bc({ t: 'g', e: 'over', winner, reason });
+    H.s.after(3200, H.finish);
+  }
+  function winCheck(slot) { // 先看自己,再看有沒有人「底下的棋被翻出來」而連線
+    let line = triLineOf(bd, slot);
+    if (line) { end(slot, '連成三了!', line); return true; }
+    for (const s of P) {
+      line = triLineOf(bd, s);
+      if (line) { end(s, '底下的棋子被翻出來,連成三了!', line); return true; }
+    }
+    return false;
+  }
+  function next() {
+    turns++;
+    if (turns >= 150) return end(null, '下太久了,平手!');
+    const skipped = [];
+    for (let k = 0; k < P.length; k++) {
+      turnI = (turnI + 1) % P.length;
+      if (canAct(P[turnI])) {
+        if (skipped.length) last = { ...last, skip: skipped };
+        return bc();
+      }
+      if (H.online(P[turnI])) skipped.push(P[turnI]);
+    }
+    end(null, '大家都沒辦法行動了,平手!');
+  }
+
+  return {
+    start() { H.bc({ t: 'g', e: 'intro', order: P }); H.s.after(1800, () => bc()); },
+    input(slot, m) {
+      if (over || slot !== P[turnI]) return;
+      if (m.e === 'place') {
+        const cells = Array.isArray(m.cells) ? m.cells.map(Number) : [];
+        if (!cells.length || cells.length > 3 || cells.length > hand[slot]) return;
+        const h = bd.map(x => x.length);
+        for (const i of cells) {
+          if (!(i >= 0 && i < 16) || h[i] >= 3) return;
+          h[i]++;
+        }
+        cells.forEach(i => bd[i].push(slot));
+        hand[slot] -= cells.length;
+        last = { type: 'place', cells, slot };
+      } else if (m.e === 'move') {
+        const f = +m.from, t = +m.to;
+        if (!(f >= 0 && f < 16 && t >= 0 && t < 16) || triTop(bd, f) !== slot || !triAdj(f, t) || bd[t].length >= 3) return;
+        bd[t].push(bd[f].pop());
+        last = { type: 'move', from: f, to: t, slot };
+      } else return;
+      if (!winCheck(slot)) next();
+    },
+    presence() {
+      if (over) return;
+      const alive = P.filter(H.online);
+      if (alive.length === 1) return end(alive[0], '其他人都離開了');
+      if (!H.online(P[turnI])) next();
+    },
+  };
+}
+
+function vTri(V) {
+  const me = V.me;
+  let st = null, over = false, mode = 'place', pend = [], sel = null, lastTurn = null, coverT = null, targets = [];
+  const colorOf = s => TRI_COLORS[Math.max(0, st ? st.order.indexOf(s) : 0)].c;
+  const chipsEl = $('.chips', V.root);
+  chipsEl.className = 'cstatus';
+  chipsEl.innerHTML = '<span class="cs">對局準備中…</span>';
+  V.renderChips = () => {};
+
+  const wrap = el('div', 'tbwrap');
+  const board = el('div', 'tboard');
+  const cells = Array.from({ length: 16 }, (_, i) => {
+    const c = el('div', 'tc');
+    c.dataset.i = i;
+    board.appendChild(c);
+    return c;
+  });
+  const winSvg = el('div', 'twin');
+  const cover = el('div', 'cover');
+  board.appendChild(winSvg);
+  board.appendChild(cover);
+  const bar = el('div', 'tbar');
+  wrap.appendChild(board);
+  wrap.appendChild(bar);
+  V.pad.innerHTML = '';
+  V.pad.appendChild(wrap);
+  const fit = () => {
+    if (!board.isConnected) { ro.disconnect(); return; }
+    const s = Math.floor(Math.min(V.pad.clientWidth, V.pad.clientHeight - bar.offsetHeight - 12));
+    board.style.width = board.style.height = Math.max(140, s) + 'px';
+  };
+  const ro = new ResizeObserver(fit);
+  ro.observe(V.pad);
+  const showCover = (html, ms) => {
+    cover.innerHTML = html;
+    cover.classList.add('on');
+    clearTimeout(coverT);
+    if (ms) coverT = setTimeout(() => cover.classList.remove('on'), ms);
+  };
+  V.stage('<div class="tcards"></div>');
+  showCover('<div class="big">🥞</div><div>擺好棋盤…</div>');
+
+  const myTurn = () => st && !over && !st.done && st.turn === me;
+  const playing = () => st && st.order.includes(me);
+  const who = s => (s === me ? '你' : esc(pinfo(s).name));
+
+  function renderStage() {
+    V.stage(`<div class="tcards">${st.order.map(s => {
+      const p = pinfo(s);
+      return `<div class="tpc${st.turn === s && !over ? ' now' : ''}${p.online ? '' : ' off'}" style="--pc:${colorOf(s)}">
+        <span class="tav">${p.emoji}</span><b>${who(s)}</b><span class="tchip"><i></i>×${st.hand[s]}</span></div>`;
+    }).join('')}</div>`);
+    let msg;
+    if (over || st.done) msg = '對局結束';
+    else if (myTurn()) {
+      if (mode === 'place') msg = pend.length ? `已選 ${pend.length} 顆:可以再點格子,或按「確定」` : '點格子放棋子(一次 1~3 顆,可以疊上去)';
+      else msg = sel != null ? '點旁邊亮起來的格子移過去' : '點「最上面是你的棋」的格子,往上下左右移一格';
+    } else msg = (playing() ? '' : '👀 觀戰 · ') + `輪到 ${pinfo(st.turn).emoji} ${who(st.turn)}…`;
+    chipsEl.innerHTML = `<span class="cs${myTurn() ? ' on' : ''}">${msg}</span>`;
+  }
+
+  function renderBar() {
+    if (!myTurn()) { bar.innerHTML = `<div class="tlegend">${st.order.map(s => `<span><i style="--pc:${colorOf(s)}"></i>${who(s)}</span>`).join('')}</div>`; fit(); return; }
+    const hand = st.hand[me], canMove = triMoves(st.bd, me).length > 0;
+    bar.innerHTML = `
+      <div class="tseg">
+        <button class="tm${mode === 'place' ? ' on' : ''}" data-m="place" ${hand ? '' : 'disabled'}>放棋子 <b>${hand - pend.length}</b></button>
+        <button class="tm${mode === 'move' ? ' on' : ''}" data-m="move" ${canMove ? '' : 'disabled'}>移動棋子</button>
+      </div>
+      ${mode === 'place' ? `<button class="btn green sm tconf" ${pend.length ? '' : 'disabled'}>確定放 ${pend.length || ''} 顆</button>
+      <button class="btn white sm tundo" ${pend.length ? '' : 'disabled'} aria-label="重選">↺</button>` : ''}`;
+    fit();
+  }
+
+  function render(isNew) {
+    const bd = st.bd, myT = myTurn();
+    const hand = st.hand[me] || 0;
+    targets = [];
+    const movable = new Set();
+    if (myT && mode === 'place' && pend.length < Math.min(3, hand)) {
+      for (let i = 0; i < 16; i++) if (bd[i].length + pend.filter(x => x === i).length < 3) targets.push(i);
+    }
+    if (myT && mode === 'move') {
+      const mv = triMoves(bd, me);
+      if (sel != null) targets = mv.filter(([f]) => f === sel).map(([, t]) => t);
+      else mv.forEach(([f]) => movable.add(f));
+    }
+    const L = st.last || {};
+    const lastCells = L.type === 'place' ? L.cells : L.type === 'move' ? [L.to] : [];
+    cells.forEach((c, i) => {
+      const stack = bd[i], ghosts = pend.filter(x => x === i).length, h = stack.length + ghosts;
+      let html = stack.map((s, lv) => `<i class="td${lv === stack.length - 1 && !ghosts ? ' top' : ''}${isNew && lv === stack.length - 1 && lastCells.includes(i) ? ' fresh' : ''}" style="--pc:${colorOf(s)};--lv:${lv}"></i>`).join('');
+      for (let g = 0; g < ghosts; g++) html += `<i class="td ghost${g === ghosts - 1 ? ' top' : ''}" style="--pc:${colorOf(me)};--lv:${stack.length + g}"></i>`;
+      if (h) html += `<span class="th">${'<i class="on"></i>'.repeat(h)}${'<i></i>'.repeat(3 - h)}</span>`;
+      c.innerHTML = html;
+      c.className = 'tc' + (targets.includes(i) ? ' tgt' : '') + (sel === i ? ' sel' : '') + (movable.has(i) ? ' can' : '')
+        + (lastCells.includes(i) ? ' last' : '') + (L.type === 'move' && L.from === i ? ' from' : '') + (h >= 3 ? ' full' : '');
+    });
+    winSvg.innerHTML = st.win ? (() => {
+      const [a, , b] = st.win, xy = i => [(i % 4) + 0.5, Math.floor(i / 4) + 0.5];
+      const [x1, y1] = xy(a), [x2, y2] = xy(b);
+      return `<svg viewBox="0 0 4 4"><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" style="stroke:${colorOf(triTop(st.bd, a))}"/></svg>`;
+    })() : '';
+    V.root.classList.toggle('myturn', myT);
+    renderStage();
+    renderBar();
+  }
+
+  bar.addEventListener('click', e => {
+    if (!myTurn()) return;
+    const t = e.target.closest('button');
+    if (!t) return;
+    if (t.classList.contains('tm')) { mode = t.dataset.m; pend = []; sel = null; SFX.tap(); }
+    else if (t.classList.contains('tconf') && pend.length) { V.send({ e: 'place', cells: pend.slice() }); pend = []; }
+    else if (t.classList.contains('tundo')) pend = [];
+    render(false);
+  });
+  V.onTap = e => {
+    const c = e.target.closest('.tc');
+    if (!c || !myTurn()) return;
+    const i = +c.dataset.i;
+    if (mode === 'place') {
+      if (targets.includes(i)) { pend.push(i); SFX.tap(); }
+      else if (pend.includes(i)) pend.splice(pend.lastIndexOf(i), 1);
+    } else if (sel != null && targets.includes(i)) {
+      V.send({ e: 'move', from: sel, to: i });
+      sel = null;
+    } else if (triTop(st.bd, i) === me) { sel = sel === i ? null : i; SFX.tap(); }
+    else sel = null;
+    render(false);
+  };
+  V.on = m => {
+    if (m.e === 'intro') {
+      const names = m.order.map((s, k) => `<span class="vsp">${pinfo(s).emoji}<b><i class="tdot" style="--pc:${TRI_COLORS[k].c}"></i>${who(s)}</b></span>`).join('');
+      showCover(`<div class="small">順序與顏色</div><div class="vsrow tvs">${names}</div><div class="small">從正上方看,最上面的顏色連成 3 格就贏!</div>`, 2200);
+      SFX.go();
+    } else if (m.e === 'board') {
+      const prevLast = st && st.last;
+      st = m;
+      pend = [];
+      sel = null;
+      if (!m.done) cover.classList.remove('on');
+      if (myTurn() && lastTurn !== me) { mode = st.hand[me] > 0 ? 'place' : 'move'; buzz(60); }
+      render(true);
+      const L = m.last;
+      if (L && L !== prevLast) {
+        beep(L.type === 'place' ? rand(380, 440) : 520, 0.08, 'sine', 0.14);
+        if (L.skip && L.skip.includes(me)) toast('你沒有棋可以動,這回合跳過');
+      }
+      lastTurn = m.turn;
+    } else if (m.e === 'over') {
+      over = true;
+      if (st) render(false);
+      setTimeout(() => showCover(m.winner == null
+        ? `<div class="big">🤝</div><div>${m.reason}</div>`
+        : `<div class="big">🏆</div><div class="vsrow"><span class="vsp">${pinfo(m.winner).emoji}<b>${who(m.winner)} 獲勝!</b></span></div><div class="small">${m.reason}</div>`), 900);
+      if (m.winner === me) SFX.win(); else SFX.bad();
+    }
+  };
+}
+
+/* =========================================================
    電腦玩家的行為:聽到房主的廣播,就像真人一樣送出操作
    ========================================================= */
 function botsHear(H, m) {
@@ -3043,6 +3309,52 @@ BOTS.morris = (H, s, m, k) => {
       return { f, t, sc };
     });
     if (cand.length) { const c = best(cand); act({ e: 'move', from: c.f, to: c.t }); }
+  });
+};
+
+/* 疊疊三連線的電腦:能連三就連、蓋住對手快連成的線,手上的棋省著用 */
+BOTS.tri = (H, s, m, k) => {
+  if (m.t !== 'g' || m.e !== 'board' || m.turn !== s || m.done) return;
+  H.s.after(rand(800, 1400) * k.spd, () => {
+    const bd = m.bd.map(x => x.slice()), others = m.order.filter(x => x !== s);
+    const evalB = b => {
+      let sc = 0;
+      for (const l of TRI_LINES) {
+        const tops = l.map(i => triTop(b, i));
+        const mine = tops.filter(x => x === s).length;
+        if (mine === 3) return 1e6;
+        for (const o of others) {
+          const c = tops.filter(x => x === o).length;
+          if (c === 3) return -1e6;
+          if (c === 2 && !tops.includes(s)) sc -= 30; // 對手只差一格
+        }
+        if (!tops.some(x => x != null && x !== s)) sc += [0, 2, 12][mine];
+      }
+      return sc;
+    };
+    const acts = [], hand = m.hand[s];
+    if (hand > 0) {
+      for (let i = 0; i < 16; i++) {
+        if (bd[i].length >= 3) continue;
+        const b1 = bd.map(x => x.slice()); b1[i].push(s);
+        acts.push({ a: { e: 'place', cells: [i] }, sc: evalB(b1) - 1 });
+        if (hand > 1) {
+          for (let jj = 0; jj < 16; jj++) {
+            if (b1[jj].length >= 3) continue;
+            const b2 = b1.map(x => x.slice()); b2[jj].push(s);
+            acts.push({ a: { e: 'place', cells: [i, jj] }, sc: evalB(b2) - 5 });
+          }
+        }
+      }
+    }
+    for (const [f, t] of triMoves(bd, s)) {
+      const b1 = bd.map(x => x.slice()); b1[t].push(b1[f].pop());
+      acts.push({ a: { e: 'move', from: f, to: t }, sc: evalB(b1) });
+    }
+    if (!acts.length) return;
+    acts.forEach(x => { x.sc += Math.random() * (1 - k.sk) * 60; });
+    acts.sort((x, y) => y.sc - x.sc);
+    botSend(H, s, acts[0].a);
   });
 };
 
