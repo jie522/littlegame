@@ -808,94 +808,163 @@ button:disabled { cursor: not-allowed; }
 .card.matched .front { background: var(--mc); box-shadow: inset 0 0 0 3px var(--mb); }
 
 /* 暗棋 */
-.play-chess .stage { flex: none; padding: 10px 12px; font-size: 1.1rem; }
-.play-chess.myturn .stage { background: var(--c); color: #fff; }
-.play-chess.myturn .stage .turn { text-shadow: var(--ol-sm); }
-.play-chess .pad { padding: 8px; background: #ffeccc; box-shadow: inset 0 -8px 0 rgba(0,0,0,.06), 0 5px 0 var(--ink); }
-.sides { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-bottom: 4px; }
-.side {
-  display: flex; flex-direction: column; align-items: center;
-  padding: 4px 10px;
-  border-radius: 16px;
-  border: 3px solid transparent;
+.play-chess { gap: 7px; padding-top: max(8px, env(safe-area-inset-top)); }
+.play-chess .topbar { padding: 4px; gap: 6px; }
+.play-chess .exit { width: 36px; height: 36px; }
+.cstatus { flex: 1; display: flex; }
+.cs {
+  flex: 1;
+  padding: 7px 10px;
+  border-radius: 12px;
+  background: rgba(255,255,255,.88);
+  border: 2.5px solid var(--ink);
+  text-align: center;
   font-size: .9rem;
-  min-width: 0;
+  font-weight: 900;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.side > span:first-child { font-size: 1.6rem; line-height: 1.1; }
-.side b { max-width: 6em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.side .cl { font-size: .8rem; opacity: .85; white-space: nowrap; }
-.side.now { border-color: var(--ink); background: #fff; color: var(--ink); animation: jelly .5s; }
-.vs { font-weight: 900; color: #ff7a1a; font-size: 1rem; font-family: "Fredoka", var(--font); }
-.play-chess.myturn .vs { color: #fff; }
+.cs.on { background: linear-gradient(#ffe066, #ffa800); animation: jelly .5s; }
+.cs .pe { height: 1.2em; }
 
-.graves { width: 100%; display: flex; flex-direction: column; gap: 3px; margin-top: 4px; }
-.grave { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; min-height: 26px; font-size: .8rem; font-weight: 700; text-align: left; }
-.gl { flex: none; min-width: 5.6em; opacity: .85; }
-.gnone { opacity: .5; font-weight: 500; }
+.play-chess .stage { flex: none; padding: 0; background: transparent; border: none; box-shadow: none; overflow: visible; }
+.play-chess .sin { gap: 0; }
+.cinfo { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.pcard {
+  display: grid;
+  grid-template-columns: 38px 1fr;
+  grid-template-areas: "av info" "tro tro";
+  gap: 3px 7px;
+  align-items: center;
+  padding: 6px 8px 5px;
+  background: var(--cream);
+  border: 3px solid var(--ink);
+  border-radius: 16px;
+  box-shadow: inset 0 -4px 0 rgba(31,56,100,.08), 0 3px 0 var(--ink);
+  text-align: left;
+  transition: box-shadow .2s, transform .2s;
+}
+.pcard.now { box-shadow: 0 0 0 3px var(--c), 0 0 14px var(--c), 0 3px 0 var(--ink); transform: translateY(-1px); }
+.pav { grid-area: av; position: relative; width: 38px; height: 38px; border-radius: 50%; background: #fff; border: 3px solid var(--c); display: flex; align-items: center; justify-content: center; font-size: 1.5rem; }
+.pav .pe { height: 26px; }
+.pdot { position: absolute; right: -5px; bottom: -4px; width: 15px; height: 15px; border-radius: 50%; border: 2.5px solid var(--ink); }
+.pdot.r { background: #e8344e; }
+.pdot.b { background: #3a3347; }
+.pinfo { grid-area: info; display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+.pinfo b { font-size: .95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pcnt { font-size: .72rem; font-weight: 800; opacity: .7; white-space: nowrap; }
+.ptro { grid-area: tro; display: flex; flex-wrap: wrap; gap: 2px; min-height: 22px; align-content: flex-start; }
+.gnone { font-size: .68rem; opacity: .45; font-weight: 700; line-height: 22px; }
 .gp {
   font-style: normal;
-  width: 24px; height: 24px;
+  width: 21px; height: 21px;
   border-radius: 50%;
-  background: #fff;
-  border: 2px solid #c9995a;
+  background: radial-gradient(circle at 35% 30%, #fffdf6, #f1dcb2);
+  border: 2px solid #b98a55;
   display: flex; align-items: center; justify-content: center;
-  font-size: .85rem; font-weight: 900;
+  font-size: .72rem; font-weight: 900;
   font-family: "Kaiti TC", "BiauKai", "DFKai-SB", "PingFang TC", "Microsoft JhengHei", serif;
 }
-.gp.r { color: #e8344e; }
-.gp.b { color: #3a2d3d; }
-.play-chess.myturn .gl { color: #fff; }
+.gp.r { color: #c4202e; }
+.gp.b { color: #25242f; }
 
+/* 棋盤:木框 + 竹色格子 */
+.play-chess .pad {
+  position: relative;
+  padding: 0;
+  gap: 0;
+  background: none; border: none; box-shadow: none;
+  overflow: visible;
+}
 .cboard {
-  height: 100%;
-  max-width: 100%;
-  aspect-ratio: 1 / 2;
+  width: 100%; height: 100%;
+  max-width: 520px;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   grid-template-rows: repeat(8, 1fr);
-  gap: 4px;
-  padding: 4px;
-  background: #f4cf96;
+  gap: 0;
+  padding: 9px;
   border: 3px solid var(--ink);
-  border-radius: 16px;
+  border-radius: 20px;
+  background:
+    repeating-linear-gradient(92deg, rgba(0,0,0,.05) 0 2px, transparent 2px 7px),
+    linear-gradient(135deg, #9a6738, #6f4526 55%, #85552f);
+  box-shadow: inset 0 0 0 3px #d4a468, inset 0 0 0 5px rgba(60,30,10,.55), inset 0 0 26px rgba(0,0,0,.4), 0 6px 0 var(--ink);
 }
 .cell {
   position: relative;
   display: flex; align-items: center; justify-content: center;
-  background: #ffe6bd;
-  border-radius: 10px;
-  min-height: 0;
+  min-height: 0; min-width: 0;
+  background: #f1d9a4;
+  box-shadow: inset 0 0 0 1px rgba(120,80,30,.22);
 }
-.cell.tgt { background: #b9f0cc; }
-.cell.tgt:empty::after { content: ""; width: 26%; aspect-ratio: 1; border-radius: 50%; background: #34b347; opacity: .7; }
-.cell.tgt .pc { box-shadow: 0 0 0 4px #ee4b4b, 0 3px 0 #9a6b33; }
-.cell.from { background: #dbe9ff; }
-.cell.last { box-shadow: inset 0 0 0 3px var(--accent); }
+.cell.dk { background: #e6c88b; }
+.cell:nth-child(1) { border-top-left-radius: 9px; }
+.cell:nth-child(4) { border-top-right-radius: 9px; }
+.cell:nth-child(29) { border-bottom-left-radius: 9px; }
+.cell:nth-child(32) { border-bottom-right-radius: 9px; }
+.cell.from { background: #ffe9a6; }
+.cell.last::after, .cell.from::after {
+  content: ""; position: absolute; inset: 3px;
+  border: 2.5px solid rgba(236,150,20,.9);
+  border-radius: 8px;
+  pointer-events: none;
+}
+.cell.from::after { border-style: dashed; opacity: .7; }
+.cell.tgt { background: #c9f0cf; }
+.cell.tgt:empty::before { content: ""; width: 24%; aspect-ratio: 1; border-radius: 50%; background: #2fb36b; box-shadow: 0 0 0 5px rgba(47,179,107,.28); animation: pulse .6s ease-in-out infinite alternate; }
+.cell.tgt .pc { box-shadow: 0 0 0 4px #ee4b4b, 0 0 14px 4px rgba(238,75,75,.6), 0 4px 0 #7a5530; }
+
 .pc {
-  width: 88%;
-  max-height: 88%;
+  height: 90%;
   aspect-ratio: 1;
+  max-width: 94%;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #fffaf0, #ffe2b0);
-  border: 2.5px solid #9a6b33;
-  box-shadow: 0 3px 0 #9a6b33;
   display: flex; align-items: center; justify-content: center;
-  font-size: min(4.2vh, 8vw);
   font-weight: 900;
-  font-family: "Kaiti TC", "BiauKai", "DFKai-SB", "PingFang TC", "Microsoft JhengHei", serif;
   line-height: 1;
+  font-family: "Kaiti TC", "BiauKai", "DFKai-SB", "PingFang TC", "Microsoft JhengHei", serif;
   transition: transform .15s;
 }
-.pc.r { color: #e8344e; }
-.pc.b { color: #3a2d3d; }
-.pc.hid {
-  background: repeating-linear-gradient(45deg, #6fb3ff 0 6px, #8fc4ff 6px 12px);
-  border-color: var(--ink);
-  box-shadow: 0 3px 0 var(--ink);
-  font-size: min(2.6vh, 5vw);
+.pc span { font-size: clamp(20px, 8.6vw, 44px); }
+.pc.r, .pc.b {
+  background: radial-gradient(circle at 34% 28%, #fffef8 0%, #f6e7c4 55%, #e5ca98 100%);
+  box-shadow: inset 0 0 0 3px #fff7de, inset 0 0 0 5px var(--rg), 0 4px 0 #7a5530, 0 7px 9px rgba(40,20,5,.35);
+  border: 3px solid var(--rg);
 }
-.cell.sel .pc { transform: scale(1.12) translateY(-3px); box-shadow: 0 0 0 4px var(--c), 0 6px 0 #9a6b33; }
+.pc.r { --rg: #cf3340; color: #c4202e; }
+.pc.b { --rg: #2f2d3c; color: #25242f; }
+.pc.r span, .pc.b span { text-shadow: 0 1.5px 0 rgba(255,255,255,.9), 0 -1px 0 rgba(0,0,0,.18); }
+.pc.hid {
+  background: radial-gradient(circle at 34% 28%, #6a8be0 0%, #3556a8 55%, #1f3478 100%);
+  border: 3px solid #14204a;
+  box-shadow: inset 0 0 0 3px #1f3478, inset 0 0 0 5px #e9c872, 0 4px 0 #0f1838, 0 7px 9px rgba(10,15,50,.4);
+  color: #f2cf7a;
+}
+.pc.hid span { font-size: clamp(16px, 6.4vw, 32px); text-shadow: 0 1.5px 0 rgba(0,0,0,.35); }
+.cell.sel .pc { transform: translateY(-4px) scale(1.1); box-shadow: inset 0 0 0 3px #fff7de, inset 0 0 0 5px var(--rg, #e9c872), 0 0 0 4px var(--c), 0 0 16px 5px var(--c), 0 9px 0 rgba(122,85,48,.8); }
 .cell.flipped .pc { animation: popin .35s ease-out; }
+.play-chess:not(.myturn) .pc.hid { filter: saturate(.7) brightness(.95); }
+
+/* 開局 / 結束的蓋板 */
+.cover {
+  position: absolute; inset: 0;
+  display: none;
+  flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  background: rgba(20,32,70,.72);
+  border-radius: 20px;
+  color: #fff;
+  text-align: center;
+  font-size: 1.15rem;
+  font-weight: 900;
+  text-shadow: var(--ol-sm);
+  z-index: 8;
+}
+.cover.on { display: flex; animation: popin .3s ease-out; }
+.cover .big { font-size: 4rem; }
+.vsrow { display: flex; align-items: center; justify-content: center; gap: 12px; font-size: 1.3rem; }
+.vsp { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.vsp .pe { height: 3.2rem; }
+.cover .vs { color: #ffd23f; font-family: "Fredoka", var(--font); }
 
 /* 坦克大戰 */
 .play-tank .stage { flex: none; padding: 6px; }

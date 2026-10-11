@@ -1336,7 +1336,11 @@ function hChess(H) {
 }
 
 function vChess(V) {
-  let st = null, sel = null, targets = [], over = false, lastTurn = null;
+  let st = null, sel = null, targets = [], over = false, lastTurn = null, coverT = null;
+  const chipsEl = $('.chips', V.root);
+  chipsEl.className = 'cstatus'; // 上方只留一條狀態列,計分改由玩家卡顯示
+  chipsEl.innerHTML = '<span class="cs">對局準備中…</span>';
+  V.renderChips = () => {};
   const boardEl = el('div', 'cboard');
   const cells = Array.from({ length: CHESS_COLS * CHESS_ROWS }, (_, i) => {
     const c = el('div', 'cell');
@@ -1344,43 +1348,53 @@ function vChess(V) {
     boardEl.appendChild(c);
     return c;
   });
+  const cover = el('div', 'cover');
   V.pad.innerHTML = '';
   V.pad.appendChild(boardEl);
-  V.stage('<div class="big">♟️</div><div>擺棋中…</div>');
+  V.pad.appendChild(cover);
+  const showCover = (html, ms) => {
+    cover.innerHTML = html;
+    cover.classList.add('on');
+    clearTimeout(coverT);
+    if (ms) coverT = setTimeout(() => cover.classList.remove('on'), ms);
+  };
+  V.stage('<div class="cinfo"></div>');
+  showCover('<div class="big">♟️</div><div>擺棋中…</div>');
 
   const fighting = () => st && st.fighters.includes(V.me);
   const myTurn = () => st && !over && st.turn === V.me;
   const who = s => (s === V.me ? '你' : esc(pinfo(s).name));
 
   function renderStage() {
-    const side = s => {
-      const p = pinfo(s), c = st.color[s];
-      return `<div class="side${st.turn === s && !over ? ' now' : ''}" style="--c:${p.color}">
-        <span>${p.emoji}</span><b>${who(s)}</b><span class="cl">${c ? COLOR_LABEL[c] + ` ×${st.left[c]}` : '❔ 未定'}</span></div>`;
+    const order = fighting() ? [V.me, st.fighters.find(s => s !== V.me)] : st.fighters;
+    const card = s => {
+      const p = pinfo(s), c = st.color[s], oc = c ? (c === 'r' ? 'b' : 'r') : null;
+      const ks = oc ? [...st.dead[oc]].sort((x, y) => CHESS_RANK[y] - CHESS_RANK[x]) : []; // 這位玩家吃掉的對方棋子
+      return `<div class="pcard${st.turn === s && !over ? ' now' : ''}" style="--c:${p.color}">
+        <div class="pav">${p.emoji}${c ? `<i class="pdot ${c}"></i>` : ''}</div>
+        <div class="pinfo"><b>${who(s)}</b><span class="pcnt">${c ? (c === 'r' ? '紅方' : '黑方') + ' · 剩 ' + st.left[c] : '尚未定色'}</span></div>
+        <div class="ptro">${ks.length ? ks.map(k => `<i class="gp ${oc}">${CHESS_NAME[oc][k]}</i>`).join('') : '<span class="gnone">吃子紀錄</span>'}</div>
+      </div>`;
     };
+    V.stage(`<div class="cinfo">${order.map(card).join('')}</div>`);
+
     let msg;
-    if (myTurn()) msg = sel != null ? '選要走去哪一格 ✨' : (st.color[V.me] ? '輪到你了!翻棋或走棋' : '輪到你了!先翻一顆棋');
-    else msg = (fighting() ? '' : '👀 觀戰中 — ') + `輪到 ${pinfo(st.turn).emoji} ${who(st.turn)}…`;
-    let note = '';
-    if (st.last && st.last.type === 'cap') note = `${pinfo(st.last.slot).emoji} ${who(st.last.slot)} 吃掉了 ${CHESS_NAME[st.last.cap.c][st.last.cap.k]}!`;
-    else if (st.idle >= 40) note = `再 ${50 - st.idle} 步沒吃子就平手`;
-    const grave = c => {
-      const ks = [...st.dead[c]].sort((a, b) => CHESS_RANK[b] - CHESS_RANK[a]);
-      return `<div class="grave"><span class="gl ${c}">${c === 'r' ? '🔴' : '⚫'} 被吃掉</span>${ks.length ? ks.map(k => `<i class="gp ${c}">${CHESS_NAME[c][k]}</i>`).join('') : '<span class="gnone">還沒有</span>'}</div>`;
-    };
-    V.stage(`<div class="sides">${st.fighters.map(side).join('<span class="vs">VS</span>')}</div>
-      <div class="turn">${msg}</div>${note ? `<div class="small">${note}</div>` : ''}
-      <div class="graves">${grave('r')}${grave('b')}</div>`);
+    if (over) msg = '對局結束';
+    else if (myTurn()) msg = sel != null ? '選要走去哪一格' : (st.color[V.me] ? '輪到你!翻棋或走棋' : '輪到你!先翻一顆棋');
+    else msg = (fighting() ? '' : '👀 觀戰 · ') + `輪到 ${pinfo(st.turn).emoji} ${who(st.turn)}…`;
+    if (!over && st.idle >= 40) msg += ` · 再 ${50 - st.idle} 步平手`;
+    chipsEl.innerHTML = `<span class="cs${myTurn() ? ' on' : ''}">${msg}</span>`;
   }
   function render() {
     targets = sel != null && myTurn() ? chessTargets(st.cells, sel) : [];
     const lastFrom = st.last ? st.last.from : -1, lastTo = st.last ? st.last.to : -1;
     cells.forEach((c, i) => {
       const x = st.cells[i];
-      c.className = 'cell' + (sel === i ? ' sel' : '') + (targets.includes(i) ? ' tgt' : '')
+      const dk = (Math.floor(i / CHESS_COLS) + (i % CHESS_COLS)) % 2;
+      c.className = 'cell' + (dk ? ' dk' : '') + (sel === i ? ' sel' : '') + (targets.includes(i) ? ' tgt' : '')
         + (i === lastTo ? ' last' : '') + (i === lastFrom ? ' from' : '')
         + (i === lastTo && st.last.type === 'flip' ? ' flipped' : '');
-      c.innerHTML = !x ? '' : x.h ? '<div class="pc hid">🐾</div>' : `<div class="pc ${x.c}">${CHESS_NAME[x.c][x.k]}</div>`;
+      c.innerHTML = !x ? '' : x.h ? '<div class="pc hid"><span>❖</span></div>' : `<div class="pc ${x.c}"><span>${CHESS_NAME[x.c][x.k]}</span></div>`;
     });
     V.root.classList.toggle('myturn', myTurn());
     renderStage();
@@ -1406,13 +1420,14 @@ function vChess(V) {
   };
   V.on = m => {
     if (m.e === 'intro') {
-      const [a, b] = m.fighters.map(s => `${pinfo(s).emoji} ${who(s)}`);
-      V.stage(`<div class="small">${V.players.length > 2 ? '抽籤結果' : '對戰開始'}</div><div class="turn">${a} <span class="vs">VS</span> ${b}</div>
-        ${m.fighters.includes(V.me) ? '' : '<div class="small">你這局觀戰 👀</div>'}`);
+      const [a, b] = m.fighters.map(s => `<span class="vsp">${pinfo(s).emoji}<b>${who(s)}</b></span>`);
+      showCover(`<div class="small">${V.players.length > 2 ? '抽籤結果' : '對戰開始'}</div><div class="vsrow">${a}<span class="vs">VS</span>${b}</div>
+        ${m.fighters.includes(V.me) ? '' : '<div class="small">你這局觀戰 👀</div>'}`, 1700);
       SFX.go();
     } else if (m.e === 'board') {
       st = m;
       sel = null;
+      cover.classList.remove('on');
       render();
       if (m.last) {
         if (m.last.type === 'cap') {
@@ -1425,9 +1440,9 @@ function vChess(V) {
       over = true;
       sel = null;
       if (st) render();
-      V.stage(m.winner == null
+      showCover(m.winner == null
         ? `<div class="big">🤝</div><div>${m.reason}</div>`
-        : `<div class="big">${pinfo(m.winner).emoji}</div><div>${who(m.winner)} 獲勝!</div><div class="small">${m.reason}</div>`);
+        : `<div class="big">🏆</div><div class="vsrow"><span class="vsp">${pinfo(m.winner).emoji}<b>${who(m.winner)} 獲勝!</b></span></div><div class="small">${m.reason}</div>`);
     }
   };
 }
