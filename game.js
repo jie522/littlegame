@@ -66,7 +66,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.10.12b';
+const APP_VERSION = '2026.10.13';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -469,32 +469,23 @@ function home() {
   resetView();
   app.innerHTML = '';
   const roomParam = new URLSearchParams(location.search).get('room') || '';
-  const h = el('div', 'screen home');
+  const h = el('div', 'screen home2');
   h.innerHTML = `
-    <div class="hbar">
-      <label class="profile"><span class="ava">🐣</span>
-        <input id="name" maxlength="8" placeholder="輸入你的暱稱" value="${esc(myName())}"></label>
-      <div class="coin" title="累計勝場"><span>⭐</span><b>${store.get('wins', 0)}</b></div>
+    <div class="art">
       <button class="iconbtn" id="mute" aria-label="音效">${S.muted ? '🔇' : '🔊'}</button>
+      <div class="coin" title="累計勝場"><span>⭐</span><b>${store.get('wins', 0)}</b></div>
     </div>
-    <header class="logo">
-      <div class="logo-t"><span class="l1">萌萌</span><span class="l2">派對</span></div>
-      ${ribbon('PARTY GAMES')}
-    </header>
-    <div class="mascots">${shuffle(CHARS).slice(0, 4).map(c => `<img class="mimg" src="assets/chars/${c.id}.png" alt="">`).join('')}</div>
-    <nav class="menu">
+    <div class="hpanel">
+      <label class="profile"><span class="ava">${charHTML(CHARS[myChar()])}</span>
+        <input id="name" maxlength="8" placeholder="輸入你的暱稱" value="${esc(myName())}"></label>
       <button class="btn big green" id="solo"><span class="bi">▶</span><span class="bt">單人遊戲<small>對戰電腦</small></span></button>
-      <button class="btn big yellow" id="create"><span class="bi">🏠</span><span class="bt">建立房間<small>邀請朋友一起玩</small></span></button>
+      <button class="btn big orange" id="create"><span class="bi">🏠</span><span class="bt">建立房間<small>邀請朋友一起玩</small></span></button>
       <div class="joinbox">
         <input class="field" id="code" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="輸入房號" value="${esc(roomParam)}">
         <button class="btn blue" id="join">加入</button>
       </div>
-    </nav>
-    <section class="gstrip">
-      <div class="gs-t">🎮 ${GAMES.length} 款小遊戲</div>
-      <div class="gs-row">${GAMES.map(g => `<div class="gs-i" style="--g:${g.color}"><span>${g.emoji}</span><b>${g.name}</b></div>`).join('')}</div>
-    </section>
-    <p class="tip">每人一支手機 · 2~4 人連線 · 建議連同一個 Wi-Fi<br><span class="ver">版本 ${APP_VERSION} · ${GAMES.length} 款遊戲</span></p>`;
+      <p class="tip">每人一支手機 · 2~4 人連線 · 建議連同一個 Wi-Fi<br><span class="ver">版本 ${APP_VERSION} · ${GAMES.length} 款遊戲</span></p>
+    </div>`;
   app.appendChild(h);
 
   const nameIn = $('#name', h), codeIn = $('#code', h);
