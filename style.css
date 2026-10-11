@@ -1202,3 +1202,42 @@ button:disabled { cursor: not-allowed; }
 @media (max-height: 760px) { .mimg { height: 84px; } }
 .play-shaft .stage { background: transparent; border-color: transparent; box-shadow: none; }
 .play-shaft .hud { color: #fff; text-shadow: var(--ol-sm); }
+
+/* 選角色 */
+.seat.mine { cursor: pointer; box-shadow: 0 0 0 3px #ffd23f; }
+.seat.mine:active { transform: scale(.95); }
+.swap { position: absolute; top: -9px; left: -7px; z-index: 2; width: 24px; height: 24px; border-radius: 50%; background: #ffd23f; border: 2px solid var(--ink); font-style: normal; font-size: .8rem; display: flex; align-items: center; justify-content: center; }
+.seathint { grid-column: 1 / -1; font-size: .78rem; opacity: .65; margin-top: 2px; }
+.sheetbg { position: absolute; inset: 0; z-index: 60; background: rgba(15,25,60,.55); display: flex; align-items: flex-end; justify-content: center; animation: screenin .2s ease-out; }
+.sheet {
+  width: 100%; max-width: 480px;
+  max-height: 92%; overflow-y: auto;
+  padding: 14px 12px max(14px, env(safe-area-inset-bottom));
+  background: var(--cream);
+  border: 3px solid var(--ink); border-bottom: none;
+  border-radius: 26px 26px 0 0;
+  text-align: center;
+  animation: sheetup .25s ease-out;
+}
+.sheet h3 { font-size: 1.15rem; margin-bottom: 10px; }
+.sheet .btn.big { margin-top: 12px; justify-content: center; }
+.chargrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.cc {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 8px 2px 6px;
+  border-radius: 16px;
+  border: 3px solid var(--ink);
+  background: var(--soft);
+  box-shadow: 0 3px 0 var(--ink);
+  font-size: .78rem;
+  transition: transform .08s;
+}
+.cc:active:not(:disabled) { transform: translateY(2px); }
+.cc.on { background: #fff5b8; box-shadow: 0 0 0 3px var(--c), 0 3px 0 var(--ink); transform: translateY(-2px); }
+.cc.taken { opacity: .45; filter: grayscale(.6); }
+.ci { height: 78px; display: flex; align-items: flex-end; }
+.ci img { height: 100%; width: auto; max-width: 100%; object-fit: contain; }
+.by { position: absolute; top: -8px; left: 50%; transform: translateX(-50%); font-style: normal; font-size: .62rem; font-weight: 900; padding: 0 7px; border-radius: 999px; background: var(--ink); color: #fff; white-space: nowrap; max-width: 90%; overflow: hidden; text-overflow: ellipsis; }
+.by.me { background: #ffa800; }
+@keyframes sheetup { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }

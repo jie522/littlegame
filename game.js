@@ -38,19 +38,35 @@ const store = {
   },
 };
 
-/* 依加入順序分配角色:房主 = 0 號 */
-const PLAYERS = [
-  { name: '兔兔', file: 'bunny', color: '#9b7bff', soft: '#ede6ff' },
-  { name: '熊熊', file: 'bear', color: '#ffa04d', soft: '#fff0dc' },
-  { name: '柴柴', file: 'shiba', color: '#3fbf78', soft: '#dcf6e6' },
-  { name: '貓貓', file: 'cat', color: '#5b9bff', soft: '#e0ecff' },
+/* 8 個角色(每位玩家可以自己選):name 是預設名字、color 是隊伍色、soft 是淡色 */
+const CHARS = [
+  { id: 'bunny', name: '兔兔', color: '#9b7bff', soft: '#ede6ff' },
+  { id: 'bear', name: '熊熊', color: '#c9854a', soft: '#f6e8d8' },
+  { id: 'shiba', name: '柴柴', color: '#3fbf78', soft: '#dcf6e6' },
+  { id: 'cat', name: '貓貓', color: '#4f8ef7', soft: '#e0ecff' },
+  { id: 'sleepy', name: '睏睏貓', color: '#7d8aa3', soft: '#e6eaf2' },
+  { id: 'redpanda', name: '小貓熊', color: '#e0572d', soft: '#fde4d9' },
+  { id: 'penguin', name: '企鵝', color: '#22b5c7', soft: '#d9f3f6' },
+  { id: 'otter', name: '水獺', color: '#e2b21f', soft: '#fbf0c9' },
 ];
-/* emoji 欄位:文字裡用的小頭像(圖片);畫布遊戲用 CHAR_IMG 直接畫圖 */
-PLAYERS.forEach(p => { p.emoji = '<img class="pe" src="assets/chars/head_' + p.file + '.png" alt="">'; });
 const loadImg = src => { const i = new Image(); i.src = src; return i; };
-const CHAR_IMG = PLAYERS.map(p => ({ full: loadImg('assets/chars/' + p.file + '.png'), head: loadImg('assets/chars/head_' + p.file + '.png') }));
+const CHAR_IMGS = CHARS.map(c => ({ full: loadImg('assets/chars/' + c.id + '.png'), head: loadImg('assets/chars/head_' + c.id + '.png') }));
+const charHTML = c => '<img class="pe" src="assets/chars/head_' + c.id + '.png" alt="">';
+/* PLAYERS[座位]:目前這個座位的玩家用的角色;emoji 欄位是文字裡用的小頭像(圖片),畫布遊戲用 CHAR_IMG */
+const PLAYERS = [0, 1, 2, 3].map(i => ({ slot: i, ch: i, ...CHARS[i], file: CHARS[i].id, emoji: charHTML(CHARS[i]) }));
+const CHAR_IMG = [0, 1, 2, 3].map(i => CHAR_IMGS[i]);
+const dispName = p => { const c = CHARS[p.ch != null ? p.ch : p.slot]; return p.bot ? '🤖' + c.name : (p.name || c.name); };
+function applyChars() {
+  for (let s = 0; s < 4; s++) {
+    const p = NET.players.find(x => x.slot === s);
+    const ci = p && p.ch != null ? p.ch : s, c = CHARS[ci];
+    PLAYERS[s] = { slot: s, ch: ci, ...c, file: c.id, emoji: charHTML(c), name: p ? dispName(p) : c.name };
+    CHAR_IMG[s] = CHAR_IMGS[ci];
+  }
+}
+const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.10.11';
+const APP_VERSION = '2026.10.12';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -120,6 +136,7 @@ function makeTimers() {
 }
 let viewT = makeTimers();
 function resetView() {
+  NET.pickerOpen = false;
   viewT.stop();
   viewT = makeTimers();
   V = null;
@@ -160,7 +177,7 @@ const NET = {
 
 const pinfo = slot => {
   const p = NET.players.find(x => x.slot === slot);
-  return { ...PLAYERS[slot], name: p ? p.name : PLAYERS[slot].name, online: p ? p.online : false, bot: !!(p && p.bot) };
+  return { ...PLAYERS[slot], name: PLAYERS[slot].name, online: p ? p.online : false, bot: !!(p && p.bot) };
 };
 const myName = () => (store.get('name', '') || '').trim().slice(0, 8);
 
@@ -189,7 +206,8 @@ function addBot() {
   const used = new Set(NET.players.map(p => p.slot));
   const slot = [1, 2, 3].find(s => !used.has(s));
   if (slot == null) return;
-  NET.players.push({ slot, name: '🤖' + PLAYERS[slot].name, online: true, bot: true });
+  const usedCh = new Set(NET.players.map(p => p.ch));
+  NET.players.push({ slot, name: '', online: true, bot: true, ch: pick(CHARS.map((_, i) => i).filter(i => !usedCh.has(i))) });
   NET.players.sort((a, b) => a.slot - b.slot);
   NET.stars[slot] = 0;
 }
@@ -201,7 +219,7 @@ function removeBot() {
 function createSolo() {
   resetView();
   Object.assign(NET, { role: 'host', peer: null, code: '單人', solo: true, mySlot: 0, phase: 'lobby', stars: [0, 0, 0, 0] });
-  NET.players = [{ slot: 0, name: myName() || PLAYERS[0].name, online: true }];
+  NET.players = [{ slot: 0, name: myName(), online: true, ch: myChar() }];
   addBot();
   requestWake();
   hostToLobby();
@@ -215,7 +233,7 @@ function createRoom() {
   const peer = new Peer(PREFIX + code, PEER_OPTS);
   let opened = false;
   Object.assign(NET, { role: 'host', peer, code, mySlot: 0, phase: 'lobby', stars: [0, 0, 0, 0] });
-  NET.players = [{ slot: 0, name: myName() || PLAYERS[0].name, online: true }];
+  NET.players = [{ slot: 0, name: myName(), online: true, ch: myChar() }];
 
   peer.on('open', () => {
     opened = true;
@@ -261,7 +279,9 @@ function onClientConn(conn) {
       slot = free;
       NET.conns.set(slot, conn);
       NET.players = NET.players.filter(p => p.slot !== slot);
-      NET.players.push({ slot, name: String(m.name || '').trim().slice(0, 8) || PLAYERS[slot].name, online: true });
+      const taken = new Set(NET.players.filter(p => p.slot !== slot).map(p => p.ch));
+      const want = Number.isInteger(m.ch) && m.ch >= 0 && m.ch < CHARS.length && !taken.has(m.ch) ? m.ch : CHARS.map((_, i) => i).find(i => !taken.has(i));
+      NET.players.push({ slot, name: String(m.name || '').trim().slice(0, 8), online: true, ch: want });
       NET.players.sort((a, b) => a.slot - b.slot);
       NET.stars[slot] = 0;
       conn.send({ t: 'welcome', slot });
@@ -272,6 +292,8 @@ function onClientConn(conn) {
         if (NET.phase === 'intro') conn.send({ t: 'intro', g: NET.introG, players: NET.players });
         else conn.send({ t: 'busy', players: NET.players });
       }
+    } else if (slot !== null && m.t === 'pick') {
+      hostSetChar(slot, m.ch);
     } else if (slot !== null) {
       hostInput(slot, m);
     }
@@ -300,6 +322,20 @@ function sendInput(m) {
 function hostInput(slot, m) {
   const H = NET.game;
   if (m.t === 'in' && H && !H.done && H.players.includes(slot)) H.logic.input(slot, m);
+}
+
+/* 選角色:房主直接改,其他人請房主改(同一個角色只能一個人用) */
+function hostSetChar(slot, ci) {
+  const p = NET.players.find(x => x.slot === slot);
+  if (!p || NET.phase !== 'lobby' || !Number.isInteger(ci) || ci < 0 || ci >= CHARS.length) return;
+  if (NET.players.some(x => x.slot !== slot && x.ch === ci)) return hostToLobby(); // 被別人選走了
+  p.ch = ci;
+  hostToLobby();
+}
+function pickChar(ci) {
+  store.set('char', ci);
+  if (NET.role === 'host') hostSetChar(NET.mySlot, ci);
+  else if (NET.conn && NET.conn.open) NET.conn.send({ t: 'pick', ch: ci });
 }
 
 function pruneOffline() { NET.players = NET.players.filter(p => p.online); }
@@ -335,7 +371,7 @@ function joinRoom(code) {
     conn.on('open', () => {
       ok = true;
       clearTimeout(timer);
-      conn.send({ t: 'hello', name: myName() });
+      conn.send({ t: 'hello', name: myName(), ch: myChar() });
       requestWake();
     });
     conn.on('data', m => { if (NET.peer === peer) onMsg(m); });
@@ -355,16 +391,16 @@ function onMsg(m) {
     case 'welcome': NET.mySlot = m.slot; break;
     case 'full': leaveRoom('房間已經滿了(最多 4 人)'); break;
     case 'lobby':
-      NET.players = m.players; NET.stars = m.stars; NET.code = m.code;
+      NET.players = m.players; NET.stars = m.stars; NET.code = m.code; applyChars();
       lobbyView();
       break;
     case 'presence':
-      NET.players = m.players;
+      NET.players = m.players; applyChars();
       if (V) V.renderChips();
       else if ($('.intro')) introPlayers();
       break;
-    case 'busy': NET.players = m.players; busyView(); break;
-    case 'intro': NET.players = m.players; introView(GAME[m.g]); break;
+    case 'busy': NET.players = m.players; applyChars(); busyView(); break;
+    case 'intro': NET.players = m.players; applyChars(); introView(GAME[m.g]); break;
     case 'play': playView(m); break;
     case 'cd': if (V) V.countdown(m.n); break;
     case 'score': if (V) V.setScores(m); break;
@@ -373,7 +409,7 @@ function onMsg(m) {
       if (m.e === 'end') { V.onTap = null; V.stage('<div class="big">🎉</div><div>結束囉!</div>'); SFX.go(); }
       else V.on(m);
       break;
-    case 'results': NET.stars = m.stars; NET.players = m.pl; resultsView(m); break;
+    case 'results': NET.stars = m.stars; NET.players = m.pl; applyChars(); resultsView(m); break;
   }
 }
 
@@ -440,7 +476,7 @@ function home() {
       <div class="logo-t"><span class="l1">萌萌</span><span class="l2">派對</span></div>
       ${ribbon('PARTY GAMES')}
     </header>
-    <div class="mascots">${PLAYERS.map(p => `<img class="mimg" src="assets/chars/${p.file}.png" alt="">`).join('')}</div>
+    <div class="mascots">${shuffle(CHARS).slice(0, 4).map(c => `<img class="mimg" src="assets/chars/${c.id}.png" alt="">`).join('')}</div>
     <nav class="menu">
       <button class="btn big green" id="solo"><span class="bi">▶</span><span class="bt">單人遊戲<small>對戰電腦</small></span></button>
       <button class="btn big yellow" id="create"><span class="bi">🏠</span><span class="bt">建立房間<small>邀請朋友一起玩</small></span></button>
@@ -484,7 +520,7 @@ function playerChipsHTML(withStars) {
     const P = PLAYERS[p.slot];
     const tags = (p.bot ? '<span class="ptag">電腦</span>' : '') + (p.slot === 0 ? '<span class="ptag">房主</span>' : '') + (p.slot === NET.mySlot ? '<span class="ptag me">我</span>' : '');
     return `<div class="pchip${p.online ? '' : ' off'}" style="--c:${P.color};--soft:${P.soft}">
-      <span class="pemo">${P.emoji}</span><span class="pname">${esc(p.name)}</span>${tags}
+      <span class="pemo">${P.emoji}</span><span class="pname">${esc(PLAYERS[p.slot].name)}</span>${tags}
       ${withStars ? `<span class="pstar">⭐ ${NET.stars[p.slot] || 0}</span>` : ''}</div>`;
   }).join('');
 }
@@ -499,13 +535,15 @@ function seatHTML(slot) {
   }
   const P = PLAYERS[slot];
   const tags = (p.bot ? '<span class="ptag">電腦</span>' : '') + (slot === 0 ? '<span class="ptag">房主</span>' : '') + (slot === NET.mySlot ? '<span class="ptag me">我</span>' : '');
-  return `<div class="seat${p.online ? '' : ' off'}" style="--c:${P.color};--soft:${P.soft}">
+  return `<div class="seat${p.online ? '' : ' off'}${slot === NET.mySlot ? ' mine' : ''}" style="--c:${P.color};--soft:${P.soft}">
+    ${slot === NET.mySlot ? '<i class="swap">✎</i>' : ''}
     ${isHost && p.bot ? `<button class="kick" data-slot="${slot}" aria-label="移除電腦">✕</button>` : ''}
-    <div class="ava-big">${P.emoji}</div><b class="sname">${esc(p.name)}</b>
+    <div class="ava-big">${P.emoji}</div><b class="sname">${esc(PLAYERS[slot].name)}</b>
     <div class="stags">${tags}</div><div class="sstar">⭐ ${NET.stars[slot] || 0}</div></div>`;
 }
 
 function lobbyView() {
+  const reopen = NET.pickerOpen;
   resetView();
   app.innerHTML = '';
   const isHost = NET.role === 'host';
@@ -518,7 +556,7 @@ function lobbyView() {
       <div class="roomtag">${NET.solo ? '🤖 單人模式' : `房號<b>${esc(NET.code)}</b>`}</div>
       ${NET.solo ? '<span class="iconbtn ghost"></span>' : '<button class="iconbtn" id="share" aria-label="邀請朋友">📤</button>'}
     </div>
-    <section class="panel seats">${[0, 1, 2, 3].map(seatHTML).join('')}</section>
+    <section class="panel seats">${[0, 1, 2, 3].map(seatHTML).join('')}<p class="seathint">👆 點自己的頭像可以換角色</p></section>
     ${isHost && hasBot ? `<div class="lvl">電腦強度<div class="seg">${BOT_LEVELS.map((n, i) => `<button class="lv${i === NET.level ? ' on' : ''}" data-l="${i}">${n}</button>`).join('')}</div></div>` : ''}
     ${isHost ? `${ribbon(enough ? '選擇遊戲' : '至少 2 人才能開始', 'blue')}
       <section class="games">${GAMES.map(g => `
@@ -533,6 +571,7 @@ function lobbyView() {
   const sh = $('#share', d);
   if (sh) sh.addEventListener('click', shareRoom);
   $$('.seat.can', d).forEach(s => s.addEventListener('click', () => { addBot(); hostToLobby(); }));
+  $$('.seat.mine', d).forEach(s => s.addEventListener('click', openPicker));
   $$('.kick', d).forEach(b => b.addEventListener('click', e => {
     e.stopPropagation();
     NET.players = NET.players.filter(p => !(p.bot && p.slot === +b.dataset.slot));
@@ -544,6 +583,8 @@ function lobbyView() {
   });
   $$('.gcard', d).forEach(b => b.addEventListener('click', () => hostPickGame(b.dataset.g)));
 
+  if (reopen) openPicker();
+
   // 內容比螢幕長時,提示「往下滑還有更多遊戲」
   const hint = el('button', 'scrollhint', '▼ 還有更多遊戲');
   d.appendChild(hint);
@@ -551,6 +592,26 @@ function lobbyView() {
   hint.addEventListener('click', () => d.scrollBy({ top: d.clientHeight * 0.7, behavior: 'smooth' }));
   d.addEventListener('scroll', upd);
   setTimeout(upd, 50);
+}
+
+/* 選角色面板:8 個角色,被別人選走的會變灰並標示是誰 */
+function openPicker() {
+  NET.pickerOpen = true;
+  const old = $('.sheetbg');
+  if (old) old.remove();
+  const me = NET.players.find(p => p.slot === NET.mySlot);
+  const bg = el('div', 'sheetbg');
+  bg.innerHTML = `<div class="sheet"><h3>選擇你的角色</h3><div class="chargrid">${CHARS.map((c, i) => {
+    const owner = NET.players.find(p => p.ch === i && p.slot !== NET.mySlot);
+    const on = me && me.ch === i;
+    return `<button class="cc${on ? ' on' : ''}${owner ? ' taken' : ''}" data-i="${i}" style="--c:${c.color};--soft:${c.soft}" ${owner ? 'disabled' : ''}>
+      <span class="ci"><img src="assets/chars/${c.id}.png" alt=""></span><b>${c.name}</b>${owner ? `<i class="by">${esc(PLAYERS[owner.slot].name)}</i>` : on ? '<i class="by me">我</i>' : ''}</button>`;
+  }).join('')}</div><button class="btn big green done"><span class="bt">完成</span></button></div>`;
+  app.appendChild(bg);
+  $$('.cc', bg).forEach(b => b.addEventListener('click', () => { SFX.tap(); pickChar(+b.dataset.i); }));
+  const close = () => { NET.pickerOpen = false; bg.remove(); };
+  $('.done', bg).addEventListener('click', close);
+  bg.addEventListener('pointerdown', e => { if (e.target === bg) close(); });
 }
 
 async function shareRoom() {
