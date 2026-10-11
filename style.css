@@ -1302,3 +1302,179 @@ button:disabled { cursor: not-allowed; }
 .snote { color: #fff; font-size: .72rem; text-align: center; text-shadow: var(--ol-sm); }
 .sbtns { display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .sbtns .btn.big { justify-content: center; }
+
+/* 心臟病:墨綠絨布牌桌 + 金邊、純 CSS 畫的撲克牌 */
+.play-heart { gap: 7px; padding-top: max(8px, env(safe-area-inset-top)); }
+.play-heart .topbar { padding: 4px; gap: 6px; }
+.play-heart .exit { width: 36px; height: 36px; }
+.cs b { color: #d6283f; font-family: "Fredoka", var(--font); font-size: 1.1em; }
+.play-heart .stage { flex: none; padding: 0; background: transparent; border: none; box-shadow: none; overflow: visible; }
+.play-heart .sin { gap: 0; }
+.play-heart .pad { padding: 0; background: none; border: none; box-shadow: none; overflow: visible; }
+.hseats { width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 6px; }
+.hseat {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  padding: 5px 3px 5px;
+  background: var(--cream);
+  border: 3px solid var(--ink);
+  border-radius: 14px;
+  box-shadow: 0 3px 0 var(--ink);
+  font-size: .78rem;
+  min-width: 0;
+  transition: transform .2s, box-shadow .2s;
+}
+.hseat b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hseat.me { background: #fff5b8; }
+.hseat.now { box-shadow: 0 0 0 3px var(--pc), 0 0 14px var(--pc), 0 3px 0 var(--ink); transform: translateY(-2px); }
+.hseat.off { filter: grayscale(1); opacity: .5; }
+.hav .pe { height: 28px; }
+.hcnt { position: relative; display: flex; align-items: center; height: 22px; padding-left: 20px; }
+.hcnt i {
+  position: absolute; left: 0; top: 1px;
+  width: 14px; height: 20px; border-radius: 3px;
+  background: repeating-linear-gradient(45deg, rgba(255,214,120,.35) 0 1px, transparent 1px 4px), linear-gradient(#b3122b, #6d0718);
+  border: 1.5px solid #fff; box-shadow: 0 0 0 1px var(--ink);
+}
+.hcnt i:nth-child(2) { left: 3px; top: -1px; transform: rotate(6deg); }
+.hcnt i:nth-child(3) { left: 6px; top: 0; transform: rotate(-4deg); }
+.hcnt em { font-style: normal; font-weight: 900; font-family: "Fredoka", var(--font); font-size: 1.05rem; margin-left: 4px; }
+
+.hx { width: 100%; height: 100%; display: flex; flex-direction: column; gap: 9px; }
+.htable {
+  position: relative;
+  flex: 1; min-height: 0;
+  border-radius: 26px;
+  border: 3px solid var(--ink);
+  background:
+    radial-gradient(circle at 50% 46%, rgba(255,255,255,.10), transparent 55%),
+    repeating-radial-gradient(circle at 30% 20%, rgba(0,0,0,.035) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at 50% 45%, #2f8f5b 0%, #1b6a41 55%, #0e4229 100%);
+  box-shadow: inset 0 0 0 4px #c9a24a, inset 0 0 0 6px rgba(0,0,0,.45), inset 0 0 0 8px #e9cd7f, inset 0 12px 46px rgba(0,0,0,.55), 0 5px 0 var(--ink);
+  overflow: hidden;
+  touch-action: none;
+}
+.htable::before { /* 牌桌中間的燙金花紋 */
+  content: "♠ ♥ ♣ ♦";
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: calc(var(--cw) * .5);
+  letter-spacing: .5em;
+  color: rgba(233,205,127,.07);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.htable.thump { animation: thump .22s ease-out; }
+@keyframes thump { 30% { transform: scale(.985); filter: brightness(1.12); } }
+.hcall {
+  position: absolute; left: 50%; top: 5%;
+  transform: translateX(-50%);
+  display: flex; align-items: baseline; gap: 4px;
+  padding: 2px 16px 4px;
+  border-radius: 999px;
+  background: rgba(0,0,0,.32);
+  border: 2px solid rgba(233,205,127,.6);
+  color: #ffe9a8;
+  z-index: 3;
+}
+.hcall small { font-size: .85rem; font-weight: 900; opacity: .85; }
+.hcall b { font-family: Georgia, "Times New Roman", serif; font-size: calc(var(--cw) * .36); line-height: 1; text-shadow: 0 0 10px rgba(255,200,90,.6); }
+.hcall.pop { animation: popin .25s ease-out; }
+.hnext { position: absolute; left: 50%; bottom: 3.5%; transform: translateX(-50%); color: rgba(255,255,255,.75); font-size: .8rem; font-weight: 800; white-space: nowrap; z-index: 3; }
+.hnext b { color: #ffe9a8; font-family: Georgia, serif; font-size: 1.1rem; }
+
+/* 撲克牌 */
+.hpile { position: absolute; left: 50%; top: 53%; width: var(--cw); height: calc(var(--cw) * 1.4); transform: translate(-50%, -50%); perspective: 900px; z-index: 2; }
+.hpile.tome { animation: tome .6s ease-in forwards; }
+.hpile.toop { animation: toop .6s ease-in forwards; }
+@keyframes tome { to { transform: translate(-50%, 120%) scale(.5); opacity: 0; } }
+@keyframes toop { to { transform: translate(-50%, -220%) scale(.4); opacity: 0; } }
+.pc {
+  position: absolute; inset: 0;
+  transform-style: preserve-3d;
+  transform: translate(calc(var(--i, 0) * .6px), calc(var(--i, 0) * -.8px)) rotate(var(--r, 0deg));
+}
+.pc.fromme { animation: fromme .3s cubic-bezier(.2, .8, .3, 1); }
+.pc.fromop { animation: fromop .3s cubic-bezier(.2, .8, .3, 1); }
+@keyframes fromme { from { transform: translateY(110%) rotate(0deg) rotateY(180deg) scale(1.12); } }
+@keyframes fromop { from { transform: translateY(-110%) rotate(0deg) rotateY(180deg) scale(1.12); } }
+.hf, .hb { position: absolute; inset: 0; border-radius: calc(var(--cw) * .075); backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.hf {
+  --sc: #1b1f2a;
+  color: var(--sc);
+  background: linear-gradient(155deg, #ffffff 0%, #fbf8f1 60%, #efe9dc 100%);
+  border: 1px solid rgba(0,0,0,.28);
+  box-shadow: inset 0 0 0 calc(var(--cw) * .025) #fff, inset 0 0 0 calc(var(--cw) * .03) rgba(0,0,0,.06), 0 3px 8px rgba(0,0,0,.4);
+  font-family: Georgia, "Times New Roman", serif;
+  overflow: hidden;
+}
+.hf.red { --sc: #c8102e; }
+.hcn { position: absolute; left: 6%; top: 4%; display: flex; flex-direction: column; align-items: center; font-size: calc(var(--cw) * .2); font-weight: 700; line-height: .95; letter-spacing: -.04em; }
+.hcn i { font-style: normal; font-size: .78em; }
+.hcn.br { left: auto; top: auto; right: 6%; bottom: 4%; transform: rotate(180deg); }
+.hpips { position: absolute; inset: 12% 22%; }
+.hpips i { position: absolute; transform: translate(-50%, -50%); font-style: normal; font-size: calc(var(--cw) * .2); line-height: 1; }
+.hpips i.dn { transform: translate(-50%, -50%) rotate(180deg); }
+.hace { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: calc(var(--cw) * .62); text-shadow: 0 2px 0 rgba(0,0,0,.12); }
+.hface {
+  position: absolute; inset: 15% 17%;
+  border: 2px solid var(--sc);
+  border-radius: 6%;
+  background: radial-gradient(circle at 50% 30%, #fffaf0, #f4dfae 80%);
+  box-shadow: inset 0 0 0 2px #fff, inset 0 0 0 3.5px #d9b25a;
+  overflow: hidden;
+}
+.hface img { position: absolute; left: 50%; bottom: -4%; height: 96%; transform: translateX(-50%); }
+.hface em { position: absolute; left: 50%; top: 2%; transform: translateX(-50%); font-style: normal; font-size: calc(var(--cw) * .17); filter: drop-shadow(0 1px 0 rgba(0,0,0,.3)); }
+.hb {
+  transform: rotateY(180deg);
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255,230,160,.35) 0 14%, transparent 15%),
+    repeating-linear-gradient(45deg, rgba(255,214,120,.28) 0 1px, transparent 1px 7px),
+    repeating-linear-gradient(-45deg, rgba(255,214,120,.28) 0 1px, transparent 1px 7px),
+    radial-gradient(circle at 50% 40%, #c4182f, #7a0a1c 75%);
+  border: 1px solid rgba(0,0,0,.35);
+  box-shadow: inset 0 0 0 calc(var(--cw) * .045) #fff, inset 0 0 0 calc(var(--cw) * .06) #d9b25a, 0 3px 8px rgba(0,0,0,.4);
+}
+.hb::after { content: "❤"; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: calc(var(--cw) * .2); color: #ffe9a8; text-shadow: 0 0 6px rgba(255,200,90,.7); }
+.pc.back { transform: none; }
+.pc.back .hb { transform: none; backface-visibility: visible; }
+.hpn { position: absolute; right: -10%; bottom: -8%; min-width: 26px; padding: 0 6px; border-radius: 999px; background: rgba(0,0,0,.55); border: 2px solid #e9cd7f; color: #ffe9a8; font: 900 .85rem "Fredoka", var(--font); text-align: center; z-index: 9; }
+
+/* 拍下去的手 */
+.hhits { position: absolute; left: 50%; top: 53%; width: 0; height: 0; z-index: 5; pointer-events: none; }
+.hh { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%) translate(calc((var(--i) - 1.5) * var(--cw) * .2), calc((var(--i) - 1.5) * var(--cw) * .14)) rotate(var(--r)); animation: smack .2s cubic-bezier(.3, 1.6, .5, 1); }
+.hh i { font-style: normal; font-size: calc(var(--cw) * .78); display: block; filter: drop-shadow(0 4px 4px rgba(0,0,0,.45)) drop-shadow(0 0 0 var(--pc)); }
+.hh .hav { position: absolute; left: 50%; top: 58%; transform: translate(-50%, -50%); width: calc(var(--cw) * .32); height: calc(var(--cw) * .32); border-radius: 50%; background: #fff; border: 3px solid var(--pc); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.hh .hav .pe { height: 90%; }
+.hh em { position: absolute; right: 4%; top: 6%; font-style: normal; font: 900 .8rem "Fredoka", var(--font); color: #fff; background: var(--pc); border: 2px solid var(--ink); border-radius: 999px; padding: 0 6px; }
+.hh.first em { background: linear-gradient(#ffe066, #ffa800); color: var(--ink); }
+@keyframes smack { from { transform: translate(-50%, -50%) translate(calc((var(--i) - 1.5) * var(--cw) * .2), calc((var(--i) - 1.5) * var(--cw) * .14 - 60px)) rotate(var(--r)) scale(1.6); opacity: 0; } }
+
+.hmsg { position: absolute; left: 50%; top: 53%; transform: translate(-50%, -50%); z-index: 7; display: none; flex-direction: column; align-items: center; gap: 2px; padding: 10px 18px; border-radius: 18px; background: rgba(20,32,70,.86); border: 3px solid #e9cd7f; color: #fff; text-align: center; white-space: nowrap; pointer-events: none; }
+.hmsg.on { display: flex; animation: popin .3s ease-out; }
+.hmsg.bad { background: rgba(160,20,40,.9); }
+.hmsg b { font-size: 1.15rem; }
+.hmsg small { font-size: .82rem; font-weight: 800; opacity: .9; }
+.hmsg .pe { height: 34px; }
+.htable .cover { border-radius: 23px; }
+
+/* 下方:自己的牌堆(翻牌);拍的時候拍上面的牌桌任何地方 */
+.hctl { flex: none; display: flex; height: max(64px, min(17vh, 100px)); }
+.hdeck { position: relative; flex: 1; display: flex; align-items: center; justify-content: center; gap: 14px; border: 3px solid var(--ink); border-radius: 20px; box-shadow: inset 0 -5px 0 rgba(0,0,0,.12), 0 4px 0 var(--ink); background: linear-gradient(#fff, #dde9f8); color: var(--ink); overflow: hidden; transition: filter .2s; }
+.hdeck:not(.on) { filter: saturate(.4) brightness(.92); }
+.hdeck.on { background: linear-gradient(#ffe066, #ffa800); animation: jelly .6s; }
+.hdeck.press { transform: translateY(3px); box-shadow: inset 0 -2px 0 rgba(0,0,0,.12), 0 1px 0 var(--ink); }
+.hdeck.empty .hstack { opacity: .25; }
+.hstack { --cw: 40px; position: relative; width: 40px; height: 56px; flex: none; }
+.hstack .pc:nth-child(2) { transform: translate(2px, -2px) rotate(4deg); }
+.hstack .pc:nth-child(3) { transform: translate(4px, -4px) rotate(-3deg); }
+.hdl { display: flex; flex-direction: column; align-items: flex-start; line-height: 1; }
+.hdl b { font: 900 1.7rem "Fredoka", var(--font); }
+.hdl small { font-size: .85rem; font-weight: 900; }
+.htime { position: absolute; left: 0; bottom: 0; height: 5px; width: 0; background: #d6283f; }
+.htime.run { animation: htime 6.5s linear forwards; }
+@keyframes htime { from { width: 100%; } to { width: 0; } }
+.htip { position: absolute; left: 50%; bottom: 10%; transform: translateX(-50%); color: rgba(255,255,255,.5); font-size: .78rem; font-weight: 800; white-space: nowrap; pointer-events: none; }
+.hprint { position: absolute; z-index: 8; font-size: calc(var(--cw) * .7); transform: translate(-50%, -50%); pointer-events: none; filter: drop-shadow(0 3px 3px rgba(0,0,0,.5)); animation: hprint .7s ease-out forwards; }
+@keyframes hprint { 0% { transform: translate(-50%, -50%) scale(1.7); opacity: 0; } 18% { transform: translate(-50%, -50%) scale(1); opacity: 1; } 70% { opacity: 1; } 100% { transform: translate(-50%, -50%) scale(.95); opacity: 0; } }

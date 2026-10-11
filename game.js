@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.10.16';
+const APP_VERSION = '2026.10.17';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -453,6 +453,11 @@ const GAMES = [
     id: 'morris', emoji: '⭕', name: '九子棋', tag: '益智', color: '#a0703f', desc: '連成三顆就能吃子',
     rules: ['2 人對戰,每人 9 顆棋;房間超過 2 人時抽籤上場、其他人觀戰', '棋子顏色可以自己選(點自己卡片上的「換色」),先輪流把棋子放到交叉點上', '同一條線連成三顆(成三)就能吃掉對方一顆棋;已經成三的棋受保護,不能吃', '棋子都放完後,沿著線把棋子移到旁邊的空點;只剩 3 顆時可以飛到任何空點!', '對方剩 2 顆或被困住沒路走,你就贏了!'],
     host: hMorris, view: vMorris, noCountdown: true,
+  },
+  {
+    id: 'heart', emoji: '❤️', name: '心臟病', tag: '撲克+反應', color: '#d63a4a', desc: '喊到一樣就快拍!',
+    rules: ['2~4 人,一副 52 張撲克牌平均發給大家,牌面朝下', '輪流按「翻牌」翻開自己最上面一張,依序喊 A、2、3…10、J、Q、K,喊完 K 再從 A 開始', '翻出來的牌和喊的一樣 → 大家快拍牌桌(綠色桌布任何地方都可以)!最後拍(或沒拍)的人要把桌上整疊牌收走', '不一樣卻亂拍,也要收走整疊牌 😱', '最先把手上的牌出完的人獲勝!'],
+    host: hHeart, view: vHeart, noCountdown: true,
   },
 ];
 const GAME = Object.fromEntries(GAMES.map(g => [g.id, g]));
@@ -2315,6 +2320,312 @@ function vMorris(V) {
 }
 
 /* =========================================================
+   心臟病 ❤️(2~4 人撲克牌):輪流翻牌並依序喊 A、2、3…K,
+   翻出的牌和喊的數字一樣就要拍!最後拍的人(或亂拍的人)把整疊牌收走,先把手牌出完的人獲勝
+   牌的編號 0~51:點數 = id % 13 + 1,花色 = Math.floor(id / 13)(♠ ♥ ♦ ♣)
+   ========================================================= */
+const HEART_RANK = ['', 'A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+const HEART_SUIT = ['♠', '♥', '♦', '♣'];
+const HEART_PIPS = { // 2~10 的花色排列位置(%),下半部的花色倒過來
+  2: [[50, 16], [50, 84]],
+  3: [[50, 16], [50, 50], [50, 84]],
+  4: [[27, 16], [73, 16], [27, 84], [73, 84]],
+  5: [[27, 16], [73, 16], [50, 50], [27, 84], [73, 84]],
+  6: [[27, 16], [73, 16], [27, 50], [73, 50], [27, 84], [73, 84]],
+  7: [[27, 16], [73, 16], [50, 33], [27, 50], [73, 50], [27, 84], [73, 84]],
+  8: [[27, 16], [73, 16], [50, 33], [27, 50], [73, 50], [50, 67], [27, 84], [73, 84]],
+  9: [[27, 16], [73, 16], [27, 39], [73, 39], [50, 50], [27, 61], [73, 61], [27, 84], [73, 84]],
+  10: [[27, 16], [73, 16], [50, 28], [27, 39], [73, 39], [27, 61], [73, 61], [50, 72], [27, 84], [73, 84]],
+};
+const heartRank = c => c % 13 + 1;
+function heartCard(c) { // 一張牌的正面
+  const r = heartRank(c), su = Math.floor(c / 13), sym = HEART_SUIT[su], lab = HEART_RANK[r];
+  let mid;
+  if (r === 1) mid = `<span class="hace">${sym}</span>`;
+  else if (r > 10) {
+    const ch = CHARS[(r * 3 + su * 5) % CHARS.length];
+    mid = `<span class="hface"><img src="assets/chars/${ch.id}.png" alt=""><em>${['👑', '🎀', '🎩'][13 - r]}</em></span>`;
+  } else mid = `<span class="hpips">${HEART_PIPS[r].map(([x, y]) => `<i style="left:${x}%;top:${y}%"${y > 50 ? ' class="dn"' : ''}>${sym}</i>`).join('')}</span>`;
+  return `<span class="hf${su === 1 || su === 2 ? ' red' : ''}"><span class="hcn">${lab}<i>${sym}</i></span>${mid}<span class="hcn br">${lab}<i>${sym}</i></span></span><span class="hb"></span>`;
+}
+
+function hHeart(H) {
+  const P = shuffle(H.players.slice()); // 隨機決定座位順序
+  const hand = {};
+  P.forEach(s => { hand[s] = []; });
+  shuffle([...Array(52).keys()]).forEach((c, i) => hand[P[i % P.length]].push(c));
+  let pile = [], call = 1, turnI = 0, k = 0, phase = 'deal', flips = 0, lastAt = 0, tok = 0;
+  const slaps = new Map();
+  const counts = () => Object.fromEntries(P.map(s => [s, hand[s].length]));
+  const bc = (ev, extra) => H.bc({ t: 'g', e: 'st', ev, order: P, hands: counts(), pile: pile.length, top: pile.slice(-5), call, turn: P[turnI], k, phase, ...(extra || {}) });
+
+  function armTurn() { // 太久沒翻牌就自動幫他翻
+    const my = ++tok;
+    H.s.after(6500, () => { if (my === tok && phase === 'play') flip(P[turnI], true); });
+  }
+  function nextTurn() {
+    for (let n = 0; n < P.length; n++) {
+      turnI = (turnI + 1) % P.length;
+      if (H.online(P[turnI]) && hand[P[turnI]].length) return true;
+    }
+    return false;
+  }
+  function end(reason) {
+    phase = 'over';
+    tok++;
+    const n = P.map(s => hand[s].length);
+    P.forEach(s => { H.scores[s] = P.length - n.filter(x => x < hand[s].length).length; });
+    const best = Math.min(...n);
+    bc('end', { winners: P.filter(s => hand[s].length === best), reason });
+    H.bc({ t: 'score', scores: H.scores });
+    H.s.after(3400, H.finish);
+  }
+  function flip(s, auto) {
+    if (phase !== 'play' || s !== P[turnI] || !hand[s].length) return;
+    if (!auto && performance.now() - lastAt < 380) return; // 給大家一點時間看清楚上一張
+    lastAt = performance.now();
+    const card = hand[s].shift(), said = call;
+    pile.push(card);
+    k++; flips++;
+    call = call % 13 + 1;
+    if (heartRank(card) === said) {
+      phase = 'match';
+      slaps.clear();
+      tok++;
+      bc('flip', { by: s, card, said, auto: !!auto });
+      const my = k;
+      H.s.after(2600, () => { if (k === my && phase === 'match') resolve(); });
+      return;
+    }
+    if (!hand[s].length) { bc('flip', { by: s, card, said, auto: !!auto }); return end('out'); }
+    if (flips >= 360) { bc('flip', { by: s, card, said, auto: !!auto }); return end('long'); }
+    if (!nextTurn()) return end('alone');
+    bc('flip', { by: s, card, said, auto: !!auto });
+    armTurn();
+  }
+  function resolve() {
+    const act = H.active();
+    const miss = act.filter(s => !slaps.has(s));
+    const order = [...slaps].sort((a, b) => a[1] - b[1]).map(x => x[0]);
+    if (!order.length) { // 大家都沒發現,就當沒事繼續
+      phase = 'play';
+      if (!hand[P[turnI]].length) return end('out');
+      if (!nextTurn()) return end('alone');
+      bc('miss');
+      return armTurn();
+    }
+    take(miss.length ? pick(miss) : order[order.length - 1], 'slow', order, miss);
+  }
+  function take(s, reason, order, miss) {
+    const n = pile.length;
+    hand[s].push(...pile);
+    pile = [];
+    call = 1;
+    phase = 'take';
+    tok++;
+    bc('take', { who: s, n, reason, order: order || [], miss: miss || [] });
+    H.s.after(2100, () => {
+      if (phase !== 'take') return;
+      const done = P.find(x => x !== s && !hand[x].length);
+      if (done != null) return end('out');
+      phase = 'play';
+      turnI = P.indexOf(s);
+      if (!H.online(s) && !nextTurn()) return end('alone');
+      bc('turn');
+      armTurn();
+    });
+  }
+
+  return {
+    start() {
+      bc('deal');
+      H.s.after(2200, () => { phase = 'play'; bc('turn'); armTurn(); });
+    },
+    input(slot, m) {
+      if (phase === 'over' || +m.k !== k) return;
+      if (m.e === 'flip') flip(slot);
+      else if (m.e === 'slap') {
+        if (phase === 'match') {
+          if (slaps.has(slot) || !P.includes(slot)) return;
+          slaps.set(slot, Math.max(0, Math.min(9999, +m.rt || 9999)));
+          H.bc({ t: 'g', e: 'hit', who: slot, k, n: slaps.size });
+          if (H.active().every(s => slaps.has(s))) H.s.after(350, () => { if (phase === 'match' && k === +m.k) resolve(); });
+        } else if (phase === 'play' && pile.length && P.includes(slot)) take(slot, 'wrong', [slot], []);
+      }
+    },
+    presence() {
+      if (phase === 'over') return;
+      if (H.active().length < 2) return end('alone');
+      if (phase === 'match' && H.active().every(s => slaps.has(s))) resolve();
+      else if (phase === 'play' && !H.online(P[turnI])) { if (!nextTurn()) return end('alone'); bc('turn'); armTurn(); }
+    },
+  };
+}
+
+function vHeart(V) {
+  const me = V.me;
+  let st = null, slapK = -1, shownAt = 0, over = false, lastEv = null, turnT = null;
+  const chipsEl = $('.chips', V.root);
+  chipsEl.className = 'cstatus';
+  chipsEl.innerHTML = '<span class="cs">洗牌中…</span>';
+  V.renderChips = () => {};
+  V.stage('<div class="hseats"></div>');
+
+  V.pad.innerHTML = `
+    <div class="hx">
+      <div class="htable">
+        <div class="hcall"><small>喊</small><b>—</b></div>
+        <div class="hpile"></div>
+        <div class="hhits"></div>
+        <div class="hnext"></div>
+        <div class="hmsg"></div>
+        <div class="htip">🖐️ 拍桌面任何地方</div>
+        <div class="cover"></div>
+      </div>
+      <div class="hctl">
+        <button class="hdeck"><span class="hstack"></span><span class="hdl"><b>0</b><small>翻牌</small></span><i class="htime"></i></button>
+      </div>
+    </div>`;
+  const hx = $('.hx', V.pad), table = $('.htable', hx), pileEl = $('.hpile', hx), hitsEl = $('.hhits', hx);
+  const callEl = $('.hcall b', hx), nextEl = $('.hnext', hx), msgEl = $('.hmsg', hx), cover = $('.cover', hx);
+  const deckEl = $('.hdeck', hx);
+  const fit = () => {
+    if (!hx.isConnected) { ro.disconnect(); return; }
+    const cw = Math.max(54, Math.min(table.clientWidth * 0.42, (table.clientHeight - 90) / 1.4 * 0.8));
+    hx.style.setProperty('--cw', Math.round(cw) + 'px');
+  };
+  const ro = new ResizeObserver(fit);
+  ro.observe(V.pad);
+  fit();
+
+  const who = s => (s === me ? '你' : esc(pinfo(s).name));
+  const myTurn = () => st && st.phase === 'play' && st.turn === me && !over;
+  const rot = (c, i) => ((c * 37 + i * 53) % 25) - 12;
+  const say = (html, cls) => { msgEl.className = 'hmsg on ' + (cls || ''); msgEl.innerHTML = html; };
+
+  function renderSeats() {
+    $('.hseats', V.root).innerHTML = st.order.map(s => {
+      const p = pinfo(s), n = st.hands[s];
+      return `<div class="hseat${st.turn === s && (st.phase === 'play') ? ' now' : ''}${p.online ? '' : ' off'}${s === me ? ' me' : ''}" data-s="${s}" style="--pc:${p.color}">
+        <span class="hav">${p.emoji}</span><b>${who(s)}</b>
+        <span class="hcnt"><i></i><i></i><i></i><em>${n}</em></span></div>`;
+    }).join('');
+  }
+  function renderPile(fresh) {
+    pileEl.innerHTML = st.top.map((c, i) => {
+      const last = i === st.top.length - 1;
+      const from = fresh && last ? (fresh === me ? ' fromme' : ' fromop') : '';
+      return `<span class="pc${from}" style="--r:${rot(c, st.k - st.top.length + i)}deg;--i:${i}">${heartCard(c)}</span>`;
+    }).join('') + (st.pile > 5 ? `<span class="hpn">${st.pile}</span>` : '');
+  }
+  function renderCtl() {
+    const n = st.hands[me] || 0, mine = st.order.includes(me);
+    deckEl.classList.toggle('on', myTurn());
+    deckEl.classList.toggle('empty', !n);
+    $('.hdl b', deckEl).textContent = n;
+    $('.hstack', deckEl).innerHTML = '<span class="pc back"><span class="hb"></span></span>'.repeat(Math.min(3, n));
+    deckEl.hidden = !mine;
+    clearTimeout(turnT);
+    const tm = $('.htime', deckEl);
+    tm.classList.remove('run');
+    if (myTurn()) { void tm.offsetWidth; tm.classList.add('run'); }
+    let msg;
+    if (over) msg = '這局結束了';
+    else if (st.phase === 'deal') msg = '發牌中…';
+    else if (st.phase === 'match') msg = '🖐️ 拍!拍!拍!';
+    else if (st.phase === 'take') msg = '收牌中…';
+    else if (myTurn()) msg = `輪到你翻牌!這張要喊 <b>${HEART_RANK[st.call]}</b>`;
+    else msg = (mine ? '' : '👀 觀戰 · ') + `${pinfo(st.turn).emoji} ${who(st.turn)} 翻牌,喊 <b>${HEART_RANK[st.call]}</b>`;
+    chipsEl.innerHTML = `<span class="cs${myTurn() ? ' on' : ''}">${msg}</span>`;
+  }
+
+  function slap(e) { // 拍在牌桌上任何地方都算,拍下去的位置留一個手印
+    if (!st || over || slapK === st.k || !st.order.includes(me) || (st.phase !== 'play' && st.phase !== 'match')) return;
+    slapK = st.k;
+    V.send({ e: 'slap', k: st.k, rt: Math.round(performance.now() - shownAt) });
+    const r = table.getBoundingClientRect();
+    const mark = el('span', 'hprint', '🖐️');
+    mark.style.left = (e.clientX - r.left) + 'px';
+    mark.style.top = (e.clientY - r.top) + 'px';
+    table.appendChild(mark);
+    setTimeout(() => mark.remove(), 700);
+    table.classList.remove('thump');
+    void table.offsetWidth;
+    table.classList.add('thump');
+    beep(140, 0.09, 'square', 0.12);
+    buzz(30);
+  }
+  V.onTap = e => {
+    if (e.target.closest('.hdeck')) {
+      if (myTurn() && st.hands[me]) { V.send({ e: 'flip', k: st.k }); deckEl.classList.add('press'); setTimeout(() => deckEl.classList.remove('press'), 120); }
+    } else if (e.target.closest('.htable')) slap(e);
+  };
+
+  V.on = m => {
+    if (m.e === 'hit') {
+      if (!st || m.k !== st.k) return;
+      const p = pinfo(m.who);
+      hitsEl.insertAdjacentHTML('beforeend', `<span class="hh${m.n === 1 ? ' first' : ''}" style="--pc:${p.color};--i:${m.n - 1};--r:${(m.who * 29 % 30) - 15}deg"><i>🖐️</i><span class="hav">${p.emoji}</span><em>${m.n}</em></span>`);
+      beep(90 + m.n * 15, 0.12, 'square', 0.1);
+      table.classList.remove('thump');
+      void table.offsetWidth;
+      table.classList.add('thump');
+      return;
+    }
+    if (m.e !== 'st') return;
+    const prev = st;
+    st = m;
+    lastEv = m.ev;
+    if (m.ev === 'deal') {
+      cover.innerHTML = `<div class="big">🃏</div><div>發牌!每人 ${Math.floor(52 / m.order.length)} 張左右</div><div class="small">翻出來的牌 = 喊的數字,就快拍桌面!</div>`;
+      cover.classList.add('on');
+      SFX.go();
+      setTimeout(() => cover.classList.remove('on'), 2000);
+    }
+    if (m.ev === 'flip') {
+      callEl.textContent = HEART_RANK[m.said];
+      callEl.parentElement.classList.remove('pop');
+      void callEl.offsetWidth;
+      callEl.parentElement.classList.add('pop');
+      hitsEl.innerHTML = '';
+      msgEl.className = 'hmsg';
+      renderPile(m.by);
+      beep(1300, 0.03, 'triangle', 0.08);
+      beep(700, 0.05, 'triangle', 0.06, 0.03);
+      shownAt = performance.now() + 130; // 牌翻過來大約要 0.13 秒
+      if (m.auto && m.by === me) toast('時間到,幫你自動翻了一張');
+    } else if (m.ev === 'take') {
+      const p = pinfo(m.who);
+      const why = m.reason === 'wrong' ? `${who(m.who)} 亂拍!` : m.miss.includes(m.who) ? `${who(m.who)} 沒拍到!` : `${who(m.who)} 最慢!`;
+      say(`<span class="hav">${p.emoji}</span><b>${why}</b><small>收走 ${m.n} 張牌</small>`, m.who === me ? 'bad' : '');
+      pileEl.classList.add(m.who === me ? 'tome' : 'toop');
+      setTimeout(() => { pileEl.classList.remove('tome', 'toop'); pileEl.innerHTML = ''; hitsEl.innerHTML = ''; }, 650);
+      if (m.who === me) { SFX.bad(); buzz([80, 60, 120]); V.fx('bad'); } else if (st.order.includes(me)) SFX.good();
+      callEl.textContent = '—';
+    } else if (m.ev === 'miss') {
+      say('<b>大家都沒發現!</b><small>繼續翻牌</small>');
+    } else if (m.ev === 'turn') {
+      msgEl.className = 'hmsg';
+      if (!st.top.length) pileEl.innerHTML = '';
+    } else if (m.ev === 'end') {
+      over = true;
+      const ws = m.winners;
+      setTimeout(() => {
+        cover.innerHTML = `<div class="big">${ws.includes(me) ? '🏆' : '🃏'}</div>
+          <div class="vsrow">${ws.map(s => `<span class="vsp">${pinfo(s).emoji}<b>${who(s)}</b></span>`).join('')}</div>
+          <div>${m.reason === 'out' ? '最先把牌出完,獲勝!' : m.reason === 'long' ? '玩太久了!手牌最少的獲勝' : '其他人都離開了'}</div>`;
+        cover.classList.add('on');
+      }, 900);
+      if (ws.includes(me)) SFX.win(); else SFX.bad();
+    }
+    nextEl.innerHTML = st.phase === 'play' || st.phase === 'match' ? `下一張喊 <b>${HEART_RANK[st.call]}</b>` : '';
+    if (m.ev === 'turn' && myTurn() && (!prev || prev.turn !== me || prev.phase !== 'play')) buzz(50);
+    renderSeats();
+    renderCtl();
+  };
+}
+
+/* =========================================================
    電腦玩家的行為:聽到房主的廣播,就像真人一樣送出操作
    ========================================================= */
 function botsHear(H, m) {
@@ -2516,6 +2827,21 @@ BOTS.morris = (H, s, m, k) => {
     });
     if (cand.length) { const c = best(cand); act({ e: 'move', from: c.f, to: c.t }); }
   });
+};
+
+/* 心臟病的電腦:看到一樣就拍(越強越快、越少漏拍),偶爾會被很像的數字騙到 */
+BOTS.heart = (H, s, m, k) => {
+  if (m.t !== 'g' || m.e !== 'st' || !m.order.includes(s)) return;
+  if (m.ev === 'flip' && m.phase === 'match') {
+    if (Math.random() < (1 - k.sk) * 0.2) return;
+    const rt = Math.round((rand(320, 680) + rand(0, 220)) * k.spd);
+    H.s.after(rt, () => botSend(H, s, { e: 'slap', k: m.k, rt }));
+  } else if (m.ev === 'flip' && Math.abs(heartRank(m.card) - m.said) === 1 && Math.random() < (1 - k.sk) * 0.12) {
+    H.s.after(rand(350, 700), () => botSend(H, s, { e: 'slap', k: m.k, rt: 500 }));
+  }
+  if (m.phase === 'play' && m.turn === s && (m.ev === 'flip' || m.ev === 'turn' || m.ev === 'miss')) {
+    H.s.after(Math.round(rand(700, 1300) * k.spd), () => botSend(H, s, { e: 'flip', k: m.k }));
+  }
 };
 
 /* ---------- 防止雙指縮放 / 長按選單 ---------- */
