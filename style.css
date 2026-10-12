@@ -1451,7 +1451,7 @@ button:disabled { cursor: not-allowed; }
 .hh.first em { background: linear-gradient(#ffe066, #ffa800); color: var(--ink); }
 @keyframes smack { from { transform: translate(-50%, -50%) translate(calc((var(--i) - 1.5) * var(--cw) * .2), calc((var(--i) - 1.5) * var(--cw) * .14 - 60px)) rotate(var(--r)) scale(1.6); opacity: 0; } }
 
-.hmsg { position: absolute; left: 50%; top: 53%; transform: translate(-50%, -50%); z-index: 7; display: none; flex-direction: column; align-items: center; gap: 2px; padding: 10px 18px; border-radius: 18px; background: rgba(20,32,70,.86); border: 3px solid #e9cd7f; color: #fff; text-align: center; white-space: nowrap; pointer-events: none; }
+.hmsg { position: absolute; left: 50%; top: 21%; transform: translate(-50%, -50%); z-index: 7; display: none; flex-direction: column; align-items: center; gap: 2px; padding: 10px 18px; border-radius: 18px; background: rgba(20,32,70,.86); border: 3px solid #e9cd7f; color: #fff; text-align: center; white-space: nowrap; pointer-events: none; }
 .hmsg.on { display: flex; animation: popin .3s ease-out; }
 .hmsg.bad { background: rgba(160,20,40,.9); }
 .hmsg b { font-size: 1.15rem; }
@@ -1478,3 +1478,10 @@ button:disabled { cursor: not-allowed; }
 .htip { position: absolute; left: 50%; bottom: 10%; transform: translateX(-50%); color: rgba(255,255,255,.5); font-size: .78rem; font-weight: 800; white-space: nowrap; pointer-events: none; }
 .hprint { position: absolute; z-index: 8; font-size: calc(var(--cw) * .7); transform: translate(-50%, -50%); pointer-events: none; filter: drop-shadow(0 3px 3px rgba(0,0,0,.5)); animation: hprint .7s ease-out forwards; }
 @keyframes hprint { 0% { transform: translate(-50%, -50%) scale(1.7); opacity: 0; } 18% { transform: translate(-50%, -50%) scale(1); opacity: 1; } 70% { opacity: 1; } 100% { transform: translate(-50%, -50%) scale(.95); opacity: 0; } }
+.pc.tome, .hpile.tome { animation-delay: .5s; }
+.hpile.tome, .hpile.toop { animation-delay: .6s; }
+.hh.last em { background: #d6283f; color: #fff; }
+.hh.last { animation: smack .2s ease-out, lastshake .5s .2s ease-in-out 2; }
+.hh.last i { filter: drop-shadow(0 0 10px #ff2a44) drop-shadow(0 4px 4px rgba(0,0,0,.45)); }
+.hh.last::after { content: "😱"; position: absolute; left: 50%; top: -22%; transform: translateX(-50%); font-size: calc(var(--cw) * .38); }
+@keyframes lastshake { 25% { margin-left: -4px; } 75% { margin-left: 4px; } }

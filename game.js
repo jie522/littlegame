@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.10.17';
+const APP_VERSION = '2026.10.17b';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -2596,10 +2596,18 @@ function vHeart(V) {
       if (m.auto && m.by === me) toast('時間到,幫你自動翻了一張');
     } else if (m.ev === 'take') {
       const p = pinfo(m.who);
-      const why = m.reason === 'wrong' ? `${who(m.who)} 亂拍!` : m.miss.includes(m.who) ? `${who(m.who)} 沒拍到!` : `${who(m.who)} 最慢!`;
+      const why = m.reason === 'wrong' ? `${who(m.who)} 亂拍!` : m.miss.includes(m.who) ? `${who(m.who)} 沒拍到!` : `${who(m.who)} 是最後一名!`;
       say(`<span class="hav">${p.emoji}</span><b>${why}</b><small>收走 ${m.n} 張牌</small>`, m.who === me ? 'bad' : '');
+      if (m.reason !== 'wrong') { // 依實際反應速度重新排名,最後一名(或沒拍的人)標出來
+        const row = [...m.order.map((s, i) => [s, i + 1]), ...m.miss.map(s => [s, 0])];
+        hitsEl.innerHTML = row.map(([s, rk], i) => {
+          const q = pinfo(s);
+          return `<span class="hh${rk === 1 ? ' first' : ''}${s === m.who ? ' last' : ''}" style="--pc:${q.color};--i:${i};--r:${(s * 29 % 30) - 15}deg"><i>${rk ? '🖐️' : '💤'}</i><span class="hav">${q.emoji}</span><em>${rk || '✕'}</em></span>`;
+        }).join('');
+      }
       pileEl.classList.add(m.who === me ? 'tome' : 'toop');
-      setTimeout(() => { pileEl.classList.remove('tome', 'toop'); pileEl.innerHTML = ''; hitsEl.innerHTML = ''; }, 650);
+      setTimeout(() => { pileEl.classList.remove('tome', 'toop'); pileEl.innerHTML = ''; }, 1250);
+      setTimeout(() => { hitsEl.innerHTML = ''; }, 1700);
       if (m.who === me) { SFX.bad(); buzz([80, 60, 120]); V.fx('bad'); } else if (st.order.includes(me)) SFX.good();
       callEl.textContent = '—';
     } else if (m.ev === 'miss') {
