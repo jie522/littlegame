@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.10.21c';
+const APP_VERSION = '2026.10.21d';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -476,7 +476,7 @@ const GAMES = [
   },
   {
     id: 'flood', emoji: '🌊', name: '填色大作戰', tag: '益智+競速', color: '#3b82f6', desc: '一樣的棋盤,比誰先填滿!',
-    rules: ['大家拿到一模一樣的彩色棋盤,同時開始比賽', '點下面的顏色(或直接點棋盤上的格子),左上角的區域就會變成那個顏色,吞掉相連的同色格子', '在步數限制內把整個棋盤變成同一個顏色就完成了!', '最先完成得 3 分、第二名 2 分、之後 1 分;步數用完或 90 秒內沒完成就沒分', '共 3 局:10×10、12×12、14×14,可以看到每個人的小棋盤進度'],
+    rules: ['大家拿到一模一樣的彩色棋盤,同時開始比賽', '點下面的顏色(或直接點棋盤上的格子),左上角的區域就會變成那個顏色,吞掉相連的同色格子', '在步數限制內把整個棋盤變成同一個顏色就完成了!', '最先完成得 3 分、第二名 2 分、之後 1 分;步數用完或時間到還沒完成就沒分', '共 3 局:14×14、18×18、22×22,可以看到每個人的小棋盤進度'],
     host: hFlood, view: vFlood, noCountdown: true,
   },
 ];
@@ -4187,7 +4187,8 @@ function vCheckers(V) {
    每一步選一個顏色,把左上角的區域塗成那個顏色、吞掉相連的同色格子;
    在步數限制內把整個棋盤變成同一色,最快完成的人得分最多。3 局,棋盤一局比一局大
    ========================================================= */
-const FLOOD = { SIZES: [10, 12, 14], T: 90, PTS: [3, 2, 1, 1] };
+const FLOOD = { SIZES: [14, 18, 22], PTS: [3, 2, 1, 1] };
+const floodTime = n => 60 + n * 4; // 每局秒數:棋盤越大給越久(14×14 116 秒、22×22 148 秒)
 const FLOOD_COLORS = ['#e0707a', '#ee9f5c', '#e6c15c', '#7cb485', '#5a8fc8', '#9b7fc4'];
 const FLOOD_NAMES = ['紅', '橘', '黃', '綠', '藍', '紫'];
 // 水彩紙張風:米白紙紋底;同色相連的區域畫成一整片水彩(邊緣手繪般微微抖動、內側顏料比較深、有暈染斑),不同色之間留一點紙白
@@ -4368,9 +4369,9 @@ function hFlood(H) {
     H.countdown(() => {
       phase = 'play';
       t0 = Date.now();
-      H.bc({ t: 'g', e: 'round', rd: round, R: FLOOD.SIZES.length, n, grid: grid.join(''), limit, T: FLOOD.T, order: H.players });
+      H.bc({ t: 'g', e: 'round', rd: round, R: FLOOD.SIZES.length, n, grid: grid.join(''), limit, T: floodTime(n), order: H.players });
       const my = ++tok;
-      H.s.after(FLOOD.T * 1000, () => { if (my === tok && phase === 'play') endRound(); });
+      H.s.after(floodTime(n) * 1000, () => { if (my === tok && phase === 'play') endRound(); });
     });
   }
   const finishers = () => H.players.filter(s => ps[s].done).sort((a, b) => ps[a].done - ps[b].done);
