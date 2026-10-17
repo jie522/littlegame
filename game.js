@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.10.19b';
+const APP_VERSION = '2026.10.21c';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -468,6 +468,16 @@ const GAMES = [
     id: 'bomb', emoji: '💣', name: '轟炸超人', tag: '動作+對戰', color: '#ff7043', desc: '放炸彈炸飛對手!',
     rules: ['2~4 人對戰,手機橫著拿畫面最大!左邊方向盤移動,右邊按鈕放炸彈', '炸彈會往上下左右噴火,炸開木箱可能掉出道具;被火燒到就出局', '道具:💣 多放一顆 · 🔥 火力變長 · 👟 跑更快 · 🛡️ 擋一次爆炸 · 🦶 可以踢炸彈 · 🌋 超級火力 · 💀 詛咒(碰到別人會傳染!)', '80 秒後場地會從外圈開始縮小,快躲到中間!', '每局最後活下來的人得 1 分,先拿 2 分的人獲勝!'],
     host: hBomb, view: vBomb, noCountdown: true,
+  },
+  {
+    id: 'checkers', emoji: '🔮', name: '跳棋', tag: '益智+對戰', color: '#b9783f', desc: '連跳過關,搶先到對面!',
+    rules: ['2~4 人,每人 10 顆彈珠放在自己的三角形;手機橫著拿棋盤最大', '輪到你時:點一顆自己的彈珠,再點亮起來的洞', '可以走到旁邊的空洞,或跳過一顆彈珠(誰的都可以);跳過去後還能繼續連跳!', '最先把 10 顆彈珠全部移到「對面」三角形的人獲勝', '每回合 40 秒,時間到會自動幫你走一步'],
+    host: hCheckers, view: vCheckers, noCountdown: true,
+  },
+  {
+    id: 'flood', emoji: '🌊', name: '填色大作戰', tag: '益智+競速', color: '#3b82f6', desc: '一樣的棋盤,比誰先填滿!',
+    rules: ['大家拿到一模一樣的彩色棋盤,同時開始比賽', '點下面的顏色(或直接點棋盤上的格子),左上角的區域就會變成那個顏色,吞掉相連的同色格子', '在步數限制內把整個棋盤變成同一個顏色就完成了!', '最先完成得 3 分、第二名 2 分、之後 1 分;步數用完或 90 秒內沒完成就沒分', '共 3 局:10×10、12×12、14×14,可以看到每個人的小棋盤進度'],
+    host: hFlood, view: vFlood, noCountdown: true,
   },
 ];
 const GAME = Object.fromEntries(GAMES.map(g => [g.id, g]));
@@ -3813,6 +3823,729 @@ function vBomb(V) {
 }
 
 /* =========================================================
+   跳棋(中國跳棋)🔮:2~4 人,121 個洞的六角星棋盤,每人 10 顆彈珠
+   每回合走一步到旁邊的空洞,或連續跳過別的彈珠;最先把 10 顆全部移到對面三角形的人獲勝
+   座標用立方座標 (q, r, s),q + r + s = 0;畫面上 r 方向是左右,所以橫著看最舒服
+   ========================================================= */
+const CHK = (() => {
+  const cells = [], at = new Map();
+  for (let q = -8; q <= 8; q++) for (let r = -8; r <= 8; r++) {
+    const s = -q - r;
+    const t1 = q <= 4 && r <= 4 && s <= 4, t2 = q >= -4 && r >= -4 && s >= -4;
+    if (!(t1 || t2) || Math.abs(s) > 8) continue;
+    at.set(q + ',' + r, cells.length);
+    cells.push({ q, r, s, x: r * 1.5, y: Math.sqrt(3) * (q + r / 2) });
+  }
+  const DIRS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
+  const nb = cells.map(c => DIRS.map(([dq, dr]) => { const j = at.get((c.q + dq) + ',' + (c.r + dr)); return j == null ? -1 : j; }));
+  // 六個角的三角形,依順時針排;第 k 個的對面是 (k + 3) % 6
+  const TRI = [['s', -1], ['q', 1], ['r', -1], ['s', 1], ['q', -1], ['r', 1]];
+  const tri = TRI.map(([ax, sg]) => cells.map((c, i) => (sg * c[ax] >= 5 ? i : -1)).filter(i => i >= 0));
+  return { cells, nb, TRI, tri, N: cells.length };
+})();
+const CHK_HOMES = { 2: [2, 5], 3: [1, 3, 5], 4: [1, 2, 4, 5] };
+const chkGoal = k => (k + 3) % 6;
+const chkProg = (k, i) => -CHK.TRI[k][1] * CHK.cells[i][CHK.TRI[k][0]]; // 離自己家越遠(越靠近終點)越大:-8 ~ 8
+function chkReach(occ, from) { // 從 from 出發能到的所有洞,以及走法(連續跳的每一站)
+  const out = new Map();
+  CHK.nb[from].forEach(j => { if (j >= 0 && occ[j] < 0) out.set(j, [from, j]); });
+  const seen = new Set([from]), q = [[from, [from]]];
+  while (q.length) {
+    const [i, path] = q.shift();
+    for (let d = 0; d < 6; d++) {
+      const m = CHK.nb[i][d];
+      if (m < 0 || occ[m] < 0) continue;
+      const j = CHK.nb[m][d];
+      if (j < 0 || occ[j] >= 0 || seen.has(j)) continue;
+      seen.add(j);
+      const p = path.concat(j);
+      if (!out.has(j)) out.set(j, p);
+      q.push([j, p]);
+    }
+  }
+  return out;
+}
+// 電腦(也用在時間到時幫人自動走一步):往終點前進最多、優先移動最後面的彈珠、盡量走中線
+function chkBestMove(occ, s, k, noise) {
+  const goal = new Set(CHK.tri[chkGoal(k)]);
+  const ax = CHK.TRI[k][0], others = ['q', 'r', 's'].filter(a => a !== ax);
+  const lat = i => Math.abs(CHK.cells[i][others[0]] - CHK.cells[i][others[1]]);
+  const mine = [];
+  occ.forEach((o, i) => { if (o === s) mine.push(i); });
+  const back = Math.min(...mine.map(i => chkProg(k, i)));
+  let best = null;
+  for (const f of mine) {
+    chkReach(occ, f).forEach((path, t) => {
+      const gain = chkProg(k, t) - chkProg(k, f);
+      let sc = gain * 10 - (lat(t) - lat(f)) * 1.2;
+      if (gain > 0 && chkProg(k, f) === back) sc += 4; // 落後的先走,別留尾巴
+      if (goal.has(t) && !goal.has(f)) sc += 6;
+      if (goal.has(f) && !goal.has(t)) sc -= 30;
+      if (gain < 0) sc -= 8;
+      sc += (Math.random() - 0.5) * noise;
+      if (!best || sc > best.sc) best = { sc, f, t, path };
+    });
+  }
+  return best;
+}
+
+function hCheckers(H) {
+  const n = Math.min(4, H.players.length), P = shuffle(H.players.slice()).slice(0, n);
+  const homes = {};
+  P.forEach((s, i) => { homes[s] = CHK_HOMES[n][i]; });
+  const occ = new Array(CHK.N).fill(-1);
+  P.forEach(s => CHK.tri[homes[s]].forEach(i => { occ[i] = s; }));
+  let turnI = 0, turns = 0, last = null, over = false, tok = 0, moveId = 0;
+  const MAX = 70 * n, TURN_MS = 40000;
+  const inGoal = s => CHK.tri[chkGoal(homes[s])].filter(i => occ[i] === s).length;
+  const pct = s => { let t = 0; occ.forEach((o, i) => { if (o === s) t += (chkProg(homes[s], i) + 8) / 16; }); return Math.round(t * 10); };
+  const bc = extra => H.bc({ t: 'g', e: 'st', occ, order: P, homes, turn: P[turnI], last, turns, max: MAX, goal: Object.fromEntries(P.map(s => [s, inGoal(s)])), left: TURN_MS, ...(extra || {}) });
+  function arm() {
+    const my = ++tok, s = P[turnI];
+    H.s.after(TURN_MS, () => { if (my === tok && !over) { const b = chkBestMove(occ, s, homes[s], 2); if (b) apply(s, b.f, b.t, b.path, true); } });
+  }
+  function end(winner, reason) {
+    over = true; tok++;
+    P.forEach(s => { H.scores[s] = s === winner ? 100 : Math.min(99, pct(s)); });
+    bc({ done: 1, winner, reason });
+    H.bc({ t: 'score', scores: H.scores });
+    H.s.after(3600, H.finish);
+  }
+  function next() {
+    for (let k = 0; k < P.length; k++) {
+      turnI = (turnI + 1) % P.length;
+      if (H.online(P[turnI])) { bc(); return arm(); }
+    }
+    end(null, '大家都離開了');
+  }
+  function apply(s, f, t, path, auto) {
+    occ[f] = -1; occ[t] = s;
+    turns++;
+    last = { s, path, id: ++moveId, auto: !!auto };
+    if (inGoal(s) === 10) return end(s, '10 顆彈珠全部到達終點!');
+    if (turns >= MAX) {
+      const best = P.slice().sort((a, b) => inGoal(b) - inGoal(a) || pct(b) - pct(a))[0];
+      return end(best, '下太久了!比誰最接近終點');
+    }
+    next();
+  }
+  return {
+    start() { bc({ intro: 1 }); H.s.after(1800, () => { bc(); arm(); }); },
+    input(slot, m) {
+      if (over || m.e !== 'move' || slot !== P[turnI]) return;
+      const f = +m.from, t = +m.to;
+      if (!(f >= 0 && f < CHK.N) || occ[f] !== slot) return;
+      const path = chkReach(occ, f).get(t);
+      if (!path) return;
+      tok++;
+      apply(slot, f, t, path);
+    },
+    presence() {
+      if (over) return;
+      if (P.filter(H.online).length < 2) return end(P.find(H.online), '其他人都離開了');
+      if (!H.online(P[turnI])) { tok++; next(); }
+    },
+  };
+}
+
+function vCheckers(V) {
+  const me = V.me;
+  let st = null, sel = -1, dests = new Map(), animating = false, over = false, lastId = 0, timerT = null;
+  const chipsEl = $('.chips', V.root);
+  chipsEl.className = 'cstatus';
+  chipsEl.innerHTML = '<span class="cs">擺好彈珠…</span>';
+  V.renderChips = () => {};
+  V.root.classList.add('chkui');
+
+  const xs = CHK.cells.map(c => c.x), ys = CHK.cells.map(c => c.y);
+  const minX = Math.min(...xs) - 1.8, maxX = Math.max(...xs) + 1.8, minY = Math.min(...ys) - 1.5, maxY = Math.max(...ys) + 1.5;
+  const SQ3 = Math.sqrt(3);
+  // 棋盤外框:六角形,頂點對準六個角
+  const hexPts = [0, 1, 2, 3, 4, 5].map(k => { const a = Math.PI / 3 * k; return [Math.cos(a) * 13.7, Math.sin(a) * 13.7]; });
+  const edges = [];
+  CHK.nb.forEach((ns, i) => ns.forEach(j => { if (j > i) edges.push(`M${CHK.cells[i].x.toFixed(2)} ${CHK.cells[i].y.toFixed(2)}L${CHK.cells[j].x.toFixed(2)} ${CHK.cells[j].y.toFixed(2)}`); }));
+  const triPoly = k => { // 三角形的三個角(在三角形裡只有 2 個鄰居的洞),往外撐一點
+    const set = new Set(CHK.tri[k]);
+    const corners = CHK.tri[k].filter(i => CHK.nb[i].filter(j => set.has(j)).length === 2);
+    const cx = corners.reduce((a, i) => a + CHK.cells[i].x, 0) / 3, cy = corners.reduce((a, i) => a + CHK.cells[i].y, 0) / 3;
+    return corners.map(i => `${(cx + (CHK.cells[i].x - cx) * 1.5).toFixed(2)},${(cy + (CHK.cells[i].y - cy) * 1.5).toFixed(2)}`).join(' ');
+  };
+
+  V.stage('<div class="chseats"></div>');
+  V.pad.innerHTML = `
+    <div class="chwrap">
+      <svg class="chsvg" viewBox="${minX.toFixed(2)} ${minY.toFixed(2)} ${(maxX - minX).toFixed(2)} ${(maxY - minY).toFixed(2)}">
+        <defs>
+          <radialGradient id="chWood" cx="50%" cy="42%" r="65%"><stop offset="0" stop-color="#d9a56a"/><stop offset=".6" stop-color="#b9783f"/><stop offset="1" stop-color="#7a4a22"/></radialGradient>
+          <filter id="chGrain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.035 0.6" numOctaves="2" seed="7"/><feColorMatrix values="0 0 0 0 .35  0 0 0 0 .2  0 0 0 0 .08  0 0 0 .55 0"/><feComposite in2="SourceGraphic" operator="in"/></filter>
+          <radialGradient id="chGlass" cx="36%" cy="30%" r="72%"><stop offset="0" stop-color="#fff" stop-opacity=".6"/><stop offset=".32" stop-color="#fff" stop-opacity=".06"/><stop offset=".78" stop-color="#000" stop-opacity=".12"/><stop offset="1" stop-color="#000" stop-opacity=".55"/></radialGradient>
+          <radialGradient id="chHole" cx="50%" cy="40%" r="60%"><stop offset="0" stop-color="#2b1606"/><stop offset=".75" stop-color="#4a2a10"/><stop offset="1" stop-color="#8a5a2c"/></radialGradient>
+          <filter id="chShadow" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx=".12" dy=".22" stdDeviation=".14" flood-color="#000" flood-opacity=".55"/></filter>
+          <filter id="chLift" x="-60%" y="-60%" width="220%" height="220%"><feDropShadow dx=".35" dy=".7" stdDeviation=".3" flood-color="#000" flood-opacity=".45"/></filter>
+        </defs>
+        <polygon class="chrim" points="${hexPts.map(p => p.join(',')).join(' ')}"/>
+        <polygon class="chbase" points="${hexPts.map(p => p.join(',')).join(' ')}"/>
+        <polygon class="chgrain" points="${hexPts.map(p => p.join(',')).join(' ')}" filter="url(#chGrain)"/>
+        <g class="chtris">${[0, 1, 2, 3, 4, 5].map(k => `<polygon data-k="${k}" points="${triPoly(k)}"/>`).join('')}</g>
+        <path class="chlines" d="${edges.join('')}"/>
+        <g class="chholes">${CHK.cells.map((c, i) => `<circle data-i="${i}" cx="${c.x.toFixed(2)}" cy="${c.y.toFixed(2)}" r=".46"/>`).join('')}</g>
+        <path class="chtrail" d=""/>
+        <g class="chdests"></g>
+        <g class="chballs"></g>
+      </svg>
+      <div class="cover"></div>
+    </div>
+    <div class="chinfo"><div class="chturn"></div><div class="chtip">點自己的彈珠,再點亮起來的洞</div></div>`;
+  const svg = $('.chsvg', V.pad), ballsG = $('.chballs', svg), destsG = $('.chdests', svg), trail = $('.chtrail', svg), cover = $('.cover', V.pad);
+  const turnEl = $('.chturn', V.pad), tipEl = $('.chtip', V.pad);
+  const balls = new Map(); // 洞的編號 → 彈珠元素
+
+  // 直的拿手機時提醒轉成橫的(也可以直接玩)
+  const rot = el('div', 'brot', `<div class="bphone">📱</div><b>把手機轉成橫的,棋盤更大!</b><small>如果轉不過來,請先關掉手機的「螢幕方向鎖定」</small>
+    <div class="brbtns"><button class="btn green sm bfull">全螢幕橫向</button><button class="btn white sm bskip">直的也能玩</button></div>`);
+  if (store.get('chkPortrait', false)) rot.classList.add('hide');
+  V.root.appendChild(rot);
+  $('.bskip', rot).addEventListener('pointerdown', e => { e.stopPropagation(); rot.classList.add('hide'); store.set('chkPortrait', true); });
+  $('.bfull', rot).addEventListener('pointerdown', async e => {
+    e.stopPropagation();
+    try { await document.documentElement.requestFullscreen(); await screen.orientation.lock('landscape'); } catch (err) { toast('這支手機不支援自動轉向,請直接把手機轉橫'); }
+    rot.classList.add('hide');
+  });
+
+  const who = s => (s === me ? '你' : esc(pinfo(s).name));
+  const myTurn = () => st && !over && !animating && st.turn === me;
+  const ballEl = (s, i) => {
+    const c = CHK.cells[i];
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    g.setAttribute('class', 'chball');
+    g.dataset.s = s;
+    g.innerHTML = `<circle class="b0" r=".7" style="fill:${pinfo(s).color}"/><circle class="b1" r=".7"/><ellipse class="b2" cx="-.22" cy="-.27" rx=".24" ry=".15"/>`;
+    g.setAttribute('transform', `translate(${c.x.toFixed(3)} ${c.y.toFixed(3)})`);
+    g.dataset.i = i;
+    return g;
+  };
+  function rebuild() {
+    ballsG.innerHTML = '';
+    balls.clear();
+    st.occ.forEach((s, i) => { if (s >= 0) { const b = ballEl(s, i); ballsG.appendChild(b); balls.set(i, b); } });
+  }
+  function paintTris() {
+    $$('.chtris polygon', svg).forEach(p => {
+      const k = +p.dataset.k;
+      const owner = st.order.find(s => st.homes[s] === k), target = st.order.find(s => chkGoal(st.homes[s]) === k);
+      const s = owner != null ? owner : target;
+      p.style.fill = s != null ? pinfo(s).color : '#c99a63';
+      p.style.opacity = owner != null ? 0.5 : target != null ? 0.32 : 0.18;
+    });
+  }
+  function renderSeats() {
+    $('.chseats', V.root).innerHTML = st.order.map(s => {
+      const p = pinfo(s), g = st.goal[s] || 0;
+      return `<div class="chseat${st.turn === s && !over ? ' now' : ''}${s === me ? ' me' : ''}${p.online ? '' : ' off'}" style="--pc:${p.color}">
+        <span class="chav">${p.emoji}</span><b>${who(s)}</b><i class="chdot"></i>
+        <span class="chprog"><i style="width:${g * 10}%"></i></span><small>終點 ${g}/10</small></div>`;
+    }).join('');
+  }
+  function renderStatus() {
+    clearInterval(timerT);
+    const s = st.turn, upd = () => {
+      const left = Math.max(0, Math.ceil((st.deadline - Date.now()) / 1000));
+      let msg;
+      if (over) msg = '這局結束了';
+      else if (myTurn()) msg = sel >= 0 ? '點亮起來的洞移動過去(可以連跳!)' : `輪到你了!選一顆彈珠${left <= 15 ? ` ⏰${left}` : ''}`;
+      else msg = (st.order.includes(me) ? '' : '👀 觀戰 · ') + `${pinfo(s).emoji} ${who(s)} 思考中…${left <= 15 ? ` ⏰${left}` : ''}`;
+      chipsEl.innerHTML = `<span class="cs${myTurn() ? ' on' : ''}">${msg}</span>`;
+    };
+    upd();
+    if (!over) timerT = setInterval(() => { if (!svg.isConnected) return clearInterval(timerT); upd(); }, 1000);
+    turnEl.innerHTML = over ? '' : `<span class="chav big" style="--pc:${pinfo(s).color}">${pinfo(s).emoji}</span><b>${s === me ? '輪到你!' : who(s) + ' 的回合'}</b><small>第 ${Math.floor(st.turns / st.order.length) + 1} 輪</small>`;
+    V.root.classList.toggle('myturn', myTurn());
+  }
+  function showDests() {
+    destsG.innerHTML = '';
+    $$('.chball', ballsG).forEach(b => b.classList.toggle('sel', +b.dataset.i === sel));
+    $$('.chball', ballsG).forEach(b => b.classList.toggle('can', myTurn() && sel < 0 && +b.dataset.s === me && chkReach(st.occ, +b.dataset.i).size > 0));
+    if (sel < 0) return;
+    dests.forEach((path, t) => {
+      const c = CHK.cells[t];
+      destsG.insertAdjacentHTML('beforeend', `<g class="chdest${path.length > 2 || chkJump(path) ? ' jump' : ''}" data-i="${t}" transform="translate(${c.x.toFixed(3)} ${c.y.toFixed(3)})"><circle r=".62"/><circle class="in" r=".28"/></g>`);
+    });
+  }
+  const chkJump = path => path.length === 2 && !CHK.nb[path[0]].includes(path[1]);
+  function drawTrail(path) {
+    trail.setAttribute('d', path ? 'M' + path.map(i => `${CHK.cells[i].x.toFixed(2)} ${CHK.cells[i].y.toFixed(2)}`).join('L') : '');
+    trail.style.stroke = path ? pinfo(st.last.s).color : '';
+  }
+  let finishAnim = null; // 正在跑的動畫:新的一步來了就直接跳到結尾
+  function animate(path, done) {
+    if (finishAnim) finishAnim();
+    const b = balls.get(path[0]);
+    if (!b) return done();
+    animating = true;
+    balls.delete(path[0]);
+    b.classList.add('lift');
+    ballsG.appendChild(b);
+    let k = 1, ended = false;
+    const end = () => {
+      if (ended) return;
+      ended = true; finishAnim = null; clearTimeout(safety);
+      const t = path[path.length - 1], c = CHK.cells[t];
+      b.setAttribute('transform', `translate(${c.x.toFixed(3)} ${c.y.toFixed(3)})`);
+      b.classList.remove('lift'); balls.set(t, b); b.dataset.i = t; animating = false;
+      done();
+    };
+    finishAnim = end;
+    // 手機螢幕變暗或切到別的 App 時 requestAnimationFrame 會暫停,用計時器保證動畫一定會結束
+    const total = path.slice(1).reduce((t, j, n) => t + (chkJumpStep(path[n], j) ? 260 : 180), 0);
+    const safety = setTimeout(end, total + 400);
+    const hop = () => {
+      if (ended) return;
+      if (k >= path.length) return end();
+      const a = CHK.cells[path[k - 1]], z = CHK.cells[path[k]], t0 = performance.now(), dur = chkJumpStep(path[k - 1], path[k]) ? 260 : 180;
+      const fr = now => {
+        if (ended || !svg.isConnected) return;
+        const u = Math.min(1, (now - t0) / dur), e = u < 0.5 ? 2 * u * u : 1 - (-2 * u + 2) ** 2 / 2;
+        const lift = Math.sin(u * Math.PI) * (dur > 200 ? 0.22 : 0.08);
+        b.setAttribute('transform', `translate(${(a.x + (z.x - a.x) * e).toFixed(3)} ${(a.y + (z.y - a.y) * e).toFixed(3)}) scale(${(1 + lift).toFixed(3)})`);
+        if (u < 1) requestAnimationFrame(fr);
+        else { beep(dur > 200 ? 520 + k * 60 : 440, 0.05, 'triangle', 0.12); k++; hop(); }
+      };
+      requestAnimationFrame(fr);
+    };
+    hop();
+  }
+  const chkJumpStep = (a, b) => !CHK.nb[a].includes(b);
+
+  V.onTap = e => {
+    if (!myTurn()) return;
+    const d = e.target.closest('.chdest');
+    if (d) {
+      const t = +d.dataset.i;
+      V.send({ e: 'move', from: sel, to: t });
+      sel = -1; dests = new Map(); destsG.innerHTML = '';
+      SFX.tap();
+      return;
+    }
+    const b = e.target.closest('.chball, .chholes circle');
+    const i = b ? +b.dataset.i : -1;
+    if (i >= 0 && st.occ[i] === me) {
+      sel = sel === i ? -1 : i;
+      dests = sel >= 0 ? chkReach(st.occ, sel) : new Map();
+      if (sel >= 0 && !dests.size) toast('這顆現在走不動喔');
+      SFX.tap();
+    } else { sel = -1; dests = new Map(); }
+    showDests();
+    renderStatus();
+  };
+
+  V.on = m => {
+    if (m.e !== 'st') return;
+    const prev = st;
+    st = m;
+    st.deadline = Date.now() + (m.left || 0); // 用自己的時鐘倒數,不受各手機時間不同影響
+    if (m.intro) {
+      paintTris(); rebuild(); renderSeats();
+      const mine = m.order.includes(me);
+      cover.innerHTML = `<div class="big">🔮</div><div>${mine ? '把你的彈珠全部移到<b>對面</b>的三角形!' : '觀戰中'}</div><div class="small">可以一次連續跳過好幾顆彈珠</div>`;
+      cover.classList.add('on');
+      SFX.go();
+      setTimeout(() => cover.classList.remove('on'), 2200);
+      renderStatus();
+      return;
+    }
+    if (!prev || !balls.size) { paintTris(); rebuild(); }
+    sel = -1; dests = new Map(); destsG.innerHTML = '';
+    const fin = () => {
+      if (!st) return;
+      if (balls.size !== st.occ.filter(o => o >= 0).length || [...balls].some(([i, b]) => st.occ[i] !== +b.dataset.s)) rebuild();
+      drawTrail(st.last && st.last.path);
+      renderSeats(); showDests(); renderStatus();
+      if (st.turn === me && !over && (!prev || prev.turn !== me)) { buzz(50); SFX.join(); }
+    };
+    if (m.last && m.last.id !== lastId) {
+      lastId = m.last.id;
+      if (m.last.auto && m.last.s === me) toast('時間到,幫你自動走了一步');
+      drawTrail(null);
+      animate(m.last.path, fin);
+    } else fin();
+    renderSeats();
+    if (m.done) {
+      over = true;
+      setTimeout(() => {
+        const w = m.winner;
+        cover.innerHTML = `<div class="big">${w === me ? '🏆' : '🔮'}</div>
+          <div class="vsrow">${w != null ? `<span class="vsp">${pinfo(w).emoji}<b>${who(w)} 獲勝!</b></span>` : ''}</div><div class="small">${esc(m.reason)}</div>`;
+        cover.classList.add('on');
+        if (w === me) SFX.win(); else SFX.bad();
+      }, 1200);
+    }
+  };
+}
+
+/* =========================================================
+   填色大作戰 🌊(Flood-It 競速):大家拿到一模一樣的棋盤,
+   每一步選一個顏色,把左上角的區域塗成那個顏色、吞掉相連的同色格子;
+   在步數限制內把整個棋盤變成同一色,最快完成的人得分最多。3 局,棋盤一局比一局大
+   ========================================================= */
+const FLOOD = { SIZES: [10, 12, 14], T: 90, PTS: [3, 2, 1, 1] };
+const FLOOD_COLORS = ['#e0707a', '#ee9f5c', '#e6c15c', '#7cb485', '#5a8fc8', '#9b7fc4'];
+const FLOOD_NAMES = ['紅', '橘', '黃', '綠', '藍', '紫'];
+// 水彩紙張風:米白紙紋底;同色相連的區域畫成一整片水彩(邊緣手繪般微微抖動、內側顏料比較深、有暈染斑),不同色之間留一點紙白
+const floodPaper = (() => {
+  let tex = null;
+  return () => {
+    if (tex) return tex;
+    tex = document.createElement('canvas');
+    tex.width = tex.height = 256;
+    const x = tex.getContext('2d');
+    x.fillStyle = '#f7f1e3';
+    x.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 2600; i++) { // 紙的顆粒
+      const v = 200 + Math.random() * 50 | 0;
+      x.fillStyle = `rgba(${v - 30},${v - 40},${v - 60},${Math.random() * 0.1})`;
+      x.fillRect(Math.random() * 256, Math.random() * 256, 1 + Math.random() * 1.5, 1 + Math.random() * 1.5);
+    }
+    x.strokeStyle = 'rgba(150,120,80,.06)';
+    for (let i = 0; i < 70; i++) { // 紙的纖維
+      const px = Math.random() * 256, py = Math.random() * 256, an = Math.random() * Math.PI, l = 6 + Math.random() * 14;
+      x.lineWidth = 0.5 + Math.random();
+      x.beginPath(); x.moveTo(px, py); x.quadraticCurveTo(px + Math.cos(an) * l / 2 + 2, py + Math.sin(an) * l / 2 - 2, px + Math.cos(an) * l, py + Math.sin(an) * l); x.stroke();
+    }
+    return tex;
+  };
+})();
+const floodHash = (a, b, k) => { const h = Math.sin(a * 127.1 + b * 311.7 + k * 74.7) * 43758.5453; return h - Math.floor(h); };
+function floodPaint(ctx, g, n, W, anim, now) {
+  const cs = W / n, jit = cs * 0.11;
+  // 格子頂點加上固定的小抖動(相鄰格子共用同一個頂點,所以區域之間還是剛好接在一起)
+  const V = (vx, vy) => {
+    const ex = vx === 0 || vx === n, ey = vy === 0 || vy === n;
+    return [vx * cs + (ex ? 0 : (floodHash(vx, vy, 1) - 0.5) * 2 * jit), vy * cs + (ey ? 0 : (floodHash(vx, vy, 2) - 0.5) * 2 * jit)];
+  };
+  const sh = (hex, f) => { const v = parseInt(hex.slice(1), 16), ch = k => { const x = (v >> k) & 255; return Math.round(f > 0 ? x + (255 - x) * f : x * (1 + f)); }; return `rgb(${ch(16)},${ch(8)},${ch(0)})`; };
+  const paper = ctx.createPattern(floodPaper(), 'repeat');
+  ctx.fillStyle = paper;
+  ctx.fillRect(0, 0, W, W);
+  // 找出同色相連的區域
+  const comp = new Int32Array(n * n).fill(-1), regions = [];
+  for (let i = 0; i < n * n; i++) {
+    if (comp[i] >= 0) continue;
+    const cells = [i], c = g[i];
+    comp[i] = regions.length;
+    for (let k = 0; k < cells.length; k++) {
+      const j = cells[k], x = j % n, y = (j / n) | 0;
+      for (const m of [x > 0 ? j - 1 : -1, x < n - 1 ? j + 1 : -1, y > 0 ? j - n : -1, y < n - 1 ? j + n : -1]) {
+        if (m >= 0 && comp[m] < 0 && g[m] === c) { comp[m] = regions.length; cells.push(m); }
+      }
+    }
+    regions.push({ c, cells });
+  }
+  const edgesOf = r => { // 區域的外框線段(旁邊是別的顏色或棋盤邊)
+    const out = [];
+    r.cells.forEach(i => {
+      const x = i % n, y = (i / n) | 0, id = comp[i];
+      if (y === 0 || comp[i - n] !== id) out.push([x, y, x + 1, y]);
+      if (y === n - 1 || comp[i + n] !== id) out.push([x, y + 1, x + 1, y + 1]);
+      if (x === 0 || comp[i - 1] !== id) out.push([x, y, x, y + 1]);
+      if (x === n - 1 || comp[i + 1] !== id) out.push([x + 1, y, x + 1, y + 1]);
+    });
+    return out;
+  };
+  const allEdges = [];
+  regions.forEach(r => {
+    const col = FLOOD_COLORS[r.c];
+    ctx.save();
+    ctx.beginPath();
+    r.cells.forEach(i => {
+      const x = i % n, y = (i / n) | 0, p = [V(x, y), V(x + 1, y), V(x + 1, y + 1), V(x, y + 1)];
+      ctx.moveTo(p[0][0], p[0][1]); p.slice(1).forEach(q => ctx.lineTo(q[0], q[1])); ctx.closePath();
+    });
+    ctx.clip();
+    ctx.globalAlpha = 0.82;
+    ctx.fillStyle = col;
+    ctx.fillRect(0, 0, W, W);
+    // 暈染斑:顏料堆積比較深的地方
+    r.cells.forEach(i => {
+      if (floodHash(i, r.c, 3) > 0.45) return;
+      const x = (i % n + floodHash(i, 0, 4)) * cs, y = (((i / n) | 0) + floodHash(i, 0, 5)) * cs, rr = cs * (0.6 + floodHash(i, 0, 6) * 0.7);
+      const gr = ctx.createRadialGradient(x, y, 0, x, y, rr);
+      gr.addColorStop(0, sh(col, -0.25)); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.globalAlpha = 0.22;
+      ctx.fillStyle = gr;
+      ctx.fillRect(x - rr, y - rr, rr * 2, rr * 2);
+    });
+    // 邊緣內側顏料比較深(水彩乾掉時的邊)
+    const es = edgesOf(r);
+    ctx.globalAlpha = 0.5;
+    ctx.strokeStyle = sh(col, -0.32);
+    ctx.lineWidth = cs * 0.14;
+    ctx.lineJoin = ctx.lineCap = 'round';
+    ctx.beginPath();
+    es.forEach(([x1, y1, x2, y2]) => { const p = V(x1, y1), q = V(x2, y2); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); });
+    ctx.stroke();
+    ctx.restore();
+    allEdges.push(...es);
+  });
+  // 不同顏色之間留一條細細的紙白
+  ctx.save();
+  ctx.strokeStyle = paper;
+  ctx.lineWidth = cs * 0.075;
+  ctx.lineJoin = ctx.lineCap = 'round';
+  ctx.beginPath();
+  allEdges.forEach(([x1, y1, x2, y2]) => { const p = V(x1, y1), q = V(x2, y2); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); });
+  ctx.stroke();
+  ctx.restore();
+  // 紙紋透上來
+  ctx.save();
+  ctx.globalCompositeOperation = 'multiply';
+  ctx.globalAlpha = 0.45;
+  ctx.fillStyle = paper;
+  ctx.fillRect(0, 0, W, W);
+  ctx.restore();
+  // 剛吞進來的格子:像濕顏料一樣暈開(先亮再慢慢沉下去)
+  let busy = false;
+  if (anim) {
+    anim.forEach((t0, i) => {
+      const u = (now - t0) / 420;
+      if (u < 0) { busy = true; return; }
+      if (u >= 1) { anim.delete(i); return; }
+      busy = true;
+      const x = (i % n + 0.5) * cs, y = (((i / n) | 0) + 0.5) * cs, rr = cs * (0.35 + u * 0.75);
+      const gr = ctx.createRadialGradient(x, y, 0, x, y, rr);
+      gr.addColorStop(0, `rgba(255,252,240,${(1 - u) * 0.7})`); gr.addColorStop(1, 'rgba(255,252,240,0)');
+      ctx.fillStyle = gr;
+      ctx.fillRect(x - rr, y - rr, rr * 2, rr * 2);
+    });
+  }
+  return busy;
+}
+function floodRegion(g, n) { // 跟左上角相連、同顏色的格子
+  const c0 = g[0], seen = new Uint8Array(n * n), q = [0];
+  seen[0] = 1;
+  for (let k = 0; k < q.length; k++) {
+    const i = q[k], x = i % n, y = (i / n) | 0;
+    for (const j of [x > 0 ? i - 1 : -1, x < n - 1 ? i + 1 : -1, y > 0 ? i - n : -1, y < n - 1 ? i + n : -1]) {
+      if (j >= 0 && !seen[j] && g[j] === c0) { seen[j] = 1; q.push(j); }
+    }
+  }
+  return q;
+}
+function floodApply(g, n, c) { // 回傳這一步新吞進來的格子(依距離排好,畫漣漪動畫用)
+  const before = new Set(floodRegion(g, n));
+  before.forEach(i => { g[i] = c; });
+  return floodRegion(g, n).filter(i => !before.has(i));
+}
+const floodDone = (g, n) => floodRegion(g, n).length === n * n;
+function floodGreedy(g0, n) { // 貪心解:每步選吞最多格的顏色(也是電腦的走法、步數限制的基準)
+  const g = g0.slice(), seq = [];
+  while (!floodDone(g, n) && seq.length < 200) {
+    let best = -1, bc = 0;
+    for (let c = 0; c < FLOOD_COLORS.length; c++) {
+      if (c === g[0]) continue;
+      const t = g.slice();
+      floodApply(t, n, c);
+      const sz = floodRegion(t, n).length;
+      if (sz > best) { best = sz; bc = c; }
+    }
+    floodApply(g, n, bc);
+    seq.push(bc);
+  }
+  return seq;
+}
+
+function hFlood(H) {
+  let round = 0, phase = 'idle', n = 10, grid = null, limit = 0, t0 = 0, tok = 0;
+  const tot = {}, ps = {};
+  H.players.forEach(s => { tot[s] = 0; });
+  function startRound() {
+    round++;
+    n = FLOOD.SIZES[round - 1];
+    grid = Array.from({ length: n * n }, () => rand(0, FLOOD_COLORS.length - 1));
+    limit = floodGreedy(grid, n).length + 1;
+    H.players.forEach(s => { ps[s] = { g: grid.slice(), steps: 0, done: 0, fail: false, ms: 0 }; });
+    phase = 'cd';
+    H.bc({ t: 'g', e: 'prep', rd: round, R: FLOOD.SIZES.length, n });
+    H.countdown(() => {
+      phase = 'play';
+      t0 = Date.now();
+      H.bc({ t: 'g', e: 'round', rd: round, R: FLOOD.SIZES.length, n, grid: grid.join(''), limit, T: FLOOD.T, order: H.players });
+      const my = ++tok;
+      H.s.after(FLOOD.T * 1000, () => { if (my === tok && phase === 'play') endRound(); });
+    });
+  }
+  const finishers = () => H.players.filter(s => ps[s].done).sort((a, b) => ps[a].done - ps[b].done);
+  function endRound() {
+    phase = 'rend'; tok++;
+    const fin = finishers(), pts = {};
+    fin.forEach((s, k) => { pts[s] = FLOOD.PTS[k] || 1; tot[s] += pts[s]; });
+    H.players.forEach(s => { H.scores[s] = tot[s]; });
+    H.bc({ t: 'score', scores: H.scores });
+    H.bc({ t: 'g', e: 'rend', rd: round, fin, pts, tot, ms: Object.fromEntries(fin.map(s => [s, ps[s].ms])), steps: Object.fromEntries(H.players.map(s => [s, ps[s].steps])), last: round >= FLOOD.SIZES.length });
+    H.s.after(4200, () => (round >= FLOOD.SIZES.length ? H.finish() : startRound()));
+  }
+  const allDone = () => H.active().every(s => ps[s].done || ps[s].fail);
+  return {
+    start() { startRound(); },
+    input(slot, m) {
+      const p = ps[slot];
+      if (phase !== 'play' || !p || p.done || p.fail || m.e !== 'mv') return;
+      const c = +m.c;
+      if (!(c >= 0 && c < FLOOD_COLORS.length) || c === p.g[0] || +m.i !== p.steps) return;
+      floodApply(p.g, n, c);
+      p.steps++;
+      const pct = Math.round(floodRegion(p.g, n).length / (n * n) * 100);
+      if (pct === 100) { p.done = Date.now(); p.ms = p.done - t0; }
+      else if (p.steps >= limit) p.fail = true;
+      H.bc({ t: 'g', e: 'mv', s: slot, c, i: p.steps, pct, done: p.done ? finishers().indexOf(slot) + 1 : 0, ms: p.ms, fail: p.fail });
+      if (allDone()) H.s.after(900, () => { if (phase === 'play') endRound(); });
+    },
+    presence() { if (phase === 'play' && allDone()) endRound(); },
+  };
+}
+
+function vFlood(V) {
+  const me = V.me;
+  let n = 10, g = null, base = null, limit = 0, steps = 0, live = false, myRank = 0, failed = false, endAt = 0, others = {}, timerT = null;
+  const anim = new Map(); // 格子 → 開始放大的時間(漣漪)
+  V.stage('<div class="fseats"></div>');
+  V.pad.innerHTML = `
+    <div class="fwrap">
+      <div class="fhead"><span class="fstep">步數 <b>0</b> / <i>-</i></span><span class="ftime">⏱ --</span></div>
+      <div class="fboard"><canvas class="fcv"></canvas><div class="cover"></div></div>
+      <div class="fpal">${FLOOD_COLORS.map((c, k) => `<button class="fc" data-c="${k}" style="--fc:${c}" aria-label="${FLOOD_NAMES[k]}"></button>`).join('')}</div>
+    </div>`;
+  const board = $('.fboard', V.pad), cv = $('.fcv', board), ctx = cv.getContext('2d'), cover = $('.cover', board);
+  const stepEl = $('.fstep', V.pad), timeEl = $('.ftime', V.pad), palEl = $('.fpal', V.pad);
+  const fit = () => {
+    if (!board.isConnected) { ro.disconnect(); return; }
+    const w = $('.fwrap', V.pad), avail = w.clientHeight - $('.fhead', w).offsetHeight - palEl.offsetHeight - 16;
+    const s = Math.max(160, Math.floor(Math.min(w.clientWidth, avail)));
+    board.style.width = board.style.height = s + 'px';
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = cv.height = Math.round((cv.clientWidth || s) * dpr);
+    draw();
+  };
+  const ro = new ResizeObserver(fit);
+  ro.observe(V.pad);
+
+  function draw() {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    if (!g) { ctx.fillStyle = ctx.createPattern(floodPaper(), 'repeat'); ctx.fillRect(0, 0, cv.width, cv.width); return; }
+    if (floodPaint(ctx, g, n, cv.width, anim, performance.now())) requestAnimationFrame(draw);
+  }
+  function drawMini(s) {
+    const o = others[s], c = $(`.fseat[data-s="${s}"] canvas`, V.root);
+    if (!o || !c) return;
+    floodPaint(c.getContext('2d'), o.g, n, c.width, null, 0);
+  }
+  function renderSeats(order) {
+    $('.fseats', V.root).innerHTML = order.map(s => {
+      const p = pinfo(s), o = others[s] || {};
+      const tag = o.done ? `<em class="fwin">${['🥇', '🥈', '🥉', '🎀'][o.done - 1]}</em>` : o.fail ? '<em class="ffail">💥</em>' : '';
+      return `<div class="fseat${s === me ? ' me' : ''}${p.online ? '' : ' off'}" data-s="${s}" style="--pc:${p.color}">
+        <canvas width="144" height="144"></canvas>${tag}
+        <span class="fnm">${p.emoji}<b>${s === me ? '你' : esc(p.name)}</b></span>
+        <span class="fpg"><i style="width:${o.pct || 0}%"></i></span><small>${o.steps || 0} 步 · ${o.pct || 0}%</small></div>`;
+    }).join('');
+    order.forEach(drawMini);
+  }
+  function updSeat(s) {
+    const seat = $(`.fseat[data-s="${s}"]`, V.root), o = others[s];
+    if (!seat || !o) return;
+    $('.fpg i', seat).style.width = o.pct + '%';
+    $('small', seat).textContent = `${o.steps} 步 · ${o.pct}%`;
+    const old = $('em', seat);
+    if (old) old.remove();
+    if (o.done) seat.insertAdjacentHTML('beforeend', `<em class="fwin">${['🥇', '🥈', '🥉', '🎀'][o.done - 1]}</em>`);
+    else if (o.fail) seat.insertAdjacentHTML('beforeend', '<em class="ffail">💥</em>');
+    drawMini(s);
+  }
+  function updHead() {
+    $('b', stepEl).textContent = steps;
+    $('i', stepEl).textContent = limit || '-';
+    stepEl.classList.toggle('warn', limit && limit - steps <= 2 && !myRank);
+    palEl.classList.toggle('off', !live);
+    $$('.fc', palEl).forEach(b => b.classList.toggle('cur', g && +b.dataset.c === g[0]));
+  }
+  function pickColor(c) {
+    if (!live || !g || c === g[0]) return;
+    const added = floodApply(g, n, c);
+    const now = performance.now();
+    added.forEach((i, k) => anim.set(i, now + Math.min(k, 60) * 12));
+    steps++;
+    V.send({ e: 'mv', c, i: steps - 1 });
+    others[me] = { g: g.slice(), steps, pct: Math.round(floodRegion(g, n).length / (n * n) * 100), done: 0, fail: false };
+    updSeat(me);
+    beep(330 + c * 70 + Math.min(added.length, 20) * 12, 0.07, 'triangle', 0.1);
+    if (floodDone(g, n)) { live = false; SFX.good(); buzz([40, 40, 80]); }
+    else if (steps >= limit) { live = false; failed = true; cover.innerHTML = '<div class="big">💥</div><div>步數用完了!</div><div class="small">看看其他人吧</div>'; cover.classList.add('on'); SFX.bad(); }
+    updHead();
+    draw();
+  }
+  palEl.addEventListener('pointerdown', e => { const b = e.target.closest('.fc'); if (b) { e.preventDefault(); pickColor(+b.dataset.c); } });
+  cv.addEventListener('pointerdown', e => {
+    if (!g) return;
+    const r = cv.getBoundingClientRect(), x = Math.floor((e.clientX - r.left) / r.width * n), y = Math.floor((e.clientY - r.top) / r.height * n);
+    if (x >= 0 && y >= 0 && x < n && y < n) pickColor(g[y * n + x]);
+  });
+
+  V.countdown = k => { // 倒數顯示在棋盤上,不要蓋掉上面的對手區
+    cover.innerHTML = k > 0 ? `<div class="big cdn pulse">${k}</div>` : '<div class="big cdn go">GO!</div>';
+    cover.classList.add('on');
+    if (k > 0) SFX.tick(); else SFX.go();
+  };
+  V.on = m => {
+    if (m.e === 'prep') {
+      n = m.n; g = null; live = false; myRank = 0; failed = false; steps = 0; limit = 0;
+      cover.innerHTML = `<div class="big">🌊</div><div>第 ${m.rd} / ${m.R} 局 · ${m.n}×${m.n}</div><div class="small">大家拿到一樣的棋盤,看誰最快填滿!</div>`;
+      cover.classList.add('on');
+      updHead(); draw();
+    } else if (m.e === 'round') {
+      n = m.n; base = [...m.grid].map(Number); g = base.slice(); limit = m.limit; steps = 0;
+      live = m.order.includes(me);
+      others = Object.fromEntries(m.order.map(s => [s, { g: base.slice(), steps: 0, pct: Math.round(floodRegion(base, n).length / (n * n) * 100), done: 0, fail: false }]));
+      cover.classList.remove('on');
+      anim.clear();
+      const now = performance.now();
+      for (let i = 0; i < n * n; i++) anim.set(i, now + ((i % n) + ((i / n) | 0)) * 22); // 開場:棋盤從左上角一格一格長出來
+      endAt = Date.now() + m.T * 1000;
+      clearInterval(timerT);
+      timerT = setInterval(() => {
+        if (!board.isConnected) return clearInterval(timerT);
+        const left = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
+        timeEl.textContent = '⏱ ' + left;
+        timeEl.classList.toggle('warn', left <= 10);
+      }, 250);
+      renderSeats(m.order);
+      fit(); updHead();
+      if (!live) toast('觀戰中');
+    } else if (m.e === 'mv') {
+      const o = others[m.s];
+      if (!o) return;
+      if (m.s !== me) { floodApply(o.g, n, m.c); o.steps = m.i; o.pct = m.pct; }
+      o.done = m.done; o.fail = m.fail;
+      if (m.s === me && m.done) {
+        myRank = m.done;
+        cover.innerHTML = `<div class="big">${['🥇', '🥈', '🥉', '🎀'][m.done - 1]}</div><div>完成!第 ${m.done} 名</div><div class="small">${steps} 步 · ${(m.ms / 1000).toFixed(1)} 秒</div>`;
+        setTimeout(() => cover.classList.add('on'), 700);
+        if (m.done === 1) SFX.win();
+      } else if (m.s !== me && m.done) { beep(990, 0.1, 'sine', 0.1); }
+      updSeat(m.s);
+      updHead();
+    } else if (m.e === 'rend') {
+      live = false; clearInterval(timerT); timeEl.textContent = '⏱ 0';
+      const rows = Object.keys(m.tot).map(Number).sort((a, b) => m.tot[b] - m.tot[a]).map(s => {
+        const k = m.fin.indexOf(s);
+        return `<span>${k >= 0 ? ['🥇', '🥈', '🥉', '🎀'][k] : '💤'} ${pinfo(s).emoji} ${s === me ? '你' : esc(pinfo(s).name)} <b>${k >= 0 ? `+${m.pts[s]}` : '+0'}</b><i>共 ${m.tot[s]} 分</i></span>`;
+      }).join('');
+      cover.innerHTML = `<div class="small">第 ${m.rd} 局結果</div><div class="ffinal">${rows}</div><div class="small">${m.last ? '比賽結束!' : '下一局棋盤更大…'}</div>`;
+      cover.classList.add('on');
+      updHead();
+    }
+  };
+}
+
+/* =========================================================
    電腦玩家的行為:聽到房主的廣播,就像真人一樣送出操作
    ========================================================= */
 function botsHear(H, m) {
@@ -4155,6 +4888,37 @@ BOTS.bomb = (H, s, m, k) => {
   if (Math.abs(dx) > 0.08 || Math.abs(dy) > 0.08) d = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 2 : 4) : (dy > 0 ? 3 : 1);
   if (me[9] === 'rev') d = [0, 3, 4, 1, 2][d];
   if (d !== st.d) { st.d = d; botSend(H, s, { e: 'mv', d }); }
+};
+
+/* 跳棋的電腦:用跟「時間到自動走」一樣的評分,越弱隨機性越大 */
+BOTS.checkers = (H, s, m, k) => {
+  if (m.t !== 'g' || m.e !== 'st' || m.turn !== s || m.done || m.intro) return;
+  const st = H.bs[s] || (H.bs[s] = { turns: -1 });
+  if (st.turns === m.turns) return;
+  st.turns = m.turns;
+  const occ = m.occ.slice();
+  H.s.after(Math.round(rand(900, 1700) * k.spd), () => {
+    const b = chkBestMove(occ, s, m.homes[s], (1 - k.sk) * 40);
+    if (b) botSend(H, s, { e: 'move', from: b.f, to: b.t });
+  });
+};
+
+/* 填色大作戰的電腦:每步選吞最多格的顏色;越弱越常選錯、想越久 */
+BOTS.flood = (H, s, m, k) => {
+  if (m.t !== 'g' || m.e !== 'round' || !m.order.includes(s)) return;
+  const n = m.n, g = [...m.grid].map(Number), rd = m.rd;
+  const st = H.bs[s] = { rd };
+  let i = 0;
+  const step = () => {
+    if (H.bs[s] !== st || floodDone(g, n) || i >= m.limit) return;
+    let c;
+    if (Math.random() < (1 - k.sk) * 0.45) c = pick([0, 1, 2, 3, 4, 5].filter(x => x !== g[0]));
+    else c = floodGreedy(g, n)[0];
+    floodApply(g, n, c);
+    botSend(H, s, { e: 'mv', c, i: i++ });
+    H.s.after(Math.round(rand(900, 1900) * k.spd * (0.7 + n / 30)), step);
+  };
+  H.s.after(Math.round(rand(1200, 2200) * k.spd), step);
 };
 
 /* ---------- 防止雙指縮放 / 長按選單 ---------- */
