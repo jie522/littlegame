@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.10.19';
+const APP_VERSION = '2026.10.19b';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -1624,7 +1624,8 @@ function canvasStage(V, aspect, fill) {
   const wrap = $('.twrap', sin), cv = $('.tcv', sin), ov = $('.tov', sin), hud = $('.hud', sin);
   const C = { cv, ctx: cv.getContext('2d'), ov, hud, sc: 1, ox: 0, oy: 0 };
   C.fit = () => {
-    const w = stageEl.clientWidth - 10, h = stageEl.clientHeight - 10 - hud.offsetHeight - 4;
+    const hudH = getComputedStyle(hud).position === 'absolute' ? 0 : hud.offsetHeight + 4; // 狀態列浮在畫布上時不佔高度
+    const w = stageEl.clientWidth - 10, h = stageEl.clientHeight - 10 - hudH;
     if (fill) { // 撐滿整個舞台(畫面比例不同時,背景往兩側延伸)
       wrap.style.width = Math.max(60, Math.floor(w)) + 'px';
       wrap.style.height = Math.max(40, Math.floor(h)) + 'px';
@@ -3538,6 +3539,54 @@ function vBomb(V) {
   const keys = [];
   const kd = d => [() => { keys.push(d); setDir(d); }, () => { const i = keys.lastIndexOf(d); if (i >= 0) keys.splice(i, 1); setDir(keys[keys.length - 1] || 0); }];
   keyCtl(C.cv, { ArrowUp: kd(1), ArrowRight: kd(2), ArrowDown: kd(3), ArrowLeft: kd(4), w: kd(1), d: kd(2), s: kd(3), a: kd(4), ' ': [dropBomb, null], Enter: [dropBomb, null] });
+
+  // 隱藏按鍵:戰場放到最大;螢幕左半邊按住滑動 = 方向盤(跟著手指出現),右半邊點一下 = 放炸彈
+  const toggle = el('button', 'btoggle');
+  const zl = el('div', 'bzone bzl', '👆 左半邊<br>按住滑動 = 移動'), zr = el('div', 'bzone bzr', '👆 右半邊<br>點一下 = 放炸彈');
+  const ring = el('div', 'bring', '<b></b>');
+  [toggle, zl, zr, ring].forEach(x => V.root.appendChild(x));
+  const setHide = h => {
+    V.root.classList.toggle('bhide', h);
+    requestAnimationFrame(C.fit);
+    toggle.innerHTML = h ? '🎮 顯示按鍵' : '🙈 隱藏按鍵';
+    store.set('bombHide', h);
+    if (h) { V.root.classList.remove('zused'); clearTimeout(setHide.t); setHide.t = setTimeout(() => V.root.classList.add('zused'), 4000); }
+  };
+  setHide(!!store.get('bombHide', false));
+  toggle.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); setHide(!V.root.classList.contains('bhide')); SFX.tap(); });
+  let zId = null, zx = 0, zy = 0;
+  V.root.addEventListener('pointerdown', e => {
+    if (!V.root.classList.contains('bhide') || e.target.closest('.exit, .btoggle, .brot, button')) return;
+    e.preventDefault();
+    const r = V.root.getBoundingClientRect();
+    if (e.clientX - r.left > r.width / 2) { dropBomb(); return; }
+    if (zId != null) return;
+    zId = e.pointerId; zx = e.clientX; zy = e.clientY;
+    try { V.root.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    ring.style.left = (zx - r.left) + 'px'; ring.style.top = (zy - r.top) + 'px';
+    $('b', ring).style.transform = '';
+    ring.classList.add('on');
+  });
+  V.root.addEventListener('pointermove', e => {
+    if (e.pointerId !== zId) return;
+    let dx = e.clientX - zx, dy = e.clientY - zy;
+    const len = Math.hypot(dx, dy);
+    if (len > 50) { zx = e.clientX - dx / len * 50; zy = e.clientY - dy / len * 50; dx = e.clientX - zx; dy = e.clientY - zy; } // 手指拉太遠時,搖桿中心跟著移過去
+    const r = V.root.getBoundingClientRect();
+    ring.style.left = (zx - r.left) + 'px'; ring.style.top = (zy - r.top) + 'px';
+    const k = Math.min(1, 34 / (Math.hypot(dx, dy) || 1));
+    $('b', ring).style.transform = `translate(${dx * k}px, ${dy * k}px)`;
+    if (Math.hypot(dx, dy) < 10) return setDir(0);
+    setDir(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 2 : 4) : (dy > 0 ? 3 : 1));
+  });
+  const zEnd = e => {
+    if (e.pointerId !== zId) return;
+    zId = null;
+    ring.classList.remove('on');
+    setDir(0);
+  };
+  V.root.addEventListener('pointerup', zEnd);
+  V.root.addEventListener('pointercancel', zEnd);
 
   let st = null, prevP = new Map(), prevB = new Map(), curAt = 0, grid = '', hudTxt = '', statTxt = '';
   const fxs = [], crumbs = [];

@@ -1768,3 +1768,24 @@ button:disabled { cursor: not-allowed; }
   .brbtns { display: flex; gap: 10px; margin-top: 6px; }
 }
 @keyframes brotate { 0%, 20% { transform: rotate(0); } 50%, 80% { transform: rotate(-90deg); } 100% { transform: rotate(0); } }
+
+/* 轟炸超人:隱藏按鍵模式 */
+.btoggle { position: absolute; z-index: 20; left: 50%; transform: translateX(-50%); bottom: max(8px, env(safe-area-inset-bottom)); padding: 3px 10px; border-radius: 999px; background: rgba(255,255,255,.9); border: 2px solid var(--ink); box-shadow: 0 2px 0 var(--ink); font-size: .75rem; font-weight: 900; white-space: nowrap; }
+.bzone, .bring { display: none; }
+.play-bomb.bhide .pad { display: none; }
+.play-bomb.bhide .stage { flex: 1; }
+.play-bomb.bhide .bzone { display: block; position: absolute; bottom: 14px; z-index: 6; padding: 6px 12px; border-radius: 14px; background: rgba(15,23,48,.55); color: #fff; font-size: .8rem; font-weight: 800; line-height: 1.35; text-shadow: var(--ol-sm); pointer-events: none; transition: opacity .6s; }
+.play-bomb.bhide .bzl { left: 14px; }
+.play-bomb.bhide .bzr { right: 14px; text-align: right; }
+.play-bomb.bhide.zused .bzone { opacity: 0; }
+.play-bomb.bhide .bring.on { display: block; position: absolute; z-index: 7; width: 96px; height: 96px; margin: -48px 0 0 -48px; border-radius: 50%; border: 3px solid rgba(255,255,255,.55); background: rgba(255,255,255,.12); pointer-events: none; }
+.bring b { position: absolute; left: 50%; top: 50%; width: 40px; height: 40px; margin: -20px 0 0 -20px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #fff7c2, #ffd23f); border: 3px solid var(--ink); }
+@media (orientation: landscape) {
+  .play-bomb.bhide { grid-template-columns: 0 minmax(0, 1fr) 0; grid-template-areas: "stage stage stage" "stage stage stage"; column-gap: 0; }
+  .play-bomb.bhide .topbar { position: absolute; left: max(8px, env(safe-area-inset-left)); top: max(6px, env(safe-area-inset-top)); z-index: 10; flex-wrap: nowrap; max-width: 46%; opacity: .9; }
+  .play-bomb.bhide .bdpad, .play-bomb.bhide .bside { display: none; }
+  .play-bomb .btoggle { left: auto; transform: none; right: max(8px, env(safe-area-inset-right)); bottom: max(6px, env(safe-area-inset-bottom)); }
+  .play-bomb.bhide .btoggle { bottom: auto; top: max(6px, env(safe-area-inset-top)); }
+}
+.play-bomb.bhide .sin { position: relative; }
+.play-bomb.bhide .hud { position: absolute; left: 50%; bottom: 6px; transform: translateX(-50%); z-index: 3; padding: 1px 12px; border-radius: 999px; background: rgba(15,23,48,.6); white-space: nowrap; pointer-events: none; }
