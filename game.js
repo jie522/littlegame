@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.10.18b';
+const APP_VERSION = '2026.10.19';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -463,6 +463,11 @@ const GAMES = [
     id: 'mono', emoji: '🏝️', name: '台灣大富翁', tag: '策略+運氣', color: '#2f9fd8', desc: '環島買地蓋飯店!',
     rules: ['2~4 人輪流擲骰子,在環島地圖上前進;經過起點領 $1500', '走到沒人買的景點可以買下來,別人經過就要付你過路費', '買地後或回到自己的地,可以一層一層蓋民宿 🏠 → 旅館 🏘️ → 飯店 🏨,過路費越來越高;同一區全部買下過路費 ×1.5', '機會 ❓、命運 🔮、逛夜市 🍢 會有各種驚喜;小心被抓去綠島 🔒!擲出雙數可以再擲一次', '10 輪後,現金 + 土地 + 房子 總資產最多的人獲勝!點格子可以看說明'],
     host: hMono, view: vMono, noCountdown: true,
+  },
+  {
+    id: 'bomb', emoji: '💣', name: '轟炸超人', tag: '動作+對戰', color: '#ff7043', desc: '放炸彈炸飛對手!',
+    rules: ['2~4 人對戰,手機橫著拿畫面最大!左邊方向盤移動,右邊按鈕放炸彈', '炸彈會往上下左右噴火,炸開木箱可能掉出道具;被火燒到就出局', '道具:💣 多放一顆 · 🔥 火力變長 · 👟 跑更快 · 🛡️ 擋一次爆炸 · 🦶 可以踢炸彈 · 🌋 超級火力 · 💀 詛咒(碰到別人會傳染!)', '80 秒後場地會從外圈開始縮小,快躲到中間!', '每局最後活下來的人得 1 分,先拿 2 分的人獲勝!'],
+    host: hBomb, view: vBomb, noCountdown: true,
   },
 ];
 const GAME = Object.fromEntries(GAMES.map(g => [g.id, g]));
@@ -3179,6 +3184,586 @@ function vMono(V) {
 }
 
 /* =========================================================
+   轟炸超人 💣(2~4 人即時對戰,手機橫著玩):放炸彈炸開木箱撿道具,炸到別人!
+   棋盤 15 x 11 格,座標單位是「格」;格子代碼 0 空地 1 石牆 2 木箱,'a'+k 是道具 k
+   每局最後存活的人得 1 分,先拿 2 分(或 3 局後分數最高)的人獲勝;80 秒後場地會從外圈開始縮小
+   ========================================================= */
+const BOMB = { W: 15, H: 11, TICK: 40, FUSE: 2.5, FLAME: 0.55, SD: 80, CAP: 150, R: 3, WIN: 2 };
+const BOMB_ITEMS = [
+  { k: 'bomb', e: '💣', n: '炸彈 +1', c: '#5c6bc0', w: 27 },
+  { k: 'fire', e: '🔥', n: '火力 +1', c: '#f57c00', w: 27 },
+  { k: 'speed', e: '👟', n: '速度 +1', c: '#26a69a', w: 18 },
+  { k: 'shield', e: '🛡️', n: '防護罩', c: '#42a5f5', w: 8 },
+  { k: 'kick', e: '🦶', n: '踢炸彈', c: '#8d6e63', w: 9 },
+  { k: 'skull', e: '💀', n: '詛咒!', c: '#6a1b9a', w: 7 },
+  { k: 'max', e: '🌋', n: '超級火力', c: '#d32f2f', w: 4 },
+];
+const BOMB_CURSE = { slow: '🐢 變超慢', fast: '⚡ 停不下來', rev: '🔄 方向顛倒', auto: '💣 一直放炸彈', nob: '🚫 不能放炸彈' };
+const BOMB_DX = [0, 0, 1, 0, -1], BOMB_DY = [0, -1, 0, 1, 0]; // 方向:0 停 1 上 2 右 3 下 4 左
+const BOMB_SPAWN = [[1, 1], [13, 9], [13, 1], [1, 9]];
+
+function hBomb(H) {
+  const GW = BOMB.W, GH = BOMB.H, dt = BOMB.TICK / 1000;
+  const r2 = v => Math.round(v * 100) / 100;
+  let round = 0, phase = 'idle', grid = [], hid = [], ps = [], bombs = [], flames = new Map(), t = 0, fx = [];
+  let gdirty = true, sdOrder = [], sdI = 0, sdAcc = 0, endAt = 0, nextId = 1, tick = 0;
+  const wins = {};
+  H.players.forEach(s => { wins[s] = 0; });
+
+  const idx = (c, r) => r * GW + c;
+  const bombAt = (c, r) => bombs.find(b => Math.floor(b.x) === c && Math.floor(b.y) === r);
+  function newMap() {
+    grid = []; hid = [];
+    for (let r = 0; r < GH; r++) for (let c = 0; c < GW; c++) {
+      grid.push(r === 0 || c === 0 || r === GH - 1 || c === GW - 1 || (r % 2 === 0 && c % 2 === 0) ? 1 : 0);
+      hid.push(-1);
+    }
+    const safe = new Set();
+    BOMB_SPAWN.forEach(([c, r]) => {
+      safe.add(idx(c, r));
+      safe.add(idx(c + (c < 7 ? 1 : -1), r));
+      safe.add(idx(c, r + (r < 5 ? 1 : -1)));
+    });
+    const total = BOMB_ITEMS.reduce((a, b) => a + b.w, 0);
+    for (let i = 0; i < grid.length; i++) {
+      if (grid[i] || safe.has(i) || Math.random() > 0.74) continue;
+      grid[i] = 2;
+      if (Math.random() < 0.4) {
+        let v = Math.random() * total, k = 0;
+        while ((v -= BOMB_ITEMS[k].w) > 0) k++;
+        hid[i] = k;
+      }
+    }
+    sdOrder = []; // 場地縮小的順序:從最外圈繞進來
+    for (let k = 1; k <= 5; k++) {
+      const top = k, bot = GH - 1 - k, lef = k, rig = GW - 1 - k;
+      if (top > bot || lef > rig) break;
+      const ring = [];
+      for (let c = lef; c <= rig; c++) ring.push(idx(c, top));
+      for (let r = top + 1; r <= bot; r++) ring.push(idx(rig, r));
+      if (bot > top) for (let c = rig - 1; c >= lef; c--) ring.push(idx(c, bot));
+      if (rig > lef) for (let r = bot - 1; r > top; r--) ring.push(idx(lef, r));
+      ring.forEach(i => { if (grid[i] !== 1 && !sdOrder.includes(i)) sdOrder.push(i); });
+    }
+    gdirty = true;
+  }
+  function newRound() {
+    round++;
+    newMap();
+    bombs = []; flames = new Map(); t = 0; sdI = 0; sdAcc = 0; endAt = 0;
+    ps = H.players.map((s, i) => {
+      const [c, r] = BOMB_SPAWN[H.players.length === 2 ? i : i % 4];
+      return { s, x: c + 0.5, y: r + 0.5, alive: H.online(s), dir: 0, mv: false, cap: 1, fire: 2, spd: 3, shield: 0, kick: false, curse: null, curseT: 0, inv: 0 };
+    });
+  }
+  const gridStr = () => grid.map(v => (v >= 10 ? String.fromCharCode(97 + v - 10) : v)).join('');
+  const flags = p => (p.shield ? 1 : 0) | (p.curse ? 2 : 0) | (p.kick ? 4 : 0) | (p.inv > 0 ? 8 : 0) | (p.mv ? 16 : 0);
+  function send() {
+    const m = {
+      t: 'g', e: 's', rd: round, R: BOMB.R, tl: Math.max(0, Math.ceil(BOMB.CAP - t)), sd: t >= BOMB.SD ? 1 : 0, ph: phase,
+      ps: ps.map(p => [p.s, r2(p.x), r2(p.y), p.alive ? 1 : 0, p.dir, flags(p), p.cap, p.fire, Math.round(p.spd * 10), p.curse || '']),
+      bm: bombs.map(b => [b.id, r2(b.x), r2(b.y), Math.round(b.t * 10), b.range, b.own]),
+      fl: [...flames].map(([i, f]) => [i, f.k]),
+      fx,
+    };
+    if (gdirty || tick % 25 === 0) { m.gd = gridStr(); gdirty = false; }
+    H.bc(m);
+    fx = [];
+  }
+
+  function free(c, r, p) {
+    if (c < 0 || r < 0 || c >= GW || r >= GH) return false;
+    const g = grid[idx(c, r)];
+    if (g === 1 || g === 2) return false;
+    const b = bombAt(c, r);
+    return !b || (p && b.pass.has(p.s));
+  }
+  function tryKick(p, c, r, dx, dy) {
+    const b = bombAt(c, r);
+    if (b && p.kick && !b.vx && !b.vy && bombFree(c + dx, r + dy, b)) { b.vx = dx; b.vy = dy; fx.push(['k', c, r]); }
+  }
+  function bombFree(c, r, self) {
+    if (c < 0 || r < 0 || c >= GW || r >= GH || grid[idx(c, r)] !== 0) return false;
+    if (bombs.some(o => o !== self && Math.floor(o.x) === c && Math.floor(o.y) === r)) return false;
+    return !ps.some(p => p.alive && Math.floor(p.x) === c && Math.floor(p.y) === r);
+  }
+  function move(p, d, dist) { // 沿著格子走;偏離中線時自動對齊(轉角輔助)
+    const dx = BOMB_DX[d], dy = BOMB_DY[d];
+    const c = Math.floor(p.x), r = Math.floor(p.y);
+    if (dx) {
+      const off = p.y - (r + 0.5);
+      if (Math.abs(off) > 0.001) {
+        let tr = r;
+        if (!free(c + dx, r, p) && Math.abs(off) > 0.12) { const r2_ = r + Math.sign(off); if (free(c + dx, r2_, p) && free(c, r2_, p)) tr = r2_; }
+        const ty = tr + 0.5, s = Math.min(Math.abs(ty - p.y), dist);
+        p.y += Math.sign(ty - p.y) * s; dist -= s;
+        if (Math.abs(p.y - ty) > 0.001) return;
+        p.y = ty;
+      }
+      if (dist <= 0) return;
+      const cc = Math.floor(p.x), rr = Math.floor(p.y);
+      let nx = p.x + dx * dist;
+      if (dx > 0 && nx > cc + 0.5 && !free(cc + 1, rr, p)) { tryKick(p, cc + 1, rr, 1, 0); nx = Math.max(p.x, cc + 0.5); }
+      if (dx < 0 && nx < cc + 0.5 && !free(cc - 1, rr, p)) { tryKick(p, cc - 1, rr, -1, 0); nx = Math.min(p.x, cc + 0.5); }
+      p.x = nx;
+    } else {
+      const off = p.x - (c + 0.5);
+      if (Math.abs(off) > 0.001) {
+        let tc = c;
+        if (!free(c, r + dy, p) && Math.abs(off) > 0.12) { const c2 = c + Math.sign(off); if (free(c2, r + dy, p) && free(c2, r, p)) tc = c2; }
+        const tx = tc + 0.5, s = Math.min(Math.abs(tx - p.x), dist);
+        p.x += Math.sign(tx - p.x) * s; dist -= s;
+        if (Math.abs(p.x - tx) > 0.001) return;
+        p.x = tx;
+      }
+      if (dist <= 0) return;
+      const cc = Math.floor(p.x), rr = Math.floor(p.y);
+      let ny = p.y + dy * dist;
+      if (dy > 0 && ny > rr + 0.5 && !free(cc, rr + 1, p)) { tryKick(p, cc, rr + 1, 0, 1); ny = Math.max(p.y, rr + 0.5); }
+      if (dy < 0 && ny < rr + 0.5 && !free(cc, rr - 1, p)) { tryKick(p, cc, rr - 1, 0, -1); ny = Math.min(p.y, rr + 0.5); }
+      p.y = ny;
+    }
+  }
+  function place(p) {
+    if (!p.alive || p.curse === 'nob' || (phase !== 'play' && phase !== 'ending')) return;
+    const c = Math.floor(p.x), r = Math.floor(p.y);
+    if (bombAt(c, r) || bombs.filter(b => b.own === p.s).length >= p.cap || grid[idx(c, r)] !== 0) return;
+    const pass = new Set(ps.filter(q => q.alive && Math.floor(q.x) === c && Math.floor(q.y) === r).map(q => q.s));
+    bombs.push({ id: nextId++, x: c + 0.5, y: r + 0.5, t: BOMB.FUSE, own: p.s, range: p.fire, pass, vx: 0, vy: 0 });
+    fx.push(['p', c, r]);
+  }
+  function explode(b0) {
+    const queue = [b0];
+    while (queue.length) {
+      const b = queue.shift();
+      if (!bombs.includes(b)) continue;
+      bombs = bombs.filter(o => o !== b);
+      const c = Math.floor(b.x), r = Math.floor(b.y);
+      const put = (i, k) => { const f = flames.get(i); flames.set(i, { t: BOMB.FLAME, k: f && f.k !== k ? 0 : k }); };
+      put(idx(c, r), 0);
+      fx.push(['b', c, r]);
+      for (let d = 1; d <= 4; d++) {
+        for (let k = 1; k <= b.range; k++) {
+          const cc = c + BOMB_DX[d] * k, rr = r + BOMB_DY[d] * k, i = idx(cc, rr), g = grid[i];
+          if (g === 1) break;
+          put(i, d % 2 ? 2 : 1);
+          if (g === 2) { grid[i] = hid[i] >= 0 ? 10 + hid[i] : 0; hid[i] = -1; gdirty = true; fx.push(['c', cc, rr]); break; }
+          if (g >= 10) { grid[i] = 0; gdirty = true; fx.push(['i', cc, rr]); break; }
+          const ob = bombAt(cc, rr);
+          if (ob) { ob.t = 0; queue.push(ob); }
+        }
+      }
+    }
+  }
+  function hurt(p) {
+    if (!p.alive || p.inv > 0) return;
+    if (p.shield) { p.shield = 0; p.inv = 1.3; fx.push(['sh', r2(p.x), r2(p.y), p.s]); return; }
+    p.alive = false; p.dir = 0;
+    fx.push(['d', r2(p.x), r2(p.y), p.s]);
+  }
+  function pickup(p) {
+    const i = idx(Math.floor(p.x), Math.floor(p.y)), g = grid[i];
+    if (g < 10) return;
+    const it = BOMB_ITEMS[g - 10];
+    grid[i] = 0; gdirty = true;
+    if (it.k === 'bomb') p.cap = Math.min(8, p.cap + 1);
+    else if (it.k === 'fire') p.fire = Math.min(8, p.fire + 1);
+    else if (it.k === 'max') p.fire = 8;
+    else if (it.k === 'speed') p.spd = Math.min(6, p.spd + 0.5);
+    else if (it.k === 'shield') p.shield = 1;
+    else if (it.k === 'kick') p.kick = true;
+    else if (it.k === 'skull') { p.curse = pick(Object.keys(BOMB_CURSE)); p.curseT = 10; }
+    fx.push(['g', r2(p.x), r2(p.y), p.s, g - 10, p.curse || '']);
+  }
+
+  function step() {
+    tick++;
+    if (phase !== 'play' && phase !== 'ending') return;
+    t += dt;
+    // 炸彈:倒數、被踢的滑行、離開自己炸彈的人之後就不能再穿過
+    for (const b of bombs) {
+      const c = Math.floor(b.x), r = Math.floor(b.y);
+      b.pass.forEach(s => { const q = ps.find(p => p.s === s); if (!q || !q.alive || Math.floor(q.x) !== c || Math.floor(q.y) !== r) b.pass.delete(s); });
+      if (b.vx || b.vy) {
+        const sp = 9 * dt;
+        if (b.vx) {
+          let nx = b.x + b.vx * sp;
+          if (((b.vx > 0 && nx > c + 0.5) || (b.vx < 0 && nx < c + 0.5)) && !bombFree(c + b.vx, r, b)) { nx = c + 0.5; b.vx = 0; }
+          b.x = nx;
+        } else {
+          let ny = b.y + b.vy * sp;
+          if (((b.vy > 0 && ny > r + 0.5) || (b.vy < 0 && ny < r + 0.5)) && !bombFree(c, r + b.vy, b)) { ny = r + 0.5; b.vy = 0; }
+          b.y = ny;
+        }
+      }
+      b.t -= dt;
+    }
+    bombs.filter(b => b.t <= 0).forEach(explode);
+    flames.forEach((f, i) => { if ((f.t -= dt) <= 0) flames.delete(i); });
+
+    for (const p of ps) {
+      if (!p.alive) continue;
+      if (!H.online(p.s)) { hurt(p); p.alive = false; continue; }
+      if (p.inv > 0) p.inv -= dt;
+      if (p.curse && (p.curseT -= dt) <= 0) p.curse = null;
+      let d = p.dir;
+      if (p.curse === 'rev') d = [0, 3, 4, 1, 2][d];
+      if (p.curse === 'fast' && !d) d = p.last || 3;
+      if (d) p.last = d;
+      const spd = p.curse === 'slow' ? 1.6 : p.curse === 'fast' ? 7.5 : p.spd;
+      p.mv = !!d;
+      if (d) move(p, d, spd * dt);
+      if (p.curse === 'auto') place(p);
+      pickup(p);
+      if (flames.has(idx(Math.floor(p.x), Math.floor(p.y)))) hurt(p);
+    }
+    // 詛咒會傳染:碰到別人就把詛咒傳過去
+    ps.forEach(p => {
+      if (!p.alive || !p.curse) return;
+      ps.forEach(q => { if (q !== p && q.alive && !q.curse && Math.abs(q.x - p.x) < 0.6 && Math.abs(q.y - p.y) < 0.6) { q.curse = p.curse; q.curseT = p.curseT; fx.push(['cu', r2(q.x), r2(q.y), q.s]); } });
+    });
+    // 時間到了:場地從外圈開始縮小
+    if (phase === 'play' && t >= BOMB.SD && sdI < sdOrder.length) {
+      sdAcc += dt;
+      while (sdAcc >= 0.3 && sdI < sdOrder.length) {
+        sdAcc -= 0.3;
+        const i = sdOrder[sdI++], c = i % GW, r = Math.floor(i / GW);
+        grid[i] = 1; hid[i] = -1; gdirty = true;
+        bombs = bombs.filter(b => Math.floor(b.x) !== c || Math.floor(b.y) !== r);
+        ps.forEach(p => { if (p.alive && Math.floor(p.x) === c && Math.floor(p.y) === r) { p.inv = 0; p.shield = 0; hurt(p); } });
+        fx.push(['w', c, r]);
+      }
+    }
+    const alive = ps.filter(p => p.alive);
+    if (phase === 'play' && (alive.length <= 1 || t >= BOMB.CAP)) { phase = 'ending'; endAt = t + 1.1; }
+    send();
+    if (phase === 'ending' && t >= endAt) endRound();
+  }
+  function endRound() {
+    phase = 'rend';
+    const alive = ps.filter(p => p.alive);
+    const w = alive.length === 1 ? alive[0].s : null;
+    if (w != null) { wins[w]++; H.scores[w] = wins[w]; H.bc({ t: 'score', scores: H.scores, pop: { slot: w, v: 1 } }); }
+    const done = round >= BOMB.R || H.players.some(s => wins[s] >= BOMB.WIN) || H.active().length < 2;
+    H.bc({ t: 'g', e: 'rend', w, rd: round, done: done ? 1 : 0, wins });
+    H.s.after(3200, () => {
+      if (done) return H.finish();
+      startRound();
+    });
+  }
+  function startRound() {
+    newRound();
+    phase = 'cd';
+    send();
+    H.countdown(() => { phase = 'play'; });
+  }
+
+  return {
+    start() {
+      H.loop(BOMB.TICK, step);
+      startRound();
+    },
+    input(slot, m) {
+      const p = ps.find(x => x.s === slot);
+      if (!p) return;
+      if (m.e === 'mv') p.dir = [0, 1, 2, 3, 4].includes(m.d) ? m.d : 0;
+      else if (m.e === 'bomb') place(p);
+    },
+    presence() {},
+  };
+}
+
+function vBomb(V) {
+  const GW = BOMB.W, GH = BOMB.H, me = V.me;
+  const C = canvasStage(V, GW / GH), ctx = C.ctx;
+  V.root.classList.add('bombui');
+  V.pad.innerHTML = `
+    <div class="bdpad"><i class="u">▲</i><i class="r">▶</i><i class="d">▼</i><i class="l">◀</i><b class="knob"></b></div>
+    <div class="bside"><div class="bstats"></div><button class="bbomb"><span>💣</span><small>放炸彈</small></button></div>`;
+  const dpad = $('.bdpad', V.pad), knob = $('.knob', dpad), bombBtn = $('.bbomb', V.pad), statsEl = $('.bstats', V.pad);
+  // 直的拿手機時提醒轉成橫的
+  let rotHidden = false;
+  const rot = el('div', 'brot', `<div class="bphone">📱</div><b>把手機轉成橫的,畫面更大!</b><small>如果轉不過來,請先關掉手機的「螢幕方向鎖定」</small>
+    <div class="brbtns"><button class="btn green sm bfull">全螢幕橫向</button><button class="btn white sm bskip">直的也能玩</button></div>`);
+  V.root.appendChild(rot);
+  $('.bskip', rot).addEventListener('pointerdown', e => { e.stopPropagation(); rot.classList.add('hide'); rotHidden = true; });
+  $('.bfull', rot).addEventListener('pointerdown', async e => {
+    e.stopPropagation();
+    try {
+      await document.documentElement.requestFullscreen();
+      await screen.orientation.lock('landscape');
+    } catch (err) { toast('這支手機不支援自動轉向,請直接把手機轉橫'); }
+    rot.classList.add('hide');
+  });
+
+  // 方向:按住方向盤,依手指相對中心的位置決定上下左右
+  let dir = 0;
+  const setDir = d => {
+    if (d === dir) return;
+    dir = d;
+    V.send({ e: 'mv', d });
+    dpad.dataset.d = d;
+  };
+  let padId = null;
+  const padMove = e => {
+    const r = dpad.getBoundingClientRect(), dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+    const lim = r.width * 0.3, len = Math.hypot(dx, dy), k = len > lim ? lim / len : 1;
+    knob.style.transform = `translate(${dx * k}px, ${dy * k}px)`;
+    if (len < r.width * 0.1) return setDir(0);
+    setDir(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 2 : 4) : (dy > 0 ? 3 : 1));
+  };
+  dpad.addEventListener('pointerdown', e => {
+    e.preventDefault(); e.stopPropagation();
+    padId = e.pointerId;
+    try { dpad.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    dpad.classList.add('on');
+    padMove(e);
+  });
+  dpad.addEventListener('pointermove', e => { if (e.pointerId === padId) padMove(e); });
+  const padEnd = e => {
+    if (e.pointerId !== padId) return;
+    padId = null;
+    dpad.classList.remove('on');
+    knob.style.transform = '';
+    setDir(0);
+  };
+  dpad.addEventListener('pointerup', padEnd);
+  dpad.addEventListener('pointercancel', padEnd);
+  const dropBomb = () => {
+    V.send({ e: 'bomb' });
+    bombBtn.classList.remove('hit'); void bombBtn.offsetWidth; bombBtn.classList.add('hit');
+    buzz(15);
+  };
+  bombBtn.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); dropBomb(); });
+  const keys = [];
+  const kd = d => [() => { keys.push(d); setDir(d); }, () => { const i = keys.lastIndexOf(d); if (i >= 0) keys.splice(i, 1); setDir(keys[keys.length - 1] || 0); }];
+  keyCtl(C.cv, { ArrowUp: kd(1), ArrowRight: kd(2), ArrowDown: kd(3), ArrowLeft: kd(4), w: kd(1), d: kd(2), s: kd(3), a: kd(4), ' ': [dropBomb, null], Enter: [dropBomb, null] });
+
+  let st = null, prevP = new Map(), prevB = new Map(), curAt = 0, grid = '', hudTxt = '', statTxt = '';
+  const fxs = [], crumbs = [];
+  const deadAt = new Map();
+
+  function drawCell(c, r, g, now) {
+    if (g === '1') {
+      const edge = c === 0 || r === 0 || c === GW - 1 || r === GH - 1;
+      ctx.fillStyle = edge ? '#4a5470' : '#5d6984';
+      C.rr(c + 0.02, r + 0.02, 0.96, 0.96, 0.14);
+      ctx.fillStyle = edge ? '#7a86a3' : '#a3afc8';
+      C.rr(c + 0.02, r + 0.02, 0.96, 0.8, 0.14);
+      ctx.fillStyle = 'rgba(255,255,255,.35)';
+      ctx.fillRect(c + 0.14, r + 0.1, 0.5, 0.07);
+    } else if (g === '2') {
+      ctx.fillStyle = '#9a5a2a';
+      C.rr(c + 0.04, r + 0.04, 0.92, 0.92, 0.1);
+      ctx.fillStyle = '#e09a55';
+      C.rr(c + 0.04, r + 0.04, 0.92, 0.82, 0.1);
+      ctx.fillStyle = '#c47a3a';
+      ctx.fillRect(c + 0.04, r + 0.3, 0.92, 0.05);
+      ctx.fillRect(c + 0.04, r + 0.58, 0.92, 0.05);
+      ctx.fillRect(c + 0.48, r + 0.04, 0.05, 0.26);
+      ctx.fillRect(c + 0.26, r + 0.35, 0.05, 0.23);
+      ctx.fillRect(c + 0.7, r + 0.35, 0.05, 0.23);
+      ctx.fillStyle = 'rgba(255,255,255,.3)';
+      ctx.fillRect(c + 0.1, r + 0.09, 0.32, 0.05);
+    } else if (g >= 'a') {
+      const it = BOMB_ITEMS[g.charCodeAt(0) - 97], bob = Math.sin(now / 220 + c + r) * 0.04;
+      ctx.fillStyle = 'rgba(0,0,0,.18)';
+      ctx.beginPath(); ctx.ellipse(c + 0.5, r + 0.86, 0.3, 0.08, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff';
+      C.rr(c + 0.12, r + 0.1 + bob, 0.76, 0.72, 0.18);
+      ctx.fillStyle = it.c;
+      C.rr(c + 0.17, r + 0.15 + bob, 0.66, 0.62, 0.14);
+      C.emoji(it.e, c + 0.5, r + 0.47 + bob, 0.48);
+    }
+  }
+  function drawBomb(x, y, fuse, now) {
+    const hurry = fuse < 0.8, pul = 1 + Math.sin(now / (hurry ? 50 : 130)) * (hurry ? 0.1 : 0.05);
+    const rad = 0.36 * pul;
+    ctx.fillStyle = 'rgba(0,0,0,.25)';
+    ctx.beginPath(); ctx.ellipse(x, y + 0.34, 0.3, 0.08, 0, 0, Math.PI * 2); ctx.fill();
+    const g = ctx.createRadialGradient(x - 0.12, y - 0.12, 0.03, x, y, rad);
+    g.addColorStop(0, hurry && Math.floor(now / 90) % 2 ? '#ff6b6b' : '#6a6f80');
+    g.addColorStop(1, '#14161f');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y + 0.04, rad, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#3a3f52';
+    ctx.fillRect(x - 0.07, y - rad - 0.04, 0.14, 0.1);
+    ctx.strokeStyle = '#c9a26a'; ctx.lineWidth = 0.05;
+    ctx.beginPath(); ctx.moveTo(x, y - rad - 0.03); ctx.quadraticCurveTo(x + 0.12, y - rad - 0.16, x + 0.2, y - rad - 0.12); ctx.stroke();
+    const sp = 0.07 + Math.random() * 0.06;
+    ctx.fillStyle = Math.random() < 0.5 ? '#ffd23f' : '#ff7a1a';
+    ctx.beginPath(); ctx.arc(x + 0.2, y - rad - 0.12, sp, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.55)';
+    ctx.beginPath(); ctx.arc(x - 0.12, y - 0.08, 0.07, 0, Math.PI * 2); ctx.fill();
+  }
+  function drawFlame(i, k, now) {
+    const c = i % GW, r = Math.floor(i / GW), fl = 0.9 + Math.sin(now / 40 + i) * 0.08;
+    const outer = '#ff6d1f', mid = '#ffb52e', core = '#fff6c2';
+    const layer = (col, w) => {
+      ctx.fillStyle = col;
+      if (k === 1) C.rr(c - 0.02, r + 0.5 - w / 2, 1.04, w, w / 2);
+      else if (k === 2) C.rr(c + 0.5 - w / 2, r - 0.02, w, 1.04, w / 2);
+      else { ctx.beginPath(); ctx.arc(c + 0.5, r + 0.5, w * 0.62, 0, Math.PI * 2); ctx.fill(); }
+    };
+    ctx.save();
+    ctx.shadowColor = '#ff9a2e'; ctx.shadowBlur = 12;
+    layer(outer, 0.86 * fl);
+    ctx.restore();
+    layer(mid, 0.6 * fl);
+    layer(core, 0.3 * fl);
+  }
+  function drawPlayer(q, x, y, now) {
+    const s = q[0], f = q[5], P = PLAYERS[s];
+    const bob = f & 16 ? Math.abs(Math.sin(now / 80)) * 0.08 : 0;
+    if (f & 8 && Math.floor(now / 80) % 2) return; // 剛被防護罩救一命:閃爍
+    ctx.fillStyle = 'rgba(0,0,0,.25)';
+    ctx.beginPath(); ctx.ellipse(x, y + 0.36, 0.3, 0.09, 0, 0, Math.PI * 2); ctx.fill();
+    if (s === me) {
+      ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = 0.08;
+      ctx.beginPath(); ctx.ellipse(x, y + 0.36, 0.38, 0.13, 0, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.fillStyle = P.color;
+    ctx.beginPath(); ctx.arc(x, y + 0.1 - bob, 0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#1f3864'; ctx.lineWidth = 0.05; ctx.stroke();
+    C.char(s, x, y - 0.12 - bob, 0.92, true);
+    if (f & 1) {
+      ctx.strokeStyle = `rgba(90,180,255,${0.6 + Math.sin(now / 150) * 0.25})`; ctx.lineWidth = 0.07;
+      ctx.beginPath(); ctx.arc(x, y - 0.05, 0.55, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = 'rgba(120,200,255,.15)'; ctx.fill();
+    }
+    if (f & 2) {
+      ctx.fillStyle = `rgba(140,40,200,${0.25 + Math.sin(now / 90) * 0.15})`;
+      ctx.beginPath(); ctx.arc(x, y - 0.05, 0.55, 0, Math.PI * 2); ctx.fill();
+      C.emoji('💀', x + 0.34, y - 0.5, 0.32);
+    }
+  }
+  function draw() {
+    C.size(GW);
+    const now = performance.now();
+    for (let r = 0; r < GH; r++) for (let c = 0; c < GW; c++) {
+      ctx.fillStyle = (r + c) % 2 ? '#86d36f' : '#7bc964';
+      ctx.fillRect(c, r, 1.01, 1.01);
+    }
+    if (!st || !grid) return;
+    const a = Math.min(1, (now - curAt) / BOMB.TICK);
+    for (let i = 0; i < grid.length; i++) {
+      const g = grid[i];
+      if (g === '1' || g === '2') {
+        ctx.fillStyle = 'rgba(0,0,0,.16)';
+        ctx.fillRect(i % GW + 0.06, Math.floor(i / GW) + 0.9, 0.94, 0.14);
+      }
+    }
+    for (let i = 0; i < grid.length; i++) if (grid[i] !== '0') drawCell(i % GW, Math.floor(i / GW), grid[i], now);
+    for (let i = crumbs.length - 1; i >= 0; i--) { // 木箱被炸碎的碎片
+      const k = crumbs[i], age = (now - k.t) / 450;
+      if (age >= 1) { crumbs.splice(i, 1); continue; }
+      ctx.globalAlpha = 1 - age;
+      ctx.fillStyle = '#c47a3a';
+      for (let j = 0; j < 5; j++) {
+        const ang = j * 1.3 + k.c, d = age * 0.6;
+        ctx.fillRect(k.c + 0.5 + Math.cos(ang) * d - 0.08, k.r + 0.5 + Math.sin(ang) * d - 0.08 + age * age * 0.3, 0.16, 0.16);
+      }
+      ctx.globalAlpha = 1;
+    }
+    st.bm.forEach(b => {
+      const p = prevB.get(b[0]);
+      const x = p ? p[1] + (b[1] - p[1]) * a : b[1], y = p ? p[2] + (b[2] - p[2]) * a : b[2];
+      drawBomb(x, y, b[3] / 10, now);
+    });
+    st.fl.forEach(([i, k]) => drawFlame(i, k, now));
+    st.ps.slice().sort((p, q) => p[2] - q[2]).forEach(q => {
+      if (!q[3]) return;
+      const p = prevP.get(q[0]);
+      let x = q[1], y = q[2];
+      if (p && Math.abs(p[1] - x) + Math.abs(p[2] - y) < 1.5) { x = p[1] + (x - p[1]) * a; y = p[2] + (y - p[2]) * a; }
+      drawPlayer(q, x, y, now);
+    });
+    for (let i = fxs.length - 1; i >= 0; i--) {
+      const f = fxs[i], age = now - f.t;
+      if (age > f.life) { fxs.splice(i, 1); continue; }
+      ctx.save();
+      ctx.globalAlpha = 1 - age / f.life;
+      if (f.text) {
+        ctx.font = `900 ${0.42}px "Fredoka","Noto Sans TC",sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.lineWidth = 0.1; ctx.strokeStyle = '#1f3864'; ctx.fillStyle = '#fff';
+        ctx.strokeText(f.text, f.x, f.y - age / 900);
+        ctx.fillText(f.text, f.x, f.y - age / 900);
+      } else C.emoji(f.e, f.x, f.y - age / 700, f.size + age / 2000);
+      ctx.restore();
+    }
+    if (st.sd) { // 場地縮小中:畫面邊緣紅光
+      ctx.strokeStyle = `rgba(255,40,60,${0.35 + Math.sin(now / 160) * 0.2})`;
+      ctx.lineWidth = 0.18;
+      ctx.strokeRect(0.09, 0.09, GW - 0.18, GH - 0.18);
+    }
+  }
+  const loop = () => { if (!C.alive()) return; draw(); requestAnimationFrame(loop); };
+  requestAnimationFrame(loop);
+
+  function updateHud() {
+    const mm = Math.floor(st.tl / 60), ss = String(st.tl % 60).padStart(2, '0');
+    const alive = st.ps.filter(p => p[3]).length;
+    const meP = st.ps.find(p => p[0] === me);
+    let txt = `<span>第 <b>${st.rd}</b> / ${st.R} 局</span><span>⏱ ${mm}:${ss}</span><span>存活 ${alive}/${st.ps.length}</span>`;
+    if (st.sd) txt += '<span class="bwarn">⚠️ 場地縮小中!</span>';
+    if (meP && !meP[3]) txt += '<span class="dead">👻 你被炸飛了,看大家對決!</span>';
+    if (txt !== hudTxt) { hudTxt = txt; C.hud.innerHTML = txt; }
+    let s2 = '';
+    if (meP) {
+      const f = meP[5];
+      s2 = `<span>💣<b>${meP[6]}</b></span><span>🔥<b>${meP[7]}</b></span><span>👟<b>${Math.round((meP[8] - 30) / 5) + 1}</b></span>`
+        + (f & 1 ? '<span class="on">🛡️</span>' : '') + (f & 4 ? '<span class="on">🦶</span>' : '')
+        + (meP[9] ? `<span class="cur">${BOMB_CURSE[meP[9]]}</span>` : '');
+    }
+    if (s2 !== statTxt) { statTxt = s2; statsEl.innerHTML = s2; }
+  }
+
+  V.on = m => {
+    if (m.e === 's') {
+      if (m.gd) {
+        if (grid && m.gd.length === grid.length) for (let i = 0; i < grid.length; i++) if (grid[i] === '2' && m.gd[i] !== '2' && m.gd[i] !== '1') crumbs.push({ c: i % GW, r: Math.floor(i / GW), t: performance.now() });
+        grid = m.gd;
+      }
+      prevP = st ? new Map(st.ps.map(p => [p[0], p])) : new Map();
+      prevB = st ? new Map(st.bm.map(b => [b[0], b])) : new Map();
+      if (st && m.rd !== st.rd) { prevP = new Map(); prevB = new Map(); crumbs.length = 0; }
+      st = m;
+      curAt = performance.now();
+      const now = performance.now();
+      m.fx.forEach(f => {
+        const k = f[0];
+        if (k === 'b') { beep(70, 0.35, 'sawtooth', 0.12); beep(45, 0.4, 'square', 0.08, 0.02); }
+        else if (k === 'p') beep(240, 0.06, 'square', 0.05);
+        else if (k === 'k') beep(420, 0.08, 'triangle', 0.1);
+        else if (k === 'g') {
+          const it = BOMB_ITEMS[f[4]];
+          fxs.push({ text: f[3] === me && f[5] ? BOMB_CURSE[f[5]] : it.n, x: f[1], y: f[2] - 0.6, t: now, life: 1100 });
+          if (f[3] === me) { if (it.k === 'skull') SFX.bad(); else SFX.good(); buzz(25); }
+        } else if (k === 'd') {
+          fxs.push({ e: '👻', x: f[1], y: f[2] - 0.2, size: 0.8, t: now, life: 1400 });
+          fxs.push({ e: '💥', x: f[1], y: f[2], size: 1, t: now, life: 500 });
+          if (f[3] === me) { SFX.bad(); buzz([120, 60, 200]); }
+        } else if (k === 'sh') {
+          fxs.push({ e: '🛡️', x: f[1], y: f[2] - 0.4, size: 0.7, t: now, life: 800 });
+          beep(990, 0.12, 'sine', 0.12);
+        } else if (k === 'cu') fxs.push({ e: '💀', x: f[1], y: f[2] - 0.5, size: 0.6, t: now, life: 900 });
+        else if (k === 'w') beep(150, 0.05, 'square', 0.04);
+      });
+      updateHud();
+    } else if (m.e === 'rend') {
+      setDir(0);
+      const w = m.w;
+      const board = st ? st.ps.map(p => `<span class="vsp">${pinfo(p[0]).emoji}<b>${'⭐'.repeat(m.wins[p[0]] || 0) || '·'}</b></span>`).join('') : '';
+      C.overlay(`<div class="big">${w == null ? '🤝' : w === me ? '🏆' : '💥'}</div>
+        <div>${w == null ? '同歸於盡,這局平手!' : `${w === me ? '你' : esc(pinfo(w).name)} 贏了第 ${m.rd} 局!`}</div>
+        <div class="vsrow">${board}</div><div class="small">${m.done ? '比賽結束!' : '下一局馬上開始…'}</div>`, 3000);
+      if (w === me) SFX.win(); else SFX.tick();
+    }
+  };
+}
+
+/* =========================================================
    電腦玩家的行為:聽到房主的廣播,就像真人一樣送出操作
    ========================================================= */
 function botsHear(H, m) {
@@ -3408,6 +3993,119 @@ BOTS.mono = (H, s, m, k) => {
     const yes = m.pl[s].cash - cost >= keep;
     H.s.after(Math.round(rand(800, 1500) * k.spd), () => botSend(H, s, { e: 'buy', yes }));
   }
+};
+
+/* 轟炸超人的電腦:先算出每一格多久後會被炸到;危險就逃到安全的格子,
+   安全時去撿道具、炸木箱、靠近對手;放炸彈前一定先確認有路可以逃(越弱越常判斷失誤) */
+BOTS.bomb = (H, s, m, k) => {
+  if (m.t !== 'g' || m.e !== 's') return;
+  const st = H.bs[s] || (H.bs[s] = { t: 0, d: -1, g: '', last: 0, rd: 0 });
+  if (m.gd) st.g = m.gd;
+  if (m.rd !== st.rd) { st.rd = m.rd; st.d = -1; st.last = 0; }
+  const now = Date.now();
+  if (now - st.t < [150, 100, 70][NET.level] || m.ph !== 'play' || !st.g) return;
+  st.t = now;
+  const me = m.ps.find(p => p[0] === s);
+  if (!me || !me[3]) return;
+  const GW = BOMB.W, GH = BOMB.H, g = st.g;
+  const mc = Math.floor(me[1]), mr = Math.floor(me[2]), myI = mr * GW + mc;
+  const spd = me[9] === 'slow' ? 1.6 : me[8] / 10;
+  const bombCell = new Map(m.bm.map(b => [Math.floor(b[2]) * GW + Math.floor(b[1]), b]));
+  const solid = i => g[i] === '1' || g[i] === '2';
+  // 每一格多久後會有火焰(秒);連鎖爆炸:被炸到的炸彈會提早爆
+  function dangerMap(extra) {
+    const dg = new Array(GW * GH).fill(Infinity);
+    m.fl.forEach(([i]) => { dg[i] = 0; });
+    const bs = m.bm.map(b => ({ i: Math.floor(b[2]) * GW + Math.floor(b[1]), t: b[3] / 10, r: b[4] }));
+    if (extra) bs.push(extra);
+    bs.sort((a, b) => a.t - b.t);
+    for (let pass = 0; pass < 2; pass++) {
+      for (const b of bs) {
+        const c = b.i % GW, r = Math.floor(b.i / GW);
+        b.t = Math.min(b.t, dg[b.i]);
+        dg[b.i] = Math.min(dg[b.i], b.t);
+        for (let d = 1; d <= 4; d++) {
+          for (let q = 1; q <= b.r; q++) {
+            const i = (r + BOMB_DY[d] * q) * GW + c + BOMB_DX[d] * q;
+            if (g[i] === '1') break;
+            dg[i] = Math.min(dg[i], b.t);
+            if (g[i] === '2') break;
+          }
+        }
+      }
+    }
+    return dg;
+  }
+  // 從我現在的格子往外找路(不能穿過牆、木箱、別的炸彈、正在燒的火)
+  function bfs(dg, from) {
+    const dist = new Array(GW * GH).fill(-1), prev = new Array(GW * GH).fill(-1), q = [from];
+    dist[from] = 0;
+    while (q.length) {
+      const i = q.shift(), c = i % GW, r = Math.floor(i / GW);
+      for (let d = 1; d <= 4; d++) {
+        const j = (r + BOMB_DY[d]) * GW + c + BOMB_DX[d];
+        if (dist[j] >= 0 || solid(j) || (bombCell.has(j) && j !== from)) continue;
+        const arrive = (dist[i] + 1) / spd;
+        if (dg[j] <= arrive + 0.35 && dg[j] >= arrive - 0.6) continue; // 走到那裡時剛好在燒
+        dist[j] = dist[i] + 1; prev[j] = i; q.push(j);
+      }
+    }
+    return { dist, prev };
+  }
+  const firstStep = (prev, to, from) => { let i = to; while (prev[i] !== from && prev[i] >= 0) i = prev[i]; return i; };
+  const sloppy = Math.random() > k.sk + 0.04;
+  const dg = dangerMap();
+  let target = -1;
+
+  if (dg[myI] < Infinity && !(sloppy && Math.random() < 0.3)) { // 我站的地方會被炸到:逃!
+    const { dist, prev } = bfs(dg, myI);
+    let best = Infinity;
+    dist.forEach((dd, i) => { if (dd >= 0 && dg[i] === Infinity && dd < best) { best = dd; target = firstStep(prev, i, myI); } });
+    if (target < 0) target = myI;
+  } else {
+    const myBombs = m.bm.filter(b => b[5] === s).length;
+    const enemies = m.ps.filter(p => p[0] !== s && p[3]);
+    // 要不要在這裡放炸彈?旁邊有木箱,或對手在炸得到的直線上
+    let worth = 0;
+    for (let d = 1; d <= 4; d++) {
+      for (let q = 1; q <= me[7]; q++) {
+        const c = mc + BOMB_DX[d] * q, r = mr + BOMB_DY[d] * q, i = r * GW + c;
+        if (g[i] === '1') break;
+        if (g[i] === '2') { worth += q === 1 ? 2 : 1; break; }
+        if (enemies.some(p => Math.floor(p[1]) === c && Math.floor(p[2]) === r)) worth += 4;
+      }
+    }
+    if (worth >= 2 && myBombs < me[6] && me[9] !== 'nob' && !bombCell.has(myI) && now - st.last > 600) {
+      const dg2 = dangerMap({ i: myI, t: 2.5, r: me[7] });
+      const { dist } = bfs(dg2, myI);
+      const canFlee = dist.some((dd, i) => dd > 0 && dg2[i] === Infinity && dd / spd < 2.0);
+      if (canFlee || (sloppy && Math.random() < 0.25)) { st.last = now; botSend(H, s, { e: 'bomb' }); return; }
+    }
+    const { dist, prev } = bfs(dg, myI);
+    let best = Infinity, goal = -1;
+    dist.forEach((dd, i) => {
+      if (dd < 0 || dg[i] < Infinity) return;
+      let sc = Infinity;
+      if (g[i] === 'f') return; // 詛咒不撿
+      if (g[i] >= 'a') sc = dd - 6; // 道具優先
+      else {
+        const c = i % GW, r = Math.floor(i / GW);
+        const nearBox = [1, 2, 3, 4].some(d => g[(r + BOMB_DY[d]) * GW + c + BOMB_DX[d]] === '2');
+        const nearFoe = enemies.some(p => Math.abs(Math.floor(p[1]) - c) + Math.abs(Math.floor(p[2]) - r) <= 2);
+        if (nearBox) sc = dd + 1;
+        if (nearFoe) sc = Math.min(sc, dd + 2);
+      }
+      if (sc < best) { best = sc; goal = i; }
+    });
+    if (goal >= 0 && goal !== myI) target = firstStep(prev, goal, myI);
+    else target = myI;
+  }
+  // 朝目標格子的中心走
+  const tx = target % GW + 0.5, ty = Math.floor(target / GW) + 0.5, dx = tx - me[1], dy = ty - me[2];
+  let d = 0;
+  if (Math.abs(dx) > 0.08 || Math.abs(dy) > 0.08) d = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 2 : 4) : (dy > 0 ? 3 : 1);
+  if (me[9] === 'rev') d = [0, 3, 4, 1, 2][d];
+  if (d !== st.d) { st.d = d; botSend(H, s, { e: 'mv', d }); }
 };
 
 /* ---------- 防止雙指縮放 / 長按選單 ---------- */
