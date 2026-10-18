@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.10.22';
+const APP_VERSION = '2026.10.23';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -3644,134 +3644,34 @@ function vCheckers(V) {
    ========================================================= */
 const FLOOD = { SIZES: [14, 18, 22], PTS: [3, 2, 1, 1] };
 const floodTime = n => 60 + n * 4; // 每局秒數:棋盤越大給越久(14×14 116 秒、22×22 148 秒)
-const FLOOD_COLORS = ['#e0707a', '#ee9f5c', '#e6c15c', '#7cb485', '#5a8fc8', '#9b7fc4'];
-const FLOOD_NAMES = ['紅', '橘', '黃', '綠', '藍', '紫'];
-// 水彩紙張風:米白紙紋底;同色相連的區域畫成一整片水彩(邊緣手繪般微微抖動、內側顏料比較深、有暈染斑),不同色之間留一點紙白
-const floodPaper = (() => {
-  let tex = null;
-  return () => {
-    if (tex) return tex;
-    tex = document.createElement('canvas');
-    tex.width = tex.height = 256;
-    const x = tex.getContext('2d');
-    x.fillStyle = '#f7f1e3';
-    x.fillRect(0, 0, 256, 256);
-    for (let i = 0; i < 2600; i++) { // 紙的顆粒
-      const v = 200 + Math.random() * 50 | 0;
-      x.fillStyle = `rgba(${v - 30},${v - 40},${v - 60},${Math.random() * 0.1})`;
-      x.fillRect(Math.random() * 256, Math.random() * 256, 1 + Math.random() * 1.5, 1 + Math.random() * 1.5);
-    }
-    x.strokeStyle = 'rgba(150,120,80,.06)';
-    for (let i = 0; i < 70; i++) { // 紙的纖維
-      const px = Math.random() * 256, py = Math.random() * 256, an = Math.random() * Math.PI, l = 6 + Math.random() * 14;
-      x.lineWidth = 0.5 + Math.random();
-      x.beginPath(); x.moveTo(px, py); x.quadraticCurveTo(px + Math.cos(an) * l / 2 + 2, py + Math.sin(an) * l / 2 - 2, px + Math.cos(an) * l, py + Math.sin(an) * l); x.stroke();
-    }
-    return tex;
-  };
-})();
-const floodHash = (a, b, k) => { const h = Math.sin(a * 127.1 + b * 311.7 + k * 74.7) * 43758.5453; return h - Math.floor(h); };
+const FLOOD_COLORS = ['#d94639', '#f6aa17', '#299f66', '#026e84'];
+const FLOOD_NAMES = ['紅', '黃', '綠', '藍'];
+// 一格一格獨立的圓角方塊(深靛藍底、格子之間留縫);剛吞進來的格子會彈一下
 function floodPaint(ctx, g, n, W, anim, now) {
-  const cs = W / n, jit = cs * 0.11;
-  // 格子頂點加上固定的小抖動(相鄰格子共用同一個頂點,所以區域之間還是剛好接在一起)
-  const V = (vx, vy) => {
-    const ex = vx === 0 || vx === n, ey = vy === 0 || vy === n;
-    return [vx * cs + (ex ? 0 : (floodHash(vx, vy, 1) - 0.5) * 2 * jit), vy * cs + (ey ? 0 : (floodHash(vx, vy, 2) - 0.5) * 2 * jit)];
-  };
-  const sh = (hex, f) => { const v = parseInt(hex.slice(1), 16), ch = k => { const x = (v >> k) & 255; return Math.round(f > 0 ? x + (255 - x) * f : x * (1 + f)); }; return `rgb(${ch(16)},${ch(8)},${ch(0)})`; };
-  const paper = ctx.createPattern(floodPaper(), 'repeat');
-  ctx.fillStyle = paper;
+  const cs = W / n, gap = cs * 0.1, rad = cs * 0.19;
+  ctx.fillStyle = '#1a1930';
   ctx.fillRect(0, 0, W, W);
-  // 找出同色相連的區域
-  const comp = new Int32Array(n * n).fill(-1), regions = [];
-  for (let i = 0; i < n * n; i++) {
-    if (comp[i] >= 0) continue;
-    const cells = [i], c = g[i];
-    comp[i] = regions.length;
-    for (let k = 0; k < cells.length; k++) {
-      const j = cells[k], x = j % n, y = (j / n) | 0;
-      for (const m of [x > 0 ? j - 1 : -1, x < n - 1 ? j + 1 : -1, y > 0 ? j - n : -1, y < n - 1 ? j + n : -1]) {
-        if (m >= 0 && comp[m] < 0 && g[m] === c) { comp[m] = regions.length; cells.push(m); }
-      }
-    }
-    regions.push({ c, cells });
-  }
-  const edgesOf = r => { // 區域的外框線段(旁邊是別的顏色或棋盤邊)
-    const out = [];
-    r.cells.forEach(i => {
-      const x = i % n, y = (i / n) | 0, id = comp[i];
-      if (y === 0 || comp[i - n] !== id) out.push([x, y, x + 1, y]);
-      if (y === n - 1 || comp[i + n] !== id) out.push([x, y + 1, x + 1, y + 1]);
-      if (x === 0 || comp[i - 1] !== id) out.push([x, y, x, y + 1]);
-      if (x === n - 1 || comp[i + 1] !== id) out.push([x + 1, y, x + 1, y + 1]);
-    });
-    return out;
-  };
-  const allEdges = [];
-  regions.forEach(r => {
-    const col = FLOOD_COLORS[r.c];
-    ctx.save();
-    ctx.beginPath();
-    r.cells.forEach(i => {
-      const x = i % n, y = (i / n) | 0, p = [V(x, y), V(x + 1, y), V(x + 1, y + 1), V(x, y + 1)];
-      ctx.moveTo(p[0][0], p[0][1]); p.slice(1).forEach(q => ctx.lineTo(q[0], q[1])); ctx.closePath();
-    });
-    ctx.clip();
-    ctx.globalAlpha = 0.82;
-    ctx.fillStyle = col;
-    ctx.fillRect(0, 0, W, W);
-    // 暈染斑:顏料堆積比較深的地方
-    r.cells.forEach(i => {
-      if (floodHash(i, r.c, 3) > 0.45) return;
-      const x = (i % n + floodHash(i, 0, 4)) * cs, y = (((i / n) | 0) + floodHash(i, 0, 5)) * cs, rr = cs * (0.6 + floodHash(i, 0, 6) * 0.7);
-      const gr = ctx.createRadialGradient(x, y, 0, x, y, rr);
-      gr.addColorStop(0, sh(col, -0.25)); gr.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.globalAlpha = 0.22;
-      ctx.fillStyle = gr;
-      ctx.fillRect(x - rr, y - rr, rr * 2, rr * 2);
-    });
-    // 邊緣內側顏料比較深(水彩乾掉時的邊)
-    const es = edgesOf(r);
-    ctx.globalAlpha = 0.5;
-    ctx.strokeStyle = sh(col, -0.32);
-    ctx.lineWidth = cs * 0.14;
-    ctx.lineJoin = ctx.lineCap = 'round';
-    ctx.beginPath();
-    es.forEach(([x1, y1, x2, y2]) => { const p = V(x1, y1), q = V(x2, y2); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); });
-    ctx.stroke();
-    ctx.restore();
-    allEdges.push(...es);
-  });
-  // 不同顏色之間留一條細細的紙白
-  ctx.save();
-  ctx.strokeStyle = paper;
-  ctx.lineWidth = cs * 0.075;
-  ctx.lineJoin = ctx.lineCap = 'round';
-  ctx.beginPath();
-  allEdges.forEach(([x1, y1, x2, y2]) => { const p = V(x1, y1), q = V(x2, y2); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); });
-  ctx.stroke();
-  ctx.restore();
-  // 紙紋透上來
-  ctx.save();
-  ctx.globalCompositeOperation = 'multiply';
-  ctx.globalAlpha = 0.45;
-  ctx.fillStyle = paper;
-  ctx.fillRect(0, 0, W, W);
-  ctx.restore();
-  // 剛吞進來的格子:像濕顏料一樣暈開(先亮再慢慢沉下去)
   let busy = false;
-  if (anim) {
-    anim.forEach((t0, i) => {
-      const u = (now - t0) / 420;
-      if (u < 0) { busy = true; return; }
-      if (u >= 1) { anim.delete(i); return; }
-      busy = true;
-      const x = (i % n + 0.5) * cs, y = (((i / n) | 0) + 0.5) * cs, rr = cs * (0.35 + u * 0.75);
-      const gr = ctx.createRadialGradient(x, y, 0, x, y, rr);
-      gr.addColorStop(0, `rgba(255,252,240,${(1 - u) * 0.7})`); gr.addColorStop(1, 'rgba(255,252,240,0)');
-      ctx.fillStyle = gr;
-      ctx.fillRect(x - rr, y - rr, rr * 2, rr * 2);
-    });
+  for (let i = 0; i < n * n; i++) {
+    const x = (i % n) * cs, y = ((i / n) | 0) * cs;
+    let sc = 1, flash = 0;
+    const t0 = anim && anim.get(i);
+    if (t0 != null) {
+      const u = (now - t0) / 280;
+      if (u < 0) busy = true;
+      else if (u < 1) { busy = true; sc = 0.72 + 0.28 * (1 - (1 - u) ** 3) + Math.sin(u * Math.PI) * 0.1; flash = 1 - u; }
+      else anim.delete(i);
+    }
+    const w = (cs - gap * 2) * sc, ox = x + (cs - w) / 2, oy = y + (cs - w) / 2;
+    ctx.fillStyle = FLOOD_COLORS[g[i]];
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(ox, oy, w, w, rad); else ctx.rect(ox, oy, w, w);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.07)'; // 上緣極淡的亮邊
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(ox, oy, w, w * 0.45, [rad, rad, 0, 0]); else ctx.rect(ox, oy, w, w * 0.45);
+    ctx.fill();
+    if (flash) { ctx.fillStyle = `rgba(255,255,255,${flash * 0.4})`; ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(ox, oy, w, w, rad); else ctx.rect(ox, oy, w, w); ctx.fill(); }
   }
   return busy;
 }
@@ -3886,7 +3786,7 @@ function vFlood(V) {
 
   function draw() {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    if (!g) { ctx.fillStyle = ctx.createPattern(floodPaper(), 'repeat'); ctx.fillRect(0, 0, cv.width, cv.width); return; }
+    if (!g) { ctx.fillStyle = '#1a1930'; ctx.fillRect(0, 0, cv.width, cv.width); return; }
     if (floodPaint(ctx, g, n, cv.width, anim, performance.now())) requestAnimationFrame(draw);
   }
   function drawMini(s) {
@@ -4355,7 +4255,7 @@ BOTS.flood = (H, s, m, k) => {
   const step = () => {
     if (H.bs[s] !== st || floodDone(g, n) || i >= m.limit) return;
     let c;
-    if (Math.random() < (1 - k.sk) * 0.45) c = pick([0, 1, 2, 3, 4, 5].filter(x => x !== g[0]));
+    if (Math.random() < (1 - k.sk) * 0.45) c = pick(FLOOD_COLORS.map((_, k) => k).filter(x => x !== g[0]));
     else c = floodGreedy(g, n)[0];
     floodApply(g, n, c);
     botSend(H, s, { e: 'mv', c, i: i++ });
