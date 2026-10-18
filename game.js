@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.10.31';
+const APP_VERSION = '2026.10.32';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -4117,15 +4117,14 @@ function busPerson(ci, pose, hv, sv, pv) {
   BUS_PEOPLE.cache.set(key, cur);
   return cur;
 }
-// 每個乘客有固定的長相(依編號決定),隊伍移動時不會變來變去:朝向、髮色、膚色、褲子、身高
+// 每個乘客有固定的長相(依編號決定),隊伍移動時不會變來變去:髮色、膚色、褲子、身高(朝向一律是正面)
 const BUS_LOOK = new Map();
 function busLook(id) {
   let o = BUS_LOOK.get(id);
   if (o) return o;
   const r = busRng(id * 97 + 13), pick = a => a[Math.floor(r() * a.length)];
-  const kind = r(); // 正面 35%、斜面 25%、背面 15%、側面 25%
-  const pose = kind < 0.35 ? pick([0, 1]) : kind < 0.6 ? pick([2, 3]) : kind < 0.75 ? pick([4, 5]) : pick([6, 7]);
-  o = { pose, flip: r() < 0.5, hv: pick([0, 0, 1, 1, 2, 3, 4]), sv: pick([0, 0, 1, 2, 3]), pv: pick([0, 0, 1, 2, 3]), sz: 0.93 + r() * 0.14 };
+  const pose = pick([0, 1]); // 大家都面向前方(看著畫面),兩個正面姿勢輪流出現
+  o = { pose, flip: false, hv: pick([0, 0, 1, 1, 2, 3, 4]), sv: pick([0, 0, 1, 2, 3]), pv: pick([0, 0, 1, 2, 3]), sz: 0.93 + r() * 0.14 };
   BUS_LOOK.set(id, o);
   return o;
 }
@@ -4407,10 +4406,7 @@ function busGame() {
   function drawPerson(x, y, c, s, now, k, face, id) {
     const bob = Math.abs(Math.sin(now / 260 + k * 0.7)) * 0.025, col = BUS_COLORS[c];
     if (BUS_PEOPLE.ready && BUS_PEOPLE.base.length) {
-      const lk = busLook(id == null ? k : id), moving = face === 'l' || face === 'r';
-      let pose = lk.pose, flip = lk.flip;
-      if (moving) { pose = 6; flip = face === 'l'; } // 往公車走的時候一律看著前進的方向
-      else if (face === 'f' && pose >= 4 && pose <= 5) pose = 0;
+      const lk = busLook(id == null ? k : id), moving = face === 'l' || face === 'r', pose = lk.pose, flip = false; // 一律面向前方,走路也一樣
       const sp = busPerson(c, pose, lk.hv, lk.sv, lk.pv);
       const h = 0.78 * s * lk.sz, w = sp.width / sp.height * h;
       blob(x, y + 0.07 * s, 0.17 * s, 0.06 * s, 'rgba(0,0,0,.26)');
