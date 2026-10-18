@@ -1792,3 +1792,10 @@ button:disabled { cursor: not-allowed; }
 .bgtier[data-t="超難"] { background: #ef4444; }
 .bgtier[data-t="地獄"] { background: #1f2937; box-shadow: 0 0 0 2px #ef4444; }
 .screen.busg { background: linear-gradient(#9fdcff, #d9f3ff 30%, #6dbb58 30.1%, #5fae4c); }
+
+.bgkey { margin-top: 2px; padding: 4px 14px; border-radius: 999px; background: rgba(31,56,100,.1); color: var(--ink); font-size: .78rem; font-weight: 800; }
+.bgkeyst { font-size: .78rem; font-weight: 800; opacity: .7; }
+.bgkeyrow, .bgjumprow { display: flex; align-items: center; gap: 8px; }
+.bgkeyin, .bgjump { width: 100px; padding: 7px 10px; border-radius: 12px; border: 3px solid var(--ink); background: #fff; font: inherit; font-weight: 900; font-size: 1rem; text-align: center; color: var(--ink); outline: none; -webkit-user-select: text; user-select: text; }
+.bgkeyin.bad { animation: shake .4s; border-color: #e53935; }
+.bglv { cursor: pointer; }

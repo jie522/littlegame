@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.10.26';
+const APP_VERSION = '2026.10.28';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -3965,11 +3965,150 @@ function busLevel(L) {
   return { W, H, slots, buses: placed, queue, nColors, tier };
 }
 
+/* ---------- 乘客角色:用附件的立體小人圖(戴帽子的 T 恤小人),切下來之後把衣服和帽子換成各種公車的顏色 ---------- */
+const BUS_HUES = [4, 214, 48, 140, 276, 24, 332]; // 跟 BUS_COLORS 一一對應的色相
+const BUS_PEOPLE = { ready: false, sheet: null, base: [], v: [] };
+(() => {
+  const im = new Image();
+  im.onload = () => {
+    try { busCutPeople(im); BUS_PEOPLE.ready = true; } catch (e) { /* 失敗就用程式畫的小人 */ }
+  };
+  im.src = 'assets/people.png';
+})();
+function busRgb2Hsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
+  let h = 0, s = 0;
+  if (d) {
+    s = d / (1 - Math.abs(2 * l - 1));
+    h = mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    h *= 60;
+  }
+  return [h, s, l];
+}
+function busHsl2Rgb(h, s, l) {
+  const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = l - c / 2;
+  const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  return [(r + m) * 255, (g + m) * 255, (b + m) * 255];
+}
+function busCutPeople(im) {
+  const W = im.width, H = im.height, c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  x.drawImage(im, 0, 0);
+  const src = x.getImageData(0, 0, W, H).data, BG = 235;
+  const alpha = new Float32Array(W * H), mask = new Uint8Array(W * H);
+  for (let i = 0; i < W * H; i++) {
+    const r = src[i * 4], g = src[i * 4 + 1], b = src[i * 4 + 2], mx = Math.max(r, g, b) / 255, ch = (mx * 255 - Math.min(r, g, b)) / 255;
+    alpha[i] = Math.max(0, Math.min(1, Math.max((ch - 0.09) / 0.1, (0.42 - mx) / 0.12)));
+    mask[i] = alpha[i] > 0.5 ? 1 : 0;
+  }
+  // 附件是 8 欄 x 4 排的格子:先找出所有相連的色塊,再依位置歸到各自的格子(一個小人可能被切成頭和身體兩塊)
+  const lab = new Int32Array(W * H).fill(-1), comps = [];
+  for (let i = 0; i < W * H; i++) {
+    if (!mask[i] || lab[i] >= 0) continue;
+    const q = [i], id = comps.length;
+    lab[i] = id;
+    let x0 = W, y0 = H, x1 = 0, y1 = 0;
+    for (let k = 0; k < q.length; k++) {
+      const p = q[k], px = p % W, py = (p / W) | 0;
+      if (px < x0) x0 = px; if (px > x1) x1 = px; if (py < y0) y0 = py; if (py > y1) y1 = py;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = px + dx, ny = py + dy;
+        if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+        const np = ny * W + nx;
+        if (mask[np] && lab[np] < 0) { lab[np] = id; q.push(np); }
+      }
+    }
+    comps.push({ n: q.length, x0, y0, x1, y1 });
+  }
+  const cellW = W / 8, cellH = H / 4, cells = new Map(), cellOf = new Int32Array(comps.length).fill(-1);
+  comps.forEach((p, id) => {
+    if (p.n < 40) return;
+    const cx = (p.x0 + p.x1) / 2, cy = (p.y0 + p.y1) / 2, key = Math.min(3, Math.floor(cy / cellH)) * 8 + Math.min(7, Math.floor(cx / cellW));
+    cellOf[id] = key;
+    const m = cells.get(key) || { key, x0: W, y0: H, x1: 0, y1: 0, n: 0 };
+    m.x0 = Math.min(m.x0, p.x0); m.y0 = Math.min(m.y0, p.y0); m.x1 = Math.max(m.x1, p.x1); m.y1 = Math.max(m.y1, p.y1); m.n += p.n;
+    cells.set(key, m);
+  });
+  const people = [...cells.values()].filter(p => p.n > 800).sort((p, q) => p.key - q.key);
+  // 每個小人切成透明背景的小圖(邊緣的灰色底要扣掉,不然會有一圈白邊)
+  BUS_PEOPLE.base = people.map(p => {
+    const w = p.x1 - p.x0 + 5, h = p.y1 - p.y0 + 5, oc = document.createElement('canvas');
+    oc.width = w; oc.height = h;
+    const ox = oc.getContext('2d'), out = ox.createImageData(w, h);
+    const mine = i => lab[i] >= 0 && cellOf[lab[i]] === p.key;
+    const outside = new Uint8Array(w * h), st = [];
+    const solid = (xx, yy) => { const sx = p.x0 - 2 + xx, sy = p.y0 - 2 + yy; return sx >= 0 && sy >= 0 && sx < W && sy < H && mine(sy * W + sx); };
+    for (let xx = 0; xx < w; xx++) { st.push(xx, (h - 1) * w + xx); }
+    for (let yy = 0; yy < h; yy++) { st.push(yy * w, yy * w + w - 1); }
+    while (st.length) { // 小人裡面的白色反光不能變成洞:從邊框往內淹,淹不到的就是小人內部
+      const q = st.pop();
+      if (outside[q]) continue;
+      const qx = q % w, qy = (q / w) | 0;
+      if (solid(qx, qy)) continue;
+      outside[q] = 1;
+      if (qx > 0) st.push(q - 1); if (qx < w - 1) st.push(q + 1); if (qy > 0) st.push(q - w); if (qy < h - 1) st.push(q + w);
+    }
+    for (let yy = 0; yy < h; yy++) for (let xx = 0; xx < w; xx++) {
+      const sx = p.x0 - 2 + xx, sy = p.y0 - 2 + yy;
+      if (sx < 0 || sy < 0 || sx >= W || sy >= H) continue;
+      const i = sy * W + sx;
+      let a = alpha[i];
+      if (!outside[yy * w + xx]) a = 1; // 小人裡面(含白色反光)
+      else if (a > 0 && !mine(i)) {
+        let near = false; // 只保留這個小人旁邊的像素,不要把隔壁的小人帶進來
+        for (let dy = -1; dy <= 1 && !near; dy++) for (let dx = -1; dx <= 1; dx++) { const j = i + dy * W + dx; if (j >= 0 && j < W * H && mine(j)) { near = true; break; } }
+        if (!near) a = 0;
+      }
+      if (a <= 0.02) continue;
+      const o = (yy * w + xx) * 4, ea = a < 1 ? a * a : 1; // 邊緣的半透明收緊一點,看起來不會有一圈淡淡的白邊
+      for (let k = 0; k < 3; k++) out.data[o + k] = Math.max(0, Math.min(255, (src[i * 4 + k] - (1 - a) * BG) / a));
+      out.data[o + 3] = Math.round(ea * 255);
+    }
+    ox.putImageData(out, 0, 0);
+    return oc;
+  });
+  // 換色:把「藍色的帽子和衣服」(和第 3 排紅色的)轉成各種顏色,膚色、頭髮、牛仔褲、鞋子不動
+  BUS_PEOPLE.v = BUS_HUES.map((hue, ci) => BUS_PEOPLE.base.map(b => {
+    const oc = document.createElement('canvas');
+    oc.width = b.width; oc.height = b.height;
+    const ox = oc.getContext('2d');
+    ox.drawImage(b, 0, 0);
+    const img = ox.getImageData(0, 0, b.width, b.height), d = img.data;
+    for (let i = 0; i < d.length; i += 4) {
+      if (!d[i + 3]) continue;
+      const [h, s, l] = busRgb2Hsl(d[i], d[i + 1], d[i + 2]);
+      const blue = h > 195 && h < 240, red = h > 345 || h < 10;
+      if (!((blue || red) && ((l > 0.42 && s > 0.3) || (s > 0.55 && l > 0.25)))) continue;
+      const sat = ci === 2 ? Math.min(1, s * 1.05) : s; // 黃色不要太灰
+      const lig = ci === 2 ? Math.min(0.9, l * 1.22) : ci === 5 ? l * 1.05 : l;
+      const [r, g, bb] = busHsl2Rgb(hue, sat, lig);
+      d[i] = r; d[i + 1] = g; d[i + 2] = bb;
+    }
+    ox.putImageData(img, 0, 0);
+    return oc;
+  }));
+  BUS_PEOPLE.s = BUS_PEOPLE.v.map(row => row.map(src => {
+    let cur = src;
+    while (cur.height > 52) {
+      const n = document.createElement('canvas');
+      n.width = Math.max(1, Math.round(cur.width / 2)); n.height = Math.max(1, Math.round(cur.height / 2));
+      const nx = n.getContext('2d');
+      nx.imageSmoothingQuality = 'high';
+      nx.drawImage(cur, 0, 0, n.width, n.height);
+      cur = n;
+    }
+    return cur;
+  }));
+}
 function busGame() {
   resetView();
   app.innerHTML = '';
   let level = Math.max(1, store.get('busLevel', 1) | 0);
-  const maxLv = () => Math.max(1, store.get('busMax', 1) | 0);
+  const realMax = () => Math.max(1, store.get('busMax', 1) | 0);
+  const unlocked = () => !!store.get('busKey', false); // 輸入密碼 0522 後可以跳到任何一關
+  const maxLv = () => (unlocked() ? 999 : realMax());
   const scr = el('div', 'screen busg');
   scr.innerHTML = `
     <div class="bgtop">
@@ -4132,7 +4271,7 @@ function busGame() {
   function end(win) {
     G.state = win ? 'win' : 'lose';
     if (win) {
-      store.set('busMax', Math.max(maxLv(), level + 1));
+      store.set('busMax', Math.max(realMax(), level + 1));
       SFX.win(); confetti(); buzz([60, 60, 120]);
       ov.innerHTML = `<div class="bgcard"><div class="bgbig">🎉</div><h2>第 ${level} 關 過關!</h2><p>開走了 ${G.buses.length} 台公車 · 載了 ${G.buses.reduce((t, b) => t + b.cap, 0)} 位乘客</p>
         <button class="btn big green bgnext"><span class="bi">▶</span><span class="bt">下一關</span></button><button class="btn white sm bgagain">再玩一次</button></div>`;
@@ -4216,8 +4355,18 @@ function busGame() {
     ctx.fillStyle = '#8b93a3'; ctx.fillRect(x - 0.025, y - 0.3, 0.05, 0.3);
     ball(x, y - 0.32, 0.05, '#c8ced9');
   }
-  function drawPerson(x, y, c, s, now, k) {
+  function drawPerson(x, y, c, s, now, k, face) {
     const bob = Math.abs(Math.sin(now / 260 + k * 0.7)) * 0.025, col = BUS_COLORS[c];
+    if (BUS_PEOPLE.ready && BUS_PEOPLE.s) {
+      const side = face === 'l' || face === 'r', sp = BUS_PEOPLE.s[c][side ? 6 : [0, 1, 2, 3][k % 4]];
+      const h = 0.78 * s, w = sp.width / sp.height * h;
+      blob(x, y + 0.07 * s, 0.17 * s, 0.06 * s, 'rgba(0,0,0,.26)');
+      ctx.save();
+      if (face === 'l') { ctx.translate(x, 0); ctx.scale(-1, 1); ctx.translate(-x, 0); }
+      ctx.drawImage(sp, x - w / 2, y + 0.08 * s - h - bob * (side ? 2 : 1), w, h);
+      ctx.restore();
+      return;
+    }
     blob(x + 0.03 * s, y + 0.02 * s, 0.13 * s, 0.05 * s, 'rgba(0,0,0,.25)');
     ctx.fillStyle = shade(col, -0.45);
     rr(x - 0.08 * s, y - 0.12 * s, 0.06 * s, 0.13 * s, 0.03 * s); ctx.fill();
@@ -4350,7 +4499,8 @@ function busGame() {
     G.buses.filter(b => b.st !== 'gone').sort((p, q) => p.py - q.py).forEach(b => drawBus(b, now));
     G.walkers.forEach((w, k) => {
       const tx = w.bus.px, ty = w.bus.py - 0.15, u = w.t;
-      drawPerson(w.fx + (tx - w.fx) * u, w.fy + 0.12 + (ty - w.fy) * u - Math.sin(u * Math.PI) * 0.3, w.c, 1 - u * 0.35, now, k);
+      const dx = tx - w.fx, face = Math.abs(dx) > 0.5 ? (dx < 0 ? 'l' : 'r') : 'f';
+      drawPerson(w.fx + dx * u, w.fy + 0.12 + (ty - w.fy) * u - Math.sin(u * Math.PI) * 0.3, w.c, 1 - u * 0.35, now, k, face);
     });
   }
   function frame(now) {
@@ -4382,7 +4532,35 @@ function busGame() {
     else if (e.target.closest('.bgprev')) { level = Math.max(1, level - 1); showMenu(); }
     else if (e.target.closest('.bgnextlv')) { level = Math.min(maxLv(), level + 1); showMenu(); }
     else if (e.target.closest('.bggo')) start(level);
+    else if (e.target.closest('.bgkey')) askKey();
+    else if (e.target.closest('.bgkeyok')) tryKey();
+    else if (e.target.closest('.bgjumpgo')) jumpTo();
   });
+  ov.addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    if (e.target.closest('.bgkeyin')) tryKey();
+    else if (e.target.closest('.bgjump')) jumpTo();
+  });
+  function askKey() { // 跳出密碼輸入
+    const b = $('.bgkey', ov);
+    if (!b) return;
+    b.outerHTML = '<div class="bgkeyrow"><input class="bgkeyin" type="password" inputmode="numeric" maxlength="8" placeholder="密碼" autocomplete="off"><button class="btn green sm bgkeyok">確定</button></div>';
+    const inp = $('.bgkeyin', ov);
+    if (inp) inp.focus();
+  }
+  function tryKey() {
+    const inp = $('.bgkeyin', ov);
+    if (!inp) return;
+    if (inp.value.trim() === '0522') { store.set('busKey', true); SFX.win(); toast('🔓 已解鎖跳關!'); showMenu(); }
+    else { inp.value = ''; inp.classList.remove('bad'); void inp.offsetWidth; inp.classList.add('bad'); SFX.bad(); buzz(80); }
+  }
+  function jumpTo() {
+    const inp = $('.bgjump', ov);
+    const n = Math.max(1, Math.min(999, parseInt(inp && inp.value, 10) || 1));
+    level = n;
+    showMenu();
+  }
+  $('.bglv', scr).addEventListener('click', () => { if (G && G.state !== 'menu') showMenu(); }); // 點上面的「第 N 關」可以隨時回到選關畫面
   const ro = new ResizeObserver(() => { if (!cv.isConnected) return ro.disconnect(); if (G) { layout(); G.buses.forEach(b => { if (b.st === 'lot' && !b.anim) { const [x, y] = busCenter(b); b.px = x; b.py = y; } }); } });
   ro.observe(stage);
 
@@ -4394,7 +4572,9 @@ function busGame() {
     ov.innerHTML = `<div class="bgcard"><div class="bgbig">🚌</div><h2>公車大塞車</h2>
       <p>點公車把它開出停車場,讓排隊的乘客坐上<b>同顏色</b>的公車!<br>候車格塞滿、又沒人能上車就輸了</p>
       <div class="bglvsel"><button class="bgprev" ${level <= 1 ? 'disabled' : ''}>‹</button><span>第 <b>${level}</b> 關<i class="bgtier" data-t="${G.tier}">${G.tier}</i></span><button class="bgnextlv" ${level >= maxLv() ? 'disabled' : ''}>›</button></div>
-      <button class="btn big green bggo"><span class="bi">▶</span><span class="bt">開始</span></button></div>`;
+      ${unlocked() ? `<div class="bgjumprow"><input class="bgjump" type="number" inputmode="numeric" min="1" max="999" value="${level}" aria-label="跳到第幾關"><button class="btn white sm bgjumpgo">跳關</button></div>` : ''}
+      <button class="btn big green bggo"><span class="bi">▶</span><span class="bt">開始</span></button>
+      ${unlocked() ? '<small class="bgkeyst">🔓 已解鎖跳關</small>' : '<button class="bgkey" aria-label="輸入密碼">🔑 輸入密碼</button>'}</div>`;
     ov.classList.add('on');
   }
   showMenu(); // 直接開選關畫面(不要等 requestAnimationFrame,背景分頁時它會暫停)
