@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.10.28';
+const APP_VERSION = '2026.10.29';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -3961,8 +3961,19 @@ function busLevel(L) {
     rem.set(b.id, rem.get(b.id) - 1);
     if (!rem.get(b.id)) open.splice(open.indexOf(b), 1);
   }
+  // 第 7 關起:停車場裡有石頭。優先放在公車的前方(擋路),越後面越多、越硬(要敲 2 下)
+  const rocks = [], rr2 = busRng(L * 131 + 5), nRock = L < 7 ? 0 : Math.min(14, 1 + Math.floor((L - 7) / 2.5));
+  const hardP = L >= 14 ? Math.min(0.65, (L - 13) * 0.045) : 0;
+  const empty = [];
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (occ[y][x] < 0) empty.push([x, y]);
+  const onPath = new Set();
+  placed.forEach(b => busPath(b, W, H).forEach(([x, y]) => { if (occ[y][x] < 0) onPath.add(x + ',' + y); }));
+  const pool = empty.filter(([x, y]) => onPath.has(x + ',' + y)), rest = empty.filter(([x, y]) => !onPath.has(x + ',' + y));
+  for (const arr of [pool, rest]) for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(rr2() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; }
+  pool.concat(rest).slice(0, nRock).forEach(([x, y]) => rocks.push({ x, y, hp: rr2() < hardP ? 2 : 1 }));
+  rocks.forEach(r => { r.max = r.hp; });
   const tier = L <= 5 ? '簡單' : L <= 12 ? '普通' : L <= 25 ? '困難' : L <= 45 ? '超難' : '地獄';
-  return { W, H, slots, buses: placed, queue, nColors, tier };
+  return { W, H, slots, buses: placed, queue, nColors, tier, rocks };
 }
 
 /* ---------- 乘客角色:用附件的立體小人圖(戴帽子的 T 恤小人),切下來之後把衣服和帽子換成各種公車的顏色 ---------- */
@@ -4117,10 +4128,10 @@ function busGame() {
       <button class="iconbtn bgretry" aria-label="重來">↻</button>
     </div>
     <div class="bgstage"><canvas class="bgcv"></canvas><div class="bgov"></div></div>
-    <div class="bgbar"><span class="bgleft">🧍 <b>0</b> 人等車</span><button class="bgplus">🅿️ +1 候車格</button></div>`;
+    <div class="bgbar"><span class="bgleft" title="還在排隊的乘客">🧍 <b>0</b></span><div class="bgtools"><button class="bgturn">🔄 轉向 <b>2</b></button><button class="bgplus">🅿️ +1 候車格</button></div></div>`;
   app.appendChild(scr);
   const stage = $('.bgstage', scr), cv = $('.bgcv', scr), ctx = cv.getContext('2d'), ov = $('.bgov', scr);
-  const leftEl = $('.bgleft b', scr), plusBtn = $('.bgplus', scr), lvEl = $('.bglv b', scr), tierEl = $('.bgtier', scr);
+  const leftEl = $('.bgleft b', scr), plusBtn = $('.bgplus', scr), turnBtn = $('.bgturn', scr), lvEl = $('.bglv b', scr), tierEl = $('.bgtier', scr);
   let G = null, sc = 1, ox = 0, oy = 0, raf = 0, last = 0;
 
   // ---------- 版面(世界座標的單位是「一格」) ----------
@@ -4144,7 +4155,7 @@ function busGame() {
     level = L;
     store.set('busLevel', L);
     const lv = busLevel(L);
-    G = { ...lv, level: L, queue: lv.queue.slice(), state: 'play', walkers: [], slotOf: new Array(7).fill(null), plusUsed: false, boardCd: 0.6, endT: 0, moves: 0 };
+    G = { ...lv, level: L, queue: lv.queue.slice(), state: 'play', walkers: [], slotOf: new Array(7).fill(null), plusUsed: false, boardCd: 0.6, endT: 0, moves: 0, rocks: lv.rocks.map(r => ({ ...r, shake: 0 })), parts: [], turns: 2, turning: false };
     G.buses = lv.buses.map(b => { const o = { ...b, st: 'lot', boarded: 0, incoming: 0, anim: null, shake: 0 }; return o; });
     layout();
     G.buses.forEach(b => { const [x, y] = busCenter(b); b.px = x; b.py = y; b.ang = ANG[b.dir]; b.scale = 1; });
@@ -4154,6 +4165,7 @@ function busGame() {
     tierEl.dataset.t = lv.tier;
     plusBtn.disabled = false;
     plusBtn.classList.remove('used');
+    updTurn();
     ov.className = 'bgov';
     updBar();
   }
@@ -4183,14 +4195,16 @@ function busGame() {
   function tap(b) {
     if (G.state !== 'play' || b.st !== 'lot' || b.anim) return;
     const path = busPath(b, G.W, G.H);
-    const blocker = path.findIndex(([x, y]) => G.buses.some(o => o !== b && o.st === 'lot' && busCells(o).some(c => c[0] === x && c[1] === y)));
+    const blocker = path.findIndex(([x, y]) => G.rocks.some(r => r.x === x && r.y === y) || G.buses.some(o => o !== b && o.st === 'lot' && busCells(o).some(c => c[0] === x && c[1] === y)));
     const [dx, dy] = BUS_DIRS[b.dir], [cx, cy] = busCenter(b);
     if (blocker >= 0) { // 被擋住:往前撞一下再退回來
       const d = blocker + 0.18;
       const hit = G.buses.find(o => o !== b && o.st === 'lot' && busCells(o).some(c => c[0] === path[blocker][0] && c[1] === path[blocker][1]));
+      const rk = G.rocks.find(r => r.x === path[blocker][0] && r.y === path[blocker][1]);
       drive(b, [[cx + dx * d, cy + dy * d], [cx, cy]], 11, null);
       b.anim.keepAng = true;
-      setTimeout(() => { if (hit) hit.shake = 0.35; beep(140, 0.12, 'square', 0.1); buzz(30); }, d / 11 * 1000);
+      setTimeout(() => { if (hit) hit.shake = 0.35; if (rk) rk.shake = 0.35; beep(140, 0.12, 'square', 0.1); buzz(30); }, d / 11 * 1000);
+      if (rk && !G.rockHint) { G.rockHint = true; toast('前面有石頭!點石頭把它敲碎'); }
       return;
     }
     const k = G.slotOf.findIndex((s, i) => i < G.slots && s == null);
@@ -4216,9 +4230,43 @@ function busGame() {
     drive(b, pts, 13, () => { b.st = 'slot'; b.ang = -Math.PI / 2; beep(520, 0.08, 'triangle', 0.08); }, 0.74);
   }
 
+  // ---------- 石頭與轉向 ----------
+  const OPP = { L: 'R', R: 'L', U: 'D', D: 'U' };
+  function smash(r) {
+    if (G.state !== 'play') return;
+    r.hp--;
+    r.shake = 0.3;
+    G.hammer = { x: r.x, y: r.y, t: 0 };
+    const px = G.LX + r.x + 0.5, py = G.LY + r.y + 0.5, n = r.hp <= 0 ? 16 : 6;
+    for (let i = 0; i < n; i++) G.parts.push({ x: px, y: py - 0.2, vx: (Math.random() - 0.5) * 3.2, vy: -1 - Math.random() * 2.4, life: 0.6 + Math.random() * 0.4, t: 0, c: Math.random() < 0.4 ? '#8d939c' : '#b9bec7', s: 0.04 + Math.random() * 0.06 });
+    beep(r.hp <= 0 ? 90 : 160, 0.14, 'square', 0.12); beep(r.hp <= 0 ? 60 : 220, 0.1, 'sawtooth', 0.06, 0.04);
+    buzz(r.hp <= 0 ? 40 : 20);
+    if (r.hp <= 0) G.rocks = G.rocks.filter(o => o !== r);
+  }
+  function updTurn() {
+    $('b', turnBtn).textContent = G.turns;
+    turnBtn.disabled = !G.turns;
+    turnBtn.classList.toggle('on', G.turning);
+    stage.classList.toggle('turning', G.turning);
+  }
+  function turnBus(b) { // 公車調頭:車頭變車尾,往反方向開(佔的格子不變)
+    if (G.state !== 'play' || b.st !== 'lot' || b.anim || !G.turns) return;
+    G.turns--;
+    G.turning = false;
+    b.dir = OPP[b.dir];
+    const to = b.ang + Math.PI;
+    b.spin = { from: b.ang, to, t: 0 };
+    SFX.good(); beep(480, 0.08, 'triangle', 0.1);
+    updTurn();
+  }
+
   // ---------- 每一幀 ----------
   function update(dt) {
+    G.rocks.forEach(r => { if (r.shake > 0) r.shake = Math.max(0, r.shake - dt); });
+    if (G.hammer && (G.hammer.t += dt) > 0.3) G.hammer = null;
+    G.parts = G.parts.filter(p => { p.t += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 7 * dt; return p.t < p.life; });
     G.buses.forEach(b => {
+      if (b.spin) { b.spin.t += dt / 0.35; const u = Math.min(1, b.spin.t), e = 1 - (1 - u) ** 3; b.ang = b.spin.from + (b.spin.to - b.spin.from) * e; if (u >= 1) { b.ang = ANG[b.dir]; b.spin = null; } }
       if (b.anim) stepAnim(b, dt);
       else if (b.st === 'slot') b.px += (slotX(b.slot) - b.px) * Math.min(1, dt * 8); // 候車格數量變了就滑到新位置
       if (b.shake > 0) b.shake = Math.max(0, b.shake - dt);
@@ -4389,6 +4437,25 @@ function busGame() {
     if (ctx.roundRect) ctx.roundRect(-L / 2, -Wd / 2, L, Wd, 0.2); else ctx.rect(-L / 2, -Wd / 2, L, Wd);
     return [L, Wd];
   }
+  function drawRock(r, now) {
+    const x = G.LX + r.x + 0.5, y = G.LY + r.y + 0.5, sh = r.shake ? Math.sin(now / 16) * 0.05 * (r.shake / 0.3) : 0, big = r.max > 1, k = big ? 1.1 : 0.92;
+    ctx.save();
+    ctx.translate(x + sh, y + 0.05);
+    blob(0.06, 0.28, 0.4 * k, 0.12 * k, 'rgba(0,0,0,.35)');
+    const body = (rx, ry, cy, col) => { const g = ctx.createRadialGradient(-rx * 0.3, cy - ry * 0.45, ry * 0.1, 0, cy, rx * 1.1); g.addColorStop(0, shade(col, 0.4)); g.addColorStop(0.6, col); g.addColorStop(1, shade(col, -0.4)); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(0, cy, rx, ry, 0, 0, Math.PI * 2); ctx.fill(); };
+    const col = big ? '#767d8a' : '#9aa0ab';
+    body(0.36 * k, 0.3 * k, 0.1, shade(col, -0.2));
+    body(0.3 * k, 0.26 * k, -0.04, col);
+    body(0.14 * k, 0.12 * k, -0.16 * k, shade(col, 0.18)); // 上面的小凸起
+    ctx.strokeStyle = 'rgba(30,35,45,.55)'; ctx.lineWidth = 0.03; ctx.lineCap = 'round'; // 紋路
+    ctx.beginPath(); ctx.moveTo(-0.18 * k, 0.02); ctx.lineTo(-0.06 * k, -0.06); ctx.lineTo(0.02 * k, 0.04); ctx.stroke();
+    if (r.hp < r.max) { // 被敲過了:裂開
+      ctx.strokeStyle = '#2a2f3a'; ctx.lineWidth = 0.05;
+      ctx.beginPath(); ctx.moveTo(0.02, -0.28 * k); ctx.lineTo(-0.06, -0.12); ctx.lineTo(0.06, 0.0); ctx.lineTo(-0.04, 0.14); ctx.lineTo(0.05, 0.26 * k); ctx.stroke();
+    }
+    if (big && r.hp === r.max) { ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.font = '900 0.2px Fredoka, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('×2', 0, 0.1); }
+    ctx.restore();
+  }
   function drawBus(b, now) {
     const col = b.hid ? '#9aa1ad' : BUS_COLORS[b.c], H3 = 0.5;
     // 影子
@@ -4495,8 +4562,18 @@ function busGame() {
     for (let i = 0; i < vis; i++) ppl.push([i, ...queuePos(i)]);
     ppl.sort((p, q) => p[2] - q[2]).forEach(([i, x, y]) => drawPerson(x, y + 0.12, G.queue[i], 1, now, i));
     if (G.queue.length > vis) { ctx.fillStyle = '#6b4a14'; ctx.font = '900 0.34px Fredoka, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(`+${G.queue.length - vis}`, 0.35, 0.4); }
-    // 公車:由遠到近畫(y 小的先畫),疊起來才自然
-    G.buses.filter(b => b.st !== 'gone').sort((p, q) => p.py - q.py).forEach(b => drawBus(b, now));
+    // 石頭和公車:由遠到近畫(y 小的先畫),疊起來才自然
+    const things = G.buses.filter(b => b.st !== 'gone').map(b => ({ y: b.py, f: () => drawBus(b, now) })).concat(G.rocks.map(r => ({ y: G.LY + r.y + 0.5, f: () => drawRock(r, now) })));
+    things.sort((p, q) => p.y - q.y).forEach(t => t.f());
+    G.parts.forEach(p => { ctx.globalAlpha = Math.max(0, 1 - p.t / p.life); ctx.fillStyle = p.c; ctx.fillRect(p.x - p.s / 2, p.y - p.s / 2, p.s, p.s); ctx.globalAlpha = 1; });
+    if (G.hammer) { // 鐵鎚揮下去
+      const hm = G.hammer, u = hm.t / 0.3, px = G.LX + hm.x + 0.5, py = G.LY + hm.y + 0.5;
+      ctx.save(); ctx.translate(px + 0.1, py - 0.35); ctx.rotate(-1.1 + u * 1.5); ctx.globalAlpha = 1 - u * 0.4;
+      ctx.fillStyle = '#8a5a2b'; ctx.fillRect(-0.04, -0.05, 0.08, 0.5);
+      ctx.fillStyle = '#6b7280'; rr(-0.2, -0.17, 0.4, 0.2, 0.05); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.4)'; ctx.fillRect(-0.17, -0.15, 0.34, 0.04);
+      ctx.restore();
+    }
     G.walkers.forEach((w, k) => {
       const tx = w.bus.px, ty = w.bus.py - 0.15, u = w.t;
       const dx = tx - w.fx, face = Math.abs(dx) > 0.5 ? (dx < 0 ? 'l' : 'r') : 'f';
@@ -4517,11 +4594,21 @@ function busGame() {
     e.preventDefault();
     const r = cv.getBoundingClientRect(), dpr = cv.width / r.width;
     const wx = ((e.clientX - r.left) * dpr - ox) / sc - G.LX, wy = ((e.clientY - r.top) * dpr - oy) / sc - G.LY;
-    // 車有高度、車頂畫得比較上面:先找「車頂」在手指下的車,找不到再看地面那一格
-    const hit = dy => { const cx = Math.floor(wx), cy = Math.floor(wy + dy); return G.buses.find(o => o.st === 'lot' && busCells(o).some(c => c[0] === cx && c[1] === cy)); };
-    const b = hit(0.45) || hit(0);
-    if (b) tap(b);
+    // 車和石頭都有高度、畫在比較上面:依「畫在最前面的那個」來決定點到誰
+    const inRect = (b, dy) => busCells(b).some(c => wx >= c[0] - 0.02 && wx <= c[0] + 1.02 && wy + dy >= c[1] - 0.02 && wy + dy <= c[1] + 1.02);
+    const cand = [];
+    G.buses.forEach(o => { if (o.st === 'lot' && (inRect(o, 0.4) || inRect(o, 0.2) || inRect(o, 0))) cand.push({ bus: o, z: busCenter(o)[1] - G.LY + (o.dir === 'U' || o.dir === 'D' ? o.len / 2 - 0.5 : 0) }); });
+    if (!G.turning) G.rocks.forEach(o => { if (Math.hypot(wx - (o.x + 0.5), wy - (o.y + 0.42)) < 0.44) cand.push({ rock: o, z: o.y + 0.5 }); });
+    cand.sort((p, q) => q.z - p.z);
+    const top = cand[0], b = top && top.bus, rk = top && top.rock;
+    if (G.turning) { // 轉向模式:點一台公車讓它調頭,點別的地方取消
+      if (b) turnBus(b); else { G.turning = false; updTurn(); }
+      return;
+    }
+    if (b) return tap(b);
+    if (rk) smash(rk);
   });
+  turnBtn.addEventListener('click', () => { if (G && G.state === 'play' && G.turns) { G.turning = !G.turning; updTurn(); if (G.turning) toast('點一台公車讓它調頭'); } });
   plusBtn.addEventListener('click', () => { if (G && G.state === 'play') addSlot(); });
   $('.bgback', scr).addEventListener('click', () => { cancelAnimationFrame(raf); home(); });
   $('.bgretry', scr).addEventListener('click', () => { if (G) start(level); });
