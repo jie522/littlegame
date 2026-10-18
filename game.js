@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.10.29';
+const APP_VERSION = '2026.10.31';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -3900,7 +3900,7 @@ function vFlood(V) {
    候車格全部停滿、排頭的乘客又沒有車可以上就輸了;所有乘客都上車就過關。
    關卡用固定種子產生(第 N 關永遠一樣),而且是倒著排出來的,保證一定有解
    ========================================================= */
-const BUS_COLORS = ['#ef4444', '#3b82f6', '#facc15', '#22c55e', '#a855f7', '#f97316', '#ec4899'];
+const BUS_COLORS = ['#e53935', '#1e6fe0', '#fbc02d', '#2eaa4f', '#8e44c8', '#12b5cb', '#ff6fae']; // 紅 藍 黃 綠 紫 青 粉
 const BUS_DIRS = { R: [1, 0], L: [-1, 0], D: [0, 1], U: [0, -1] };
 const busRng = seed => () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
 const busCells = b => Array.from({ length: b.len }, (_, i) => (b.dir === 'L' || b.dir === 'R' ? [b.x + i, b.y] : [b.x, b.y + i]));
@@ -3961,23 +3961,13 @@ function busLevel(L) {
     rem.set(b.id, rem.get(b.id) - 1);
     if (!rem.get(b.id)) open.splice(open.indexOf(b), 1);
   }
-  // 第 7 關起:停車場裡有石頭。優先放在公車的前方(擋路),越後面越多、越硬(要敲 2 下)
-  const rocks = [], rr2 = busRng(L * 131 + 5), nRock = L < 7 ? 0 : Math.min(14, 1 + Math.floor((L - 7) / 2.5));
-  const hardP = L >= 14 ? Math.min(0.65, (L - 13) * 0.045) : 0;
-  const empty = [];
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (occ[y][x] < 0) empty.push([x, y]);
-  const onPath = new Set();
-  placed.forEach(b => busPath(b, W, H).forEach(([x, y]) => { if (occ[y][x] < 0) onPath.add(x + ',' + y); }));
-  const pool = empty.filter(([x, y]) => onPath.has(x + ',' + y)), rest = empty.filter(([x, y]) => !onPath.has(x + ',' + y));
-  for (const arr of [pool, rest]) for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(rr2() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; }
-  pool.concat(rest).slice(0, nRock).forEach(([x, y]) => rocks.push({ x, y, hp: rr2() < hardP ? 2 : 1 }));
-  rocks.forEach(r => { r.max = r.hp; });
   const tier = L <= 5 ? '簡單' : L <= 12 ? '普通' : L <= 25 ? '困難' : L <= 45 ? '超難' : '地獄';
-  return { W, H, slots, buses: placed, queue, nColors, tier, rocks };
+  return { W, H, slots, buses: placed, queue, nColors, tier };
 }
 
 /* ---------- 乘客角色:用附件的立體小人圖(戴帽子的 T 恤小人),切下來之後把衣服和帽子換成各種公車的顏色 ---------- */
-const BUS_HUES = [4, 214, 48, 140, 276, 24, 332]; // 跟 BUS_COLORS 一一對應的色相
+const BUS_HUES = [2, 214, 46, 138, 280, 188, 332]; // 跟 BUS_COLORS 一一對應的色相
+const BUS_TONE = [[1, 1], [1, 1], [1.05, 1.22], [1, 1], [1, 1.08], [1, 1.1], [0.9, 1.22]]; // 各顏色的 [飽和度, 亮度] 倍率
 const BUS_PEOPLE = { ready: false, sheet: null, base: [], v: [] };
 (() => {
   const im = new Image();
@@ -4080,38 +4070,64 @@ function busCutPeople(im) {
     ox.putImageData(out, 0, 0);
     return oc;
   });
-  // 換色:把「藍色的帽子和衣服」(和第 3 排紅色的)轉成各種顏色,膚色、頭髮、牛仔褲、鞋子不動
-  BUS_PEOPLE.v = BUS_HUES.map((hue, ci) => BUS_PEOPLE.base.map(b => {
-    const oc = document.createElement('canvas');
-    oc.width = b.width; oc.height = b.height;
-    const ox = oc.getContext('2d');
-    ox.drawImage(b, 0, 0);
-    const img = ox.getImageData(0, 0, b.width, b.height), d = img.data;
-    for (let i = 0; i < d.length; i += 4) {
-      if (!d[i + 3]) continue;
-      const [h, s, l] = busRgb2Hsl(d[i], d[i + 1], d[i + 2]);
-      const blue = h > 195 && h < 240, red = h > 345 || h < 10;
-      if (!((blue || red) && ((l > 0.42 && s > 0.3) || (s > 0.55 && l > 0.25)))) continue;
-      const sat = ci === 2 ? Math.min(1, s * 1.05) : s; // 黃色不要太灰
-      const lig = ci === 2 ? Math.min(0.9, l * 1.22) : ci === 5 ? l * 1.05 : l;
-      const [r, g, bb] = busHsl2Rgb(hue, sat, lig);
-      d[i] = r; d[i + 1] = g; d[i + 2] = bb;
+}
+// 取得一個小人的圖:衣服和帽子換成公車的顏色,再依 hv(髮色)、sv(膚色)、pv(褲子)微調;做好就記起來
+const BUS_HAIR = [null, [null, 0.35, 0.5], [44, 1.1, 2.1], [16, 1.4, 1.5], [null, 0.06, 2.2]]; // 原本的棕、黑、金、紅棕、灰白:[色相, 飽和度倍率, 亮度倍率]
+const BUS_SKIN = [null, [24, 1.05, 0.84], [22, 0.85, 0.62], [null, 0.75, 1.06]]; // 原本、小麥色、深棕、白皙
+const BUS_PANT = [null, [null, 0.08, 0.8], [42, 0, 1.45], [8, 0, 1.1]]; // 牛仔藍、深灰、卡其、暗紅(色相有給的話,飽和度直接用固定值 0.38/0.45)
+BUS_PEOPLE.cache = new Map();
+function busPerson(ci, pose, hv, sv, pv) {
+  const key = ci + ',' + pose + ',' + hv + ',' + sv + ',' + pv;
+  let out = BUS_PEOPLE.cache.get(key);
+  if (out) return out;
+  const b = BUS_PEOPLE.base[pose], oc = document.createElement('canvas');
+  oc.width = b.width; oc.height = b.height;
+  const ox = oc.getContext('2d');
+  ox.drawImage(b, 0, 0);
+  const img = ox.getImageData(0, 0, b.width, b.height), d = img.data, hue = BUS_HUES[ci], tone = BUS_TONE[ci];
+  const hair = BUS_HAIR[hv], skin = BUS_SKIN[sv], pant = BUS_PANT[pv];
+  for (let i = 0; i < d.length; i += 4) {
+    if (!d[i + 3]) continue;
+    const [h, s, l] = busRgb2Hsl(d[i], d[i + 1], d[i + 2]);
+    let nh = null, ns = s, nl = l;
+    const blue = h > 195 && h < 240, red = h > 345 || h < 10;
+    if ((blue || red) && ((l > 0.42 && s > 0.3) || (s > 0.55 && l > 0.25))) { // 帽子和衣服
+      nh = hue; ns = Math.min(1, s * tone[0]); nl = Math.min(0.92, l * tone[1]);
+    } else if (blue && l < 0.42 && s > 0.12) { // 褲子
+      if (pant) { if (pant[0] != null) { nh = pant[0]; ns = pv === 2 ? 0.38 : 0.45; nl = Math.min(0.55, l * pant[2]); } else { ns = s * pant[1]; nl = l * pant[2]; } }
+    } else if (h > 5 && h < 45 && l < 0.45 && s > 0.18) { // 頭髮
+      if (hair) { if (hair[0] != null) nh = hair[0]; ns = Math.min(0.95, s * hair[1]); nl = Math.min(0.72, l * hair[2]); }
+    } else if (h > 5 && h < 45 && l >= 0.5 && s > 0.22) { // 皮膚
+      if (skin) { if (skin[0] != null) nh = skin[0]; ns = Math.min(0.95, s * skin[1]); nl = Math.min(0.94, l * skin[2]); }
     }
-    ox.putImageData(img, 0, 0);
-    return oc;
-  }));
-  BUS_PEOPLE.s = BUS_PEOPLE.v.map(row => row.map(src => {
-    let cur = src;
-    while (cur.height > 52) {
-      const n = document.createElement('canvas');
-      n.width = Math.max(1, Math.round(cur.width / 2)); n.height = Math.max(1, Math.round(cur.height / 2));
-      const nx = n.getContext('2d');
-      nx.imageSmoothingQuality = 'high';
-      nx.drawImage(cur, 0, 0, n.width, n.height);
-      cur = n;
-    }
-    return cur;
-  }));
+    if (nh == null && ns === s && nl === l) continue;
+    const [r, g, bb] = busHsl2Rgb(nh == null ? h : nh, ns, nl);
+    d[i] = r; d[i + 1] = g; d[i + 2] = bb;
+  }
+  ox.putImageData(img, 0, 0);
+  let cur = oc; // 縮小成遊戲裡的大小(一次縮一半比較平滑)
+  while (cur.height > 52) {
+    const n = document.createElement('canvas');
+    n.width = Math.max(1, Math.round(cur.width / 2)); n.height = Math.max(1, Math.round(cur.height / 2));
+    const nx = n.getContext('2d');
+    nx.imageSmoothingQuality = 'high';
+    nx.drawImage(cur, 0, 0, n.width, n.height);
+    cur = n;
+  }
+  BUS_PEOPLE.cache.set(key, cur);
+  return cur;
+}
+// 每個乘客有固定的長相(依編號決定),隊伍移動時不會變來變去:朝向、髮色、膚色、褲子、身高
+const BUS_LOOK = new Map();
+function busLook(id) {
+  let o = BUS_LOOK.get(id);
+  if (o) return o;
+  const r = busRng(id * 97 + 13), pick = a => a[Math.floor(r() * a.length)];
+  const kind = r(); // 正面 35%、斜面 25%、背面 15%、側面 25%
+  const pose = kind < 0.35 ? pick([0, 1]) : kind < 0.6 ? pick([2, 3]) : kind < 0.75 ? pick([4, 5]) : pick([6, 7]);
+  o = { pose, flip: r() < 0.5, hv: pick([0, 0, 1, 1, 2, 3, 4]), sv: pick([0, 0, 1, 2, 3]), pv: pick([0, 0, 1, 2, 3]), sz: 0.93 + r() * 0.14 };
+  BUS_LOOK.set(id, o);
+  return o;
 }
 function busGame() {
   resetView();
@@ -4155,7 +4171,7 @@ function busGame() {
     level = L;
     store.set('busLevel', L);
     const lv = busLevel(L);
-    G = { ...lv, level: L, queue: lv.queue.slice(), state: 'play', walkers: [], slotOf: new Array(7).fill(null), plusUsed: false, boardCd: 0.6, endT: 0, moves: 0, rocks: lv.rocks.map(r => ({ ...r, shake: 0 })), parts: [], turns: 2, turning: false };
+    G = { ...lv, level: L, queue: lv.queue.slice(), qid: lv.queue.map((_, i) => L * 1000 + i), state: 'play', walkers: [], slotOf: new Array(7).fill(null), plusUsed: false, boardCd: 0.6, endT: 0, moves: 0, turns: 2, turning: false };
     G.buses = lv.buses.map(b => { const o = { ...b, st: 'lot', boarded: 0, incoming: 0, anim: null, shake: 0 }; return o; });
     layout();
     G.buses.forEach(b => { const [x, y] = busCenter(b); b.px = x; b.py = y; b.ang = ANG[b.dir]; b.scale = 1; });
@@ -4195,16 +4211,14 @@ function busGame() {
   function tap(b) {
     if (G.state !== 'play' || b.st !== 'lot' || b.anim) return;
     const path = busPath(b, G.W, G.H);
-    const blocker = path.findIndex(([x, y]) => G.rocks.some(r => r.x === x && r.y === y) || G.buses.some(o => o !== b && o.st === 'lot' && busCells(o).some(c => c[0] === x && c[1] === y)));
+    const blocker = path.findIndex(([x, y]) => G.buses.some(o => o !== b && o.st === 'lot' && busCells(o).some(c => c[0] === x && c[1] === y)));
     const [dx, dy] = BUS_DIRS[b.dir], [cx, cy] = busCenter(b);
     if (blocker >= 0) { // 被擋住:往前撞一下再退回來
       const d = blocker + 0.18;
       const hit = G.buses.find(o => o !== b && o.st === 'lot' && busCells(o).some(c => c[0] === path[blocker][0] && c[1] === path[blocker][1]));
-      const rk = G.rocks.find(r => r.x === path[blocker][0] && r.y === path[blocker][1]);
       drive(b, [[cx + dx * d, cy + dy * d], [cx, cy]], 11, null);
       b.anim.keepAng = true;
-      setTimeout(() => { if (hit) hit.shake = 0.35; if (rk) rk.shake = 0.35; beep(140, 0.12, 'square', 0.1); buzz(30); }, d / 11 * 1000);
-      if (rk && !G.rockHint) { G.rockHint = true; toast('前面有石頭!點石頭把它敲碎'); }
+      setTimeout(() => { if (hit) hit.shake = 0.35; beep(140, 0.12, 'square', 0.1); buzz(30); }, d / 11 * 1000);
       return;
     }
     const k = G.slotOf.findIndex((s, i) => i < G.slots && s == null);
@@ -4230,19 +4244,8 @@ function busGame() {
     drive(b, pts, 13, () => { b.st = 'slot'; b.ang = -Math.PI / 2; beep(520, 0.08, 'triangle', 0.08); }, 0.74);
   }
 
-  // ---------- 石頭與轉向 ----------
+  // ---------- 轉向道具 ----------
   const OPP = { L: 'R', R: 'L', U: 'D', D: 'U' };
-  function smash(r) {
-    if (G.state !== 'play') return;
-    r.hp--;
-    r.shake = 0.3;
-    G.hammer = { x: r.x, y: r.y, t: 0 };
-    const px = G.LX + r.x + 0.5, py = G.LY + r.y + 0.5, n = r.hp <= 0 ? 16 : 6;
-    for (let i = 0; i < n; i++) G.parts.push({ x: px, y: py - 0.2, vx: (Math.random() - 0.5) * 3.2, vy: -1 - Math.random() * 2.4, life: 0.6 + Math.random() * 0.4, t: 0, c: Math.random() < 0.4 ? '#8d939c' : '#b9bec7', s: 0.04 + Math.random() * 0.06 });
-    beep(r.hp <= 0 ? 90 : 160, 0.14, 'square', 0.12); beep(r.hp <= 0 ? 60 : 220, 0.1, 'sawtooth', 0.06, 0.04);
-    buzz(r.hp <= 0 ? 40 : 20);
-    if (r.hp <= 0) G.rocks = G.rocks.filter(o => o !== r);
-  }
   function updTurn() {
     $('b', turnBtn).textContent = G.turns;
     turnBtn.disabled = !G.turns;
@@ -4262,9 +4265,6 @@ function busGame() {
 
   // ---------- 每一幀 ----------
   function update(dt) {
-    G.rocks.forEach(r => { if (r.shake > 0) r.shake = Math.max(0, r.shake - dt); });
-    if (G.hammer && (G.hammer.t += dt) > 0.3) G.hammer = null;
-    G.parts = G.parts.filter(p => { p.t += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 7 * dt; return p.t < p.life; });
     G.buses.forEach(b => {
       if (b.spin) { b.spin.t += dt / 0.35; const u = Math.min(1, b.spin.t), e = 1 - (1 - u) ** 3; b.ang = b.spin.from + (b.spin.to - b.spin.from) * e; if (u >= 1) { b.ang = ANG[b.dir]; b.spin = null; } }
       if (b.anim) stepAnim(b, dt);
@@ -4287,10 +4287,11 @@ function busGame() {
         const c = G.queue[0];
         const bus = G.slotOf.find((b, i) => i < G.slots && b && b.st === 'slot' && b.c === c && b.boarded + b.incoming < b.cap);
         if (bus) {
+          const pid = G.qid.shift();
           G.queue.shift();
           bus.incoming++;
           const [qx, qy] = queuePos(0);
-          G.walkers.push({ c, bus, t: 0, fx: qx, fy: qy });
+          G.walkers.push({ c, bus, t: 0, fx: qx, fy: qy, id: pid });
           G.boardCd = 0.12;
           updBar();
         }
@@ -4403,15 +4404,19 @@ function busGame() {
     ctx.fillStyle = '#8b93a3'; ctx.fillRect(x - 0.025, y - 0.3, 0.05, 0.3);
     ball(x, y - 0.32, 0.05, '#c8ced9');
   }
-  function drawPerson(x, y, c, s, now, k, face) {
+  function drawPerson(x, y, c, s, now, k, face, id) {
     const bob = Math.abs(Math.sin(now / 260 + k * 0.7)) * 0.025, col = BUS_COLORS[c];
-    if (BUS_PEOPLE.ready && BUS_PEOPLE.s) {
-      const side = face === 'l' || face === 'r', sp = BUS_PEOPLE.s[c][side ? 6 : [0, 1, 2, 3][k % 4]];
-      const h = 0.78 * s, w = sp.width / sp.height * h;
+    if (BUS_PEOPLE.ready && BUS_PEOPLE.base.length) {
+      const lk = busLook(id == null ? k : id), moving = face === 'l' || face === 'r';
+      let pose = lk.pose, flip = lk.flip;
+      if (moving) { pose = 6; flip = face === 'l'; } // 往公車走的時候一律看著前進的方向
+      else if (face === 'f' && pose >= 4 && pose <= 5) pose = 0;
+      const sp = busPerson(c, pose, lk.hv, lk.sv, lk.pv);
+      const h = 0.78 * s * lk.sz, w = sp.width / sp.height * h;
       blob(x, y + 0.07 * s, 0.17 * s, 0.06 * s, 'rgba(0,0,0,.26)');
       ctx.save();
-      if (face === 'l') { ctx.translate(x, 0); ctx.scale(-1, 1); ctx.translate(-x, 0); }
-      ctx.drawImage(sp, x - w / 2, y + 0.08 * s - h - bob * (side ? 2 : 1), w, h);
+      if (flip) { ctx.translate(x, 0); ctx.scale(-1, 1); ctx.translate(-x, 0); }
+      ctx.drawImage(sp, x - w / 2, y + 0.08 * s - h - bob * (moving ? 2 : 1), w, h);
       ctx.restore();
       return;
     }
@@ -4436,25 +4441,6 @@ function busGame() {
     ctx.beginPath();
     if (ctx.roundRect) ctx.roundRect(-L / 2, -Wd / 2, L, Wd, 0.2); else ctx.rect(-L / 2, -Wd / 2, L, Wd);
     return [L, Wd];
-  }
-  function drawRock(r, now) {
-    const x = G.LX + r.x + 0.5, y = G.LY + r.y + 0.5, sh = r.shake ? Math.sin(now / 16) * 0.05 * (r.shake / 0.3) : 0, big = r.max > 1, k = big ? 1.1 : 0.92;
-    ctx.save();
-    ctx.translate(x + sh, y + 0.05);
-    blob(0.06, 0.28, 0.4 * k, 0.12 * k, 'rgba(0,0,0,.35)');
-    const body = (rx, ry, cy, col) => { const g = ctx.createRadialGradient(-rx * 0.3, cy - ry * 0.45, ry * 0.1, 0, cy, rx * 1.1); g.addColorStop(0, shade(col, 0.4)); g.addColorStop(0.6, col); g.addColorStop(1, shade(col, -0.4)); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(0, cy, rx, ry, 0, 0, Math.PI * 2); ctx.fill(); };
-    const col = big ? '#767d8a' : '#9aa0ab';
-    body(0.36 * k, 0.3 * k, 0.1, shade(col, -0.2));
-    body(0.3 * k, 0.26 * k, -0.04, col);
-    body(0.14 * k, 0.12 * k, -0.16 * k, shade(col, 0.18)); // 上面的小凸起
-    ctx.strokeStyle = 'rgba(30,35,45,.55)'; ctx.lineWidth = 0.03; ctx.lineCap = 'round'; // 紋路
-    ctx.beginPath(); ctx.moveTo(-0.18 * k, 0.02); ctx.lineTo(-0.06 * k, -0.06); ctx.lineTo(0.02 * k, 0.04); ctx.stroke();
-    if (r.hp < r.max) { // 被敲過了:裂開
-      ctx.strokeStyle = '#2a2f3a'; ctx.lineWidth = 0.05;
-      ctx.beginPath(); ctx.moveTo(0.02, -0.28 * k); ctx.lineTo(-0.06, -0.12); ctx.lineTo(0.06, 0.0); ctx.lineTo(-0.04, 0.14); ctx.lineTo(0.05, 0.26 * k); ctx.stroke();
-    }
-    if (big && r.hp === r.max) { ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.font = '900 0.2px Fredoka, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('×2', 0, 0.1); }
-    ctx.restore();
   }
   function drawBus(b, now) {
     const col = b.hid ? '#9aa1ad' : BUS_COLORS[b.c], H3 = 0.5;
@@ -4560,24 +4546,14 @@ function busGame() {
     const vis = Math.min(G.queue.length, 64);
     const ppl = [];
     for (let i = 0; i < vis; i++) ppl.push([i, ...queuePos(i)]);
-    ppl.sort((p, q) => p[2] - q[2]).forEach(([i, x, y]) => drawPerson(x, y + 0.12, G.queue[i], 1, now, i));
+    ppl.sort((p, q) => p[2] - q[2]).forEach(([i, x, y]) => drawPerson(x, y + 0.12, G.queue[i], 1, now, i, null, G.qid[i]));
     if (G.queue.length > vis) { ctx.fillStyle = '#6b4a14'; ctx.font = '900 0.34px Fredoka, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(`+${G.queue.length - vis}`, 0.35, 0.4); }
-    // 石頭和公車:由遠到近畫(y 小的先畫),疊起來才自然
-    const things = G.buses.filter(b => b.st !== 'gone').map(b => ({ y: b.py, f: () => drawBus(b, now) })).concat(G.rocks.map(r => ({ y: G.LY + r.y + 0.5, f: () => drawRock(r, now) })));
-    things.sort((p, q) => p.y - q.y).forEach(t => t.f());
-    G.parts.forEach(p => { ctx.globalAlpha = Math.max(0, 1 - p.t / p.life); ctx.fillStyle = p.c; ctx.fillRect(p.x - p.s / 2, p.y - p.s / 2, p.s, p.s); ctx.globalAlpha = 1; });
-    if (G.hammer) { // 鐵鎚揮下去
-      const hm = G.hammer, u = hm.t / 0.3, px = G.LX + hm.x + 0.5, py = G.LY + hm.y + 0.5;
-      ctx.save(); ctx.translate(px + 0.1, py - 0.35); ctx.rotate(-1.1 + u * 1.5); ctx.globalAlpha = 1 - u * 0.4;
-      ctx.fillStyle = '#8a5a2b'; ctx.fillRect(-0.04, -0.05, 0.08, 0.5);
-      ctx.fillStyle = '#6b7280'; rr(-0.2, -0.17, 0.4, 0.2, 0.05); ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,.4)'; ctx.fillRect(-0.17, -0.15, 0.34, 0.04);
-      ctx.restore();
-    }
+    // 公車:由遠到近畫(y 小的先畫),疊起來才自然
+    G.buses.filter(b => b.st !== 'gone').sort((p, q) => p.py - q.py).forEach(b => drawBus(b, now));
     G.walkers.forEach((w, k) => {
       const tx = w.bus.px, ty = w.bus.py - 0.15, u = w.t;
       const dx = tx - w.fx, face = Math.abs(dx) > 0.5 ? (dx < 0 ? 'l' : 'r') : 'f';
-      drawPerson(w.fx + dx * u, w.fy + 0.12 + (ty - w.fy) * u - Math.sin(u * Math.PI) * 0.3, w.c, 1 - u * 0.35, now, k, face);
+      drawPerson(w.fx + dx * u, w.fy + 0.12 + (ty - w.fy) * u - Math.sin(u * Math.PI) * 0.3, w.c, 1 - u * 0.35, now, k, face, w.id);
     });
   }
   function frame(now) {
@@ -4594,19 +4570,17 @@ function busGame() {
     e.preventDefault();
     const r = cv.getBoundingClientRect(), dpr = cv.width / r.width;
     const wx = ((e.clientX - r.left) * dpr - ox) / sc - G.LX, wy = ((e.clientY - r.top) * dpr - oy) / sc - G.LY;
-    // 車和石頭都有高度、畫在比較上面:依「畫在最前面的那個」來決定點到誰
+    // 車有高度、車頂畫得比較上面:重疊的時候,依「畫在最前面的那台」來決定點到誰
     const inRect = (b, dy) => busCells(b).some(c => wx >= c[0] - 0.02 && wx <= c[0] + 1.02 && wy + dy >= c[1] - 0.02 && wy + dy <= c[1] + 1.02);
     const cand = [];
     G.buses.forEach(o => { if (o.st === 'lot' && (inRect(o, 0.4) || inRect(o, 0.2) || inRect(o, 0))) cand.push({ bus: o, z: busCenter(o)[1] - G.LY + (o.dir === 'U' || o.dir === 'D' ? o.len / 2 - 0.5 : 0) }); });
-    if (!G.turning) G.rocks.forEach(o => { if (Math.hypot(wx - (o.x + 0.5), wy - (o.y + 0.42)) < 0.44) cand.push({ rock: o, z: o.y + 0.5 }); });
     cand.sort((p, q) => q.z - p.z);
-    const top = cand[0], b = top && top.bus, rk = top && top.rock;
+    const top = cand[0], b = top && top.bus;
     if (G.turning) { // 轉向模式:點一台公車讓它調頭,點別的地方取消
       if (b) turnBus(b); else { G.turning = false; updTurn(); }
       return;
     }
     if (b) return tap(b);
-    if (rk) smash(rk);
   });
   turnBtn.addEventListener('click', () => { if (G && G.state === 'play' && G.turns) { G.turning = !G.turning; updTurn(); if (G.turning) toast('點一台公車讓它調頭'); } });
   plusBtn.addEventListener('click', () => { if (G && G.state === 'play') addSlot(); });
