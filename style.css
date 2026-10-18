@@ -1753,3 +1753,42 @@ button:disabled { cursor: not-allowed; }
 .fc:active { transform: scale(.88); }
 .fc.cur { opacity: .2; transform: scale(.86); }
 .fpal.off .fc { opacity: .25; pointer-events: none; }
+
+/* 首頁:單人遊戲和闖關模式並排 */
+.hrow2 { display: flex; gap: 10px; }
+.hrow2 .btn.big { flex: 1; min-width: 0; padding: 10px 10px; font-size: 1.15rem; gap: 8px; }
+.hrow2 .btn.big .bi { width: 36px; height: 36px; font-size: 1.05rem; flex: none; }
+.hrow2 .btn.big .bt small { font-size: .7rem; }
+
+/* 公車大塞車:草地、灰色停車場、上方候車格與排隊廣場 */
+.screen.busg { padding: 0; display: flex; flex-direction: column; background: linear-gradient(#8fd8ff, #c8f0ff 40%, #9ee27f 40.1%, #7ecf6a); }
+.bgtop { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: max(8px, env(safe-area-inset-top)) 12px 6px; }
+.bgtop .iconbtn { width: 42px; height: 42px; }
+.bglv { padding: 4px 22px; border-radius: 999px; background: linear-gradient(#ffe066, #ffa800); border: 3px solid var(--ink); box-shadow: 0 4px 0 var(--ink); font-weight: 900; font-size: 1.1rem; color: var(--ink); }
+.bglv b { font-family: "Fredoka", var(--font); font-size: 1.35rem; }
+.bgstage { position: relative; flex: 1; min-height: 0; margin: 0 8px; }
+.bgcv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; border-radius: 18px; }
+.bgbar { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px max(10px, env(safe-area-inset-bottom)); }
+.bgleft { padding: 5px 14px; border-radius: 999px; background: #fff; border: 3px solid var(--ink); box-shadow: 0 3px 0 var(--ink); font-weight: 900; }
+.bgleft b { font-family: "Fredoka", var(--font); font-size: 1.15rem; color: #ef4444; }
+.bgplus { padding: 7px 14px; border-radius: 999px; background: linear-gradient(#7cc7ff, #3b82f6); color: #fff; text-shadow: var(--ol-sm); border: 3px solid var(--ink); box-shadow: 0 4px 0 var(--ink); font-weight: 900; }
+.bgplus:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink); }
+.bgplus.used { opacity: .4; }
+.bgov { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; padding: 16px; background: rgba(20,32,70,.45); border-radius: 18px; z-index: 5; }
+.bgov.on { display: flex; animation: popin .3s ease-out; }
+.bgcard { width: 100%; max-width: 330px; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 18px 18px 20px; background: var(--cream); border: 4px solid var(--ink); border-radius: 26px; box-shadow: 0 7px 0 var(--ink); text-align: center; }
+.bgcard h2 { font-size: 1.45rem; }
+.bgcard p { font-size: .88rem; font-weight: 700; line-height: 1.5; opacity: .85; }
+.bgcard .btn.big { justify-content: center; }
+.bgbig { font-size: 3.4rem; line-height: 1; animation: hop 1.2s ease-in-out infinite; }
+.bglvsel { display: flex; align-items: center; gap: 14px; font-weight: 900; font-size: 1.2rem; }
+.bglvsel b { font-family: "Fredoka", var(--font); font-size: 1.8rem; color: #3b82f6; }
+.bglvsel button { width: 40px; height: 40px; border-radius: 50%; background: #fff; border: 3px solid var(--ink); box-shadow: 0 3px 0 var(--ink); font-size: 1.4rem; font-weight: 900; line-height: 1; }
+.bglvsel button:disabled { opacity: .3; }
+
+.bgtier { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; font-style: normal; font-size: .72rem; font-weight: 900; vertical-align: 2px; color: #fff; background: #22c55e; text-shadow: none; }
+.bgtier[data-t="普通"] { background: #3b82f6; }
+.bgtier[data-t="困難"] { background: #f97316; }
+.bgtier[data-t="超難"] { background: #ef4444; }
+.bgtier[data-t="地獄"] { background: #1f2937; box-shadow: 0 0 0 2px #ef4444; }
+.screen.busg { background: linear-gradient(#9fdcff, #d9f3ff 30%, #6dbb58 30.1%, #5fae4c); }
