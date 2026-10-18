@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.10.32';
+const APP_VERSION = '2026.10.33';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -3946,7 +3946,7 @@ function busLevel(L) {
   const order = placed.map((_, i) => i);
   for (let i = order.length - 1; i > 0; i--) { const j = ri(i + 1); [order[i], order[j]] = [order[j], order[i]]; }
   order.forEach((id, k) => { placed[id].c = k < nColors ? k : ri(nColors); placed[id].cap = placed[id].len === 3 ? 6 : 4; });
-  // 第 16 關起:有些公車是「?」神秘車,開出停車場才知道是什麼顏色
+  // 第 16 關起:有些公車是「?」神秘車,前面被擋住的時候看不到顏色,路一通就會顯示出來
   const hidP = L >= 16 ? Math.min(0.45, (L - 15) * 0.03) : 0;
   placed.forEach(b => { b.hid = rnd() < hidP; });
   // 乘客排隊:照「開出去的順序」(倒過來),同時最多 win 台車在接客,把它們的乘客混在一起
@@ -4175,6 +4175,7 @@ function busGame() {
     layout();
     G.buses.forEach(b => { const [x, y] = busCenter(b); b.px = x; b.py = y; b.ang = ANG[b.dir]; b.scale = 1; });
     G.deco = makeDeco(L);
+    revealFree(false); // 一開始就沒被擋住的神秘車,直接顯示顏色
     lvEl.textContent = L;
     tierEl.textContent = lv.tier;
     tierEl.dataset.t = lv.tier;
@@ -4263,7 +4264,15 @@ function busGame() {
   }
 
   // ---------- 每一幀 ----------
+  function revealFree(flash) { // 前面沒有被擋住的「?」公車,翻開顏色
+    G.buses.forEach(b => {
+      if (!b.hid || b.st !== 'lot') return;
+      const open = busPath(b, G.W, G.H).every(([x, y]) => !G.buses.some(o => o !== b && o.st === 'lot' && busCells(o).some(c => c[0] === x && c[1] === y)));
+      if (open) { b.hid = false; if (flash) { b.reveal = 0.6; beep(760, 0.08, 'sine', 0.08); } }
+    });
+  }
   function update(dt) {
+    if (G.state === 'play') revealFree(true);
     G.buses.forEach(b => {
       if (b.spin) { b.spin.t += dt / 0.35; const u = Math.min(1, b.spin.t), e = 1 - (1 - u) ** 3; b.ang = b.spin.from + (b.spin.to - b.spin.from) * e; if (u >= 1) { b.ang = ANG[b.dir]; b.spin = null; } }
       if (b.anim) stepAnim(b, dt);
