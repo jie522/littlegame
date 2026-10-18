@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.10.23';
+const APP_VERSION = '2026.10.24';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -471,7 +471,7 @@ const GAMES = [
   },
   {
     id: 'flood', emoji: '🌊', name: '填色大作戰', tag: '益智+競速', color: '#3b82f6', desc: '一樣的棋盤,比誰先填滿!',
-    rules: ['大家拿到一模一樣的彩色棋盤,同時開始比賽', '點下面的顏色(或直接點棋盤上的格子),左上角的區域就會變成那個顏色,吞掉相連的同色格子', '在步數限制內把整個棋盤變成同一個顏色就完成了!', '最先完成得 3 分、第二名 2 分、之後 1 分;步數用完或時間到還沒完成就沒分', '共 3 局:14×14、18×18、22×22,可以看到每個人的小棋盤進度'],
+    rules: ['大家拿到一模一樣的彩色棋盤,同時開始比賽', '點下面的顏色按鈕,左上角的區域就會變成那個顏色,吞掉相連的同色格子', '在步數限制內把整個棋盤變成同一個顏色就完成了!', '最先完成得 3 分、第二名 2 分、之後 1 分;步數用完或時間到還沒完成就沒分', '共 3 局:14×14、18×18、22×22,可以看到每個人的小棋盤進度'],
     host: hFlood, view: vFlood, noCountdown: true,
   },
 ];
@@ -3644,12 +3644,12 @@ function vCheckers(V) {
    ========================================================= */
 const FLOOD = { SIZES: [14, 18, 22], PTS: [3, 2, 1, 1] };
 const floodTime = n => 60 + n * 4; // 每局秒數:棋盤越大給越久(14×14 116 秒、22×22 148 秒)
-const FLOOD_COLORS = ['#d94639', '#f6aa17', '#299f66', '#026e84'];
-const FLOOD_NAMES = ['紅', '黃', '綠', '藍'];
-// 一格一格獨立的圓角方塊(深靛藍底、格子之間留縫);剛吞進來的格子會彈一下
+const FLOOD_COLORS = ['#dc4820', '#f0f41c', '#7c9c1c', '#44b0e0', '#605ca8', '#ec70a0'];
+const FLOOD_NAMES = ['紅', '黃', '綠', '藍', '紫', '粉'];
+// 純黑底、一格一格平面方塊(格子之間只有細細一條縫);剛吞進來的格子會閃白光再縮回來
 function floodPaint(ctx, g, n, W, anim, now) {
-  const cs = W / n, gap = cs * 0.1, rad = cs * 0.19;
-  ctx.fillStyle = '#1a1930';
+  const cs = W / n, gap = Math.max(0.6, cs * 0.045);
+  ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, W, W);
   let busy = false;
   for (let i = 0; i < n * n; i++) {
@@ -3657,21 +3657,15 @@ function floodPaint(ctx, g, n, W, anim, now) {
     let sc = 1, flash = 0;
     const t0 = anim && anim.get(i);
     if (t0 != null) {
-      const u = (now - t0) / 280;
+      const u = (now - t0) / 260;
       if (u < 0) busy = true;
-      else if (u < 1) { busy = true; sc = 0.72 + 0.28 * (1 - (1 - u) ** 3) + Math.sin(u * Math.PI) * 0.1; flash = 1 - u; }
+      else if (u < 1) { busy = true; sc = 0.6 + 0.4 * (1 - (1 - u) ** 3); flash = 1 - u; }
       else anim.delete(i);
     }
-    const w = (cs - gap * 2) * sc, ox = x + (cs - w) / 2, oy = y + (cs - w) / 2;
+    const w = (cs - gap) * sc, ox = x + (cs - w) / 2, oy = y + (cs - w) / 2;
     ctx.fillStyle = FLOOD_COLORS[g[i]];
-    ctx.beginPath();
-    if (ctx.roundRect) ctx.roundRect(ox, oy, w, w, rad); else ctx.rect(ox, oy, w, w);
-    ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,.07)'; // 上緣極淡的亮邊
-    ctx.beginPath();
-    if (ctx.roundRect) ctx.roundRect(ox, oy, w, w * 0.45, [rad, rad, 0, 0]); else ctx.rect(ox, oy, w, w * 0.45);
-    ctx.fill();
-    if (flash) { ctx.fillStyle = `rgba(255,255,255,${flash * 0.4})`; ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(ox, oy, w, w, rad); else ctx.rect(ox, oy, w, w); ctx.fill(); }
+    ctx.fillRect(ox, oy, w, w);
+    if (flash) { ctx.fillStyle = `rgba(255,255,255,${flash * 0.55})`; ctx.fillRect(ox, oy, w, w); }
   }
   return busy;
 }
@@ -3839,11 +3833,6 @@ function vFlood(V) {
     draw();
   }
   palEl.addEventListener('pointerdown', e => { const b = e.target.closest('.fc'); if (b) { e.preventDefault(); pickColor(+b.dataset.c); } });
-  cv.addEventListener('pointerdown', e => {
-    if (!g) return;
-    const r = cv.getBoundingClientRect(), x = Math.floor((e.clientX - r.left) / r.width * n), y = Math.floor((e.clientY - r.top) / r.height * n);
-    if (x >= 0 && y >= 0 && x < n && y < n) pickColor(g[y * n + x]);
-  });
 
   V.countdown = k => { // 倒數顯示在棋盤上,不要蓋掉上面的對手區
     cover.innerHTML = k > 0 ? `<div class="big cdn pulse">${k}</div>` : '<div class="big cdn go">GO!</div>';
