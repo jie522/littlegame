@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.10.33';
+const APP_VERSION = '2026.11.01';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -3901,68 +3901,143 @@ function vFlood(V) {
    關卡用固定種子產生(第 N 關永遠一樣),而且是倒著排出來的,保證一定有解
    ========================================================= */
 const BUS_COLORS = ['#e53935', '#1e6fe0', '#fbc02d', '#2eaa4f', '#8e44c8', '#12b5cb', '#ff6fae']; // 紅 藍 黃 綠 紫 青 粉
-const BUS_DIRS = { R: [1, 0], L: [-1, 0], D: [0, 1], U: [0, -1] };
 const busRng = seed => () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
-const busCells = b => Array.from({ length: b.len }, (_, i) => (b.dir === 'L' || b.dir === 'R' ? [b.x + i, b.y] : [b.x, b.y + i]));
-function busFront(b) {
-  if (b.dir === 'R') return [b.x + b.len - 1, b.y];
-  if (b.dir === 'D') return [b.x, b.y + b.len - 1];
-  return [b.x, b.y];
+// 停車場的大小(世界座標,單位約等於一台車的寬)
+const BUS_LW = 9.6, BUS_LH = 11, BUS_WID = 0.72;
+const busLenOf = cap => (cap === 6 ? 2.05 : 1.45); // 4 人座短車、6 人座長車
+// 兩個旋轉的長方形有沒有重疊(分離軸定理);中心 (x, y)、角度 a、半長 hl、半寬 hw
+function busObbHit(ax, ay, aa, ahl, ahw, bx, by, ba, bhl, bhw) {
+  const dx = bx - ax, dy = by - ay;
+  for (const u of [aa, aa + Math.PI / 2, ba, ba + Math.PI / 2]) {
+    const cu = Math.cos(u), su = Math.sin(u);
+    const ra = ahl * Math.abs(Math.cos(aa - u)) + ahw * Math.abs(Math.sin(aa - u));
+    const rb = bhl * Math.abs(Math.cos(ba - u)) + bhw * Math.abs(Math.sin(ba - u));
+    if (Math.abs(dx * cu + dy * su) > ra + rb) return false;
+  }
+  return true;
 }
-function busPath(b, W, H) { // 從車頭往前一直到停車場邊緣的格子
-  const [dx, dy] = BUS_DIRS[b.dir], out = [];
-  let [x, y] = busFront(b);
-  for (x += dx, y += dy; x >= 0 && y >= 0 && x < W && y < H; x += dx, y += dy) out.push([x, y]);
+const busHit = (p, q, m) => busObbHit(p.x, p.y, p.a, p.len / 2 + (m || 0), BUS_WID / 2 + (m || 0), q.x, q.y, q.a, q.len / 2, BUS_WID / 2);
+const busOutside = (x, y, r) => x < -r || y < -r || x > BUS_LW + r || y > BUS_LH + r;
+// 公車往 a 方向一直開,會不會撞到 others 裡的車:回傳撞到之前能走的距離,沒撞到就回傳 -1
+function busSweep(b, a, others) { const h = busFirstHit(b, a, others); return h ? h.d : -1; }
+function busFirstHit(b, a, others) { // 撞到的第一台車與距離,沒撞到回傳 null
+  const ca = Math.cos(a), sa = Math.sin(a), r0 = Math.hypot(b.len / 2, BUS_WID / 2), far = BUS_LW + BUS_LH;
+  const near = others.filter(o => { // 先用「圓 vs 線段」快速過濾,只留下可能撞到的車
+    if (o === b) return false;
+    const t = Math.max(0, Math.min(far, (o.x - b.x) * ca + (o.y - b.y) * sa));
+    return Math.hypot(b.x + ca * t - o.x, b.y + sa * t - o.y) < r0 + Math.hypot(o.len / 2, BUS_WID / 2);
+  });
+  const hl = b.len / 2 - 0.02, hw = BUS_WID / 2 - 0.02;
+  for (let s = 0.12; s < far; s += 0.12) {
+    const x = b.x + ca * s, y = b.y + sa * s;
+    if (busOutside(x, y, r0 + 0.1)) return null;
+    for (const o of near) if (busObbHit(x, y, a, hl, hw, o.x, o.y, o.a, o.len / 2, BUS_WID / 2)) return { d: Math.max(0, s - 0.12), o };
+  }
+  return null;
+}
+// 擺法:跟原版遊戲一樣有各種圖案(幾塊一排一排的、整片斜的、一圈一圈的、螺旋、亂堆)
+function busPattern(kind, rnd, longP) {
+  const out = [], cx = BUS_LW / 2, cy = BUS_LH / 2, cap = () => (rnd() < longP ? 6 : 4);
+  const push = (x, y, axis) => { const c = cap(); out.push({ x, y, a: axis, cap: c, len: busLenOf(c) }); };
+  if (kind === 'blocks' || kind === 'tilt') { // 分成幾塊,每一塊裡面的車方向一樣,排成一排一排
+    const rot = kind === 'tilt' ? [Math.PI / 6, Math.PI / 4, -Math.PI / 6][Math.floor(rnd() * 3)] : 0;
+    const cols = 2 + Math.floor(rnd() * 2), rows = 2 + Math.floor(rnd() * 2), bw = 12 / cols, bh = 13 / rows;
+    for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) {
+      const vert = rnd() < 0.5, x0 = -1.2 + i * bw, y0 = -1 + j * bh;
+      if (vert) for (let x = x0 + 0.5; x < x0 + bw - 0.4; x += 0.86) for (let y = y0 + 1.1; y < y0 + bh - 1; y += 2.25) push(x, y, Math.PI / 2);
+      else for (let y = y0 + 0.5; y < y0 + bh - 0.4; y += 0.86) for (let x = x0 + 1.1; x < x0 + bw - 1; x += 2.25) push(x, y, 0);
+    }
+    if (rot) out.forEach(p => { const dx = p.x - cx, dy = p.y - cy; p.x = cx + dx * Math.cos(rot) - dy * Math.sin(rot); p.y = cy + dx * Math.sin(rot) + dy * Math.cos(rot); p.a += rot; });
+  } else if (kind === 'rings') { // 一圈一圈的同心圓,車沿著圓排
+    const off = rnd() * Math.PI;
+    for (let r = 1.25; r < 5.2; r += 1.05) {
+      const n = Math.floor(2 * Math.PI * r / 2.15);
+      for (let k = 0; k < n; k++) { const t = off + k / n * Math.PI * 2 + r; push(cx + Math.cos(t) * r, cy + Math.sin(t) * r * 1.1, t + Math.PI / 2); }
+    }
+    push(cx, cy, rnd() * Math.PI);
+  } else if (kind === 'spiral') { // 螺旋
+    let t = 0.8;
+    while (true) {
+      const r = 0.55 + 0.33 * t;
+      if (r > 5.3) break;
+      push(cx + Math.cos(t) * r, cy + Math.sin(t) * r * 1.12, t + Math.PI / 2);
+      t += 2.1 / r;
+    }
+  } else { // 'pile' 亂堆:隨便擺、角度每 15 度一格
+    for (let k = 0; k < 900 && out.length < 80; k++) {
+      const c = cap(), b = { x: 0.8 + rnd() * (BUS_LW - 1.6), y: 0.8 + rnd() * (BUS_LH - 1.6), a: Math.floor(rnd() * 12) * Math.PI / 12, cap: c, len: busLenOf(c) };
+      if (!out.some(o => busHit(b, o, 0.07))) out.push(b);
+    }
+  }
   return out;
 }
 function busLevel(L) {
   const rnd = busRng(L * 7919 + 13), ri = n => Math.floor(rnd() * n);
   const nColors = Math.min(BUS_COLORS.length, 2 + Math.floor((L - 1) / 3));
-  const W = Math.min(9, 5 + Math.floor(L / 5)), H = Math.min(12, 6 + Math.floor(L / 3));
-  const want = Math.min(48, 5 + Math.floor((L - 1) * 1.1));
-  const occ = Array.from({ length: H }, () => new Array(W).fill(-1));
-  const placed = [];
-  // 一台一台放進去:新放的車,前方的路不能被已經放好的車擋住(這樣倒過來開出去一定可行);
-  // 盡量挑會擋住別台車的位置,關卡才有難度
-  for (let k = 0; k < want; k++) {
-    let best = null;
-    for (let t = 0; t < 150; t++) {
-      const len = rnd() < Math.min(0.6, 0.15 + L * 0.02) ? 3 : 2, horiz = rnd() < 0.5;
-      const dir = horiz ? (rnd() < 0.5 ? 'L' : 'R') : (rnd() < 0.5 ? 'U' : 'D');
-      const b = { len, dir, x: ri(W - (horiz ? len : 1) + 1), y: ri(H - (horiz ? 1 : len) + 1) };
-      const cells = busCells(b);
-      if (cells.some(([x, y]) => occ[y][x] >= 0)) continue;
-      if (busPath(b, W, H).some(([x, y]) => occ[y][x] >= 0)) continue;
-      const blocks = placed.filter(p => busPath(p, W, H).some(([x, y]) => cells.some(([cx, cy]) => cx === x && cy === y))).length;
-      const sc = blocks * (1 + L * 0.06) + rnd() * 0.9; // 關卡越後面,越偏好會擋住別台車的位置(連鎖更長)
-      if (!best || sc > best.sc) best = { b, sc };
+  const want = Math.min(46, 6 + Math.floor((L - 1) * 1.2));
+  const longP = Math.min(0.55, 0.2 + L * 0.02);
+  const kinds = L <= 3 ? ['blocks'] : ['blocks', 'tilt', 'rings', 'spiral', 'pile', 'blocks', 'pile'];
+  let placed = [];
+  const pBlock = Math.min(0.92, 0.35 + L * 0.03); // 越後面越常故意讓車子被「先開走的車」擋住
+  for (let attempt = 0; attempt < 4 && placed.length < want * 0.75; attempt++) {
+    // 1) 依圖案產生位置,留下在停車場裡、而且不互相重疊的
+    const cand = busPattern(kinds[ri(kinds.length)], rnd, longP);
+    const keep = [];
+    cand.forEach(b => {
+      const r = Math.hypot(b.len / 2, BUS_WID / 2);
+      if (b.x < r * 0.6 || b.y < r * 0.6 || b.x > BUS_LW - r * 0.6 || b.y > BUS_LH - r * 0.6) return;
+      if (!keep.some(o => busHit(b, o, 0.06))) keep.push(b);
+    });
+    // 數量太多就隨機拿掉一些(圖案還是看得出來)
+    while (keep.length > want) keep.splice(ri(keep.length), 1);
+    // 2) 決定每台車的方向:一直找「現在開得出去」的車把它移走,移走的順序就是保證有解的順序
+    const rest = keep.slice(), order = [], gone = [];
+    const memo = new Map(); // 「公車+方向」→ 擋住它的車(null 代表一路暢通)
+    const inRest = new Set(rest);
+    while (rest.length) {
+      const opts = [];
+      rest.forEach(b => [0, Math.PI].forEach(f => {
+        const key = b, k2 = f ? 1 : 0;
+        let m = memo.get(key);
+        if (!m) { m = [undefined, undefined]; memo.set(key, m); }
+        if (m[k2] === undefined || (m[k2] && !inRest.has(m[k2]))) { const h = busFirstHit(b, b.a + f, rest); m[k2] = h ? h.o : null; }
+        if (m[k2] === null) opts.push([b, b.a + f, busSweep(b, b.a + f, gone) >= 0 ? 1 : 0]);
+      }));
+      if (!opts.length) { const dead = rest.splice(ri(rest.length), 1)[0]; inRest.delete(dead); continue; } // 卡死了:拿掉一台車
+      const blocked = opts.filter(o => o[2]); // 會被先開走的車擋住 = 一開始開不出去,要先解開
+      const pool = blocked.length && rnd() < pBlock ? blocked : opts;
+      const [b, a] = pool[ri(pool.length)];
+      b.a = ((a % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+      order.push(b);
+      gone.push({ ...b });
+      rest.splice(rest.indexOf(b), 1);
+      inRest.delete(b);
     }
-    if (!best) break;
-    best.b.id = placed.length;
-    busCells(best.b).forEach(([x, y]) => { occ[y][x] = best.b.id; });
-    placed.push(best.b);
+    if (order.length > placed.length) placed = order;
   }
+  placed.forEach((b, i) => { b.id = i; });
   // 顏色:每種顏色至少一台
-  const order = placed.map((_, i) => i);
-  for (let i = order.length - 1; i > 0; i--) { const j = ri(i + 1); [order[i], order[j]] = [order[j], order[i]]; }
-  order.forEach((id, k) => { placed[id].c = k < nColors ? k : ri(nColors); placed[id].cap = placed[id].len === 3 ? 6 : 4; });
+  const ids = placed.map((_, i) => i);
+  for (let i = ids.length - 1; i > 0; i--) { const j = ri(i + 1); [ids[i], ids[j]] = [ids[j], ids[i]]; }
+  ids.forEach((id, k) => { placed[id].c = k < nColors ? k : ri(nColors); });
   // 第 16 關起:有些公車是「?」神秘車,前面被擋住的時候看不到顏色,路一通就會顯示出來
   const hidP = L >= 16 ? Math.min(0.45, (L - 15) * 0.03) : 0;
   placed.forEach(b => { b.hid = rnd() < hidP; });
-  // 乘客排隊:照「開出去的順序」(倒過來),同時最多 win 台車在接客,把它們的乘客混在一起
+  // 乘客排隊:照「開出去的順序」,同時最多 win 台車在接客,把它們的乘客混在一起
   const slots = 5, win = Math.min(slots - 1, 1 + Math.ceil(L / 3));
-  const exitOrder = placed.slice().reverse(), rem = new Map(placed.map(b => [b.id, b.cap]));
+  const rem = new Map(placed.map(b => [b.id, b.cap]));
   const queue = [], open = [];
   let nx = 0;
-  while (queue.length < placed.reduce((t, b) => t + b.cap, 0)) {
-    while (open.length < win && nx < exitOrder.length) open.push(exitOrder[nx++]);
+  const total = placed.reduce((t, b) => t + b.cap, 0);
+  while (queue.length < total) {
+    while (open.length < win && nx < placed.length) open.push(placed[nx++]);
     const b = open[ri(open.length)];
     queue.push(b.c);
     rem.set(b.id, rem.get(b.id) - 1);
     if (!rem.get(b.id)) open.splice(open.indexOf(b), 1);
   }
   const tier = L <= 5 ? '簡單' : L <= 12 ? '普通' : L <= 25 ? '困難' : L <= 45 ? '超難' : '地獄';
-  return { W, H, slots, buses: placed, queue, nColors, tier };
+  return { slots, buses: placed, queue, nColors, tier };
 }
 
 /* ---------- 乘客角色:用附件的立體小人圖(戴帽子的 T 恤小人),切下來之後把衣服和帽子換成各種公車的顏色 ---------- */
@@ -4143,151 +4218,176 @@ function busGame() {
       <button class="iconbtn bgretry" aria-label="重來">↻</button>
     </div>
     <div class="bgstage"><canvas class="bgcv"></canvas><div class="bgov"></div></div>
-    <div class="bgbar"><span class="bgleft" title="還在排隊的乘客">🧍 <b>0</b></span><div class="bgtools"><button class="bgturn">🔄 轉向 <b>2</b></button><button class="bgplus">🅿️ +1 候車格</button></div></div>`;
+    <div class="bgbar"><span class="bgleft" title="還在排隊的乘客">🧍 <b>0</b></span>
+      <div class="bgtools"><button class="bgturn" aria-label="轉向"><span>🔄</span><b>2</b><small>轉向</small></button><button class="bgplus" aria-label="加一個候車格"><span>🅿️</span><b>1</b><small>加格</small></button></div></div>`;
   app.appendChild(scr);
   const stage = $('.bgstage', scr), cv = $('.bgcv', scr), ctx = cv.getContext('2d'), ov = $('.bgov', scr);
   const leftEl = $('.bgleft b', scr), plusBtn = $('.bgplus', scr), turnBtn = $('.bgturn', scr), lvEl = $('.bglv b', scr), tierEl = $('.bgtier', scr);
   let G = null, sc = 1, ox = 0, oy = 0, raf = 0, last = 0;
 
-  // ---------- 版面(世界座標的單位是「一格」) ----------
-  const QH = 2.9, SH = 2.7, M = 0.7; // 上方排隊區、候車格區的高度;M 是左右下方的草地寬
+  // ---------- 版面(世界座標):上面排隊的人龍、中間候車格、下面停車場 ----------
+  const TW = BUS_LW + 1.4, QH = 4.5, SH = 2.4, LX = 0.7, LY = QH + SH + 0.55, TH = LY + BUS_LH + 0.5, SLOTS_MAX = 7;
   function layout() {
-    const TW = G.W + 2 + M * 2, TH = QH + SH + 1 + G.H + 1 + M;
     const r = stage.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
     cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
     sc = Math.min(cv.width / TW, cv.height / TH);
     ox = (cv.width - TW * sc) / 2; oy = (cv.height - TH * sc) / 2;
-    G.TW = TW; G.TH = TH; G.LX = 1 + M; G.LY = QH + SH + 1;
   }
-  const slotX = k => M + (k + 0.5) * (G.TW - M * 2) / G.slots;
+  const slotX = k => 0.55 + (k + 0.5) * (TW - 1.1) / SLOTS_MAX;
   const slotY = () => QH + SH / 2 + 0.05;
-  const roadT = () => G.LY - 0.5, roadB = () => G.LY + G.H + 0.5, roadL = () => M + 0.5, roadR = () => G.LX + G.W + 0.5;
-  function busCenter(b) { const cs = busCells(b); return [G.LX + cs.reduce((t, c) => t + c[0], 0) / b.len + 0.5, G.LY + cs.reduce((t, c) => t + c[1], 0) / b.len + 0.5]; }
-  const ANG = { R: 0, D: Math.PI / 2, L: Math.PI, U: -Math.PI / 2 };
+  const ringL = 0.33, ringR = TW - 0.33, ringT = LY - 0.3, ringB = LY + BUS_LH + 0.3;
+  const wx = b => LX + b.x, wy = b => LY + b.y; // 停車場座標 → 世界座標
+
+  // 排隊的人龍:倒過來的 U 字形走道,排頭在左下角(靠近候車格)
+  const lane = (() => {
+    const pts = [], x0 = 1.05, x1 = TW - 1.05, yB = QH - 0.35, yA = 1.55, rx = (x1 - x0) / 2, ry = 1.15, cx = (x0 + x1) / 2;
+    for (let y = yB; y > yA; y -= 0.1) pts.push([x0, y]);
+    for (let t = Math.PI; t <= Math.PI * 2 + 0.001; t += 0.03) pts.push([cx + Math.cos(t) * rx, yA + Math.sin(t) * ry]);
+    for (let y = yA; y <= yB; y += 0.1) pts.push([x1, y]);
+    const acc = [0];
+    for (let i = 1; i < pts.length; i++) acc.push(acc[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+    return { pts, acc, len: acc[acc.length - 1] };
+  })();
+  function laneAt(s) { // 走道上距離起點 s 的位置與方向
+    const { pts, acc } = lane;
+    let i = 1;
+    while (i < acc.length - 1 && acc[i] < s) i++;
+    const u = (s - acc[i - 1]) / Math.max(1e-6, acc[i] - acc[i - 1]), [ax, ay] = pts[i - 1], [bx, by] = pts[i];
+    return [ax + (bx - ax) * u, ay + (by - ay) * u, Math.atan2(by - ay, bx - ax)];
+  }
+  const PER_ROW = 3, ROW_GAP = 0.3;
+  function queuePos(i) { // 第 i 個排隊的人站在哪裡(走道上三個人並排)
+    const row = Math.floor(i / PER_ROW), k = i % PER_ROW, [x, y, a] = laneAt(Math.min(lane.len, 0.15 + row * ROW_GAP));
+    const side = (k - 1) * 0.29 + (((i * 37) % 7) - 3) * 0.012;
+    return [x - Math.sin(a) * side, y + Math.cos(a) * side];
+  }
+  const laneCap = Math.floor(lane.len / ROW_GAP) * PER_ROW;
 
   // ---------- 開始一關 ----------
   function start(L) {
     level = L;
     store.set('busLevel', L);
     const lv = busLevel(L);
-    G = { ...lv, level: L, queue: lv.queue.slice(), qid: lv.queue.map((_, i) => L * 1000 + i), state: 'play', walkers: [], slotOf: new Array(7).fill(null), plusUsed: false, boardCd: 0.6, endT: 0, moves: 0, turns: 2, turning: false };
-    G.buses = lv.buses.map(b => { const o = { ...b, st: 'lot', boarded: 0, incoming: 0, anim: null, shake: 0 }; return o; });
+    G = { ...lv, level: L, queue: lv.queue.slice(), qid: lv.queue.map((_, i) => L * 1000 + i), state: 'play', walkers: [], slotOf: new Array(SLOTS_MAX).fill(null), plusUsed: false, boardCd: 0.6, endT: 0, turns: 2, turning: false, revealT: 0 };
+    G.buses = lv.buses.map(b => ({ ...b, st: 'lot', boarded: 0, incoming: 0, anim: null, shake: 0, px: LX + b.x, py: LY + b.y, ang: b.a, scale: 1 }));
     layout();
-    G.buses.forEach(b => { const [x, y] = busCenter(b); b.px = x; b.py = y; b.ang = ANG[b.dir]; b.scale = 1; });
-    G.deco = makeDeco(L);
     revealFree(false); // 一開始就沒被擋住的神秘車,直接顯示顏色
     lvEl.textContent = L;
     tierEl.textContent = lv.tier;
     tierEl.dataset.t = lv.tier;
-    plusBtn.disabled = false;
-    plusBtn.classList.remove('used');
-    updTurn();
+    updTools();
     ov.className = 'bgov';
     updBar();
   }
   const updBar = () => { leftEl.textContent = G.queue.length + G.walkers.length; };
+  const lotBuses = () => G.buses.filter(o => o.st === 'lot');
 
-  // ---------- 動畫:沿著幾個路徑點開車 ----------
+  // ---------- 動畫:沿著路徑點開車 ----------
   function drive(b, pts, speed, onEnd, endScale) {
     b.anim = { pts, i: 0, speed, onEnd, endScale: endScale == null ? b.scale : endScale, startScale: b.scale, total: 0, done: 0 };
     let px = b.px, py = b.py;
     pts.forEach(([x, y]) => { b.anim.total += Math.hypot(x - px, y - py); px = x; py = y; });
   }
+  const lerpAng = (a, b, t) => { let d = b - a; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return a + d * t; };
   function stepAnim(b, dt) {
     const a = b.anim;
     let move = a.speed * dt;
-    while (a && move > 0 && a.i < a.pts.length) {
+    while (move > 0 && a.i < a.pts.length) {
       const [tx, ty] = a.pts[a.i], dx = tx - b.px, dy = ty - b.py, d = Math.hypot(dx, dy);
-      if (d > 0.001 && !a.keepAng) b.ang = lerpAng(b.ang, Math.atan2(dy, dx), Math.min(1, dt * 14));
+      if (d > 0.001 && !a.keepAng) b.ang = lerpAng(b.ang, Math.atan2(dy, dx), Math.min(1, dt * 12));
       if (d <= move) { b.px = tx; b.py = ty; move -= d; a.done += d; a.i++; }
       else { b.px += dx / d * move; b.py += dy / d * move; a.done += move; move = 0; }
     }
     b.scale = a.startScale + (a.endScale - a.startScale) * Math.min(1, a.done / Math.max(0.001, a.total));
     if (a.i >= a.pts.length) { b.anim = null; if (a.onEnd) a.onEnd(); }
   }
-  const lerpAng = (a, b, t) => { let d = b - a; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return a + d * t; };
 
-  // ---------- 點公車 ----------
+  // ---------- 點公車:往箭頭方向直直開;撞到車就彈回來 ----------
   function tap(b) {
-    if (G.state !== 'play' || b.st !== 'lot' || b.anim) return;
-    const path = busPath(b, G.W, G.H);
-    const blocker = path.findIndex(([x, y]) => G.buses.some(o => o !== b && o.st === 'lot' && busCells(o).some(c => c[0] === x && c[1] === y)));
-    const [dx, dy] = BUS_DIRS[b.dir], [cx, cy] = busCenter(b);
-    if (blocker >= 0) { // 被擋住:往前撞一下再退回來
-      const d = blocker + 0.18;
-      const hit = G.buses.find(o => o !== b && o.st === 'lot' && busCells(o).some(c => c[0] === path[blocker][0] && c[1] === path[blocker][1]));
-      drive(b, [[cx + dx * d, cy + dy * d], [cx, cy]], 11, null);
+    if (G.state !== 'play' || b.st !== 'lot' || b.anim || b.spin) return;
+    const hit = busFirstHit(b, b.a, lotBuses());
+    const ca = Math.cos(b.a), sa = Math.sin(b.a), x0 = b.px, y0 = b.py;
+    if (hit) {
+      const d = hit.d + 0.06;
+      drive(b, [[x0 + ca * d, y0 + sa * d], [x0, y0]], 12, null);
       b.anim.keepAng = true;
-      setTimeout(() => { if (hit) hit.shake = 0.35; beep(140, 0.12, 'square', 0.1); buzz(30); }, d / 11 * 1000);
+      setTimeout(() => { hit.o.shake = 0.35; beep(140, 0.12, 'square', 0.1); buzz(30); }, d / 12 * 1000);
       return;
     }
     const k = G.slotOf.findIndex((s, i) => i < G.slots && s == null);
     if (k < 0) { b.shake = 0.35; toast('候車格滿了!等公車載滿開走'); beep(180, 0.15, 'square', 0.08); return; }
     G.slotOf[k] = b;
     b.st = 'go';
-    if (b.hid) { b.hid = false; b.reveal = 0.6; }
     b.slot = k;
-    G.moves++;
+    if (b.hid) { b.hid = false; b.reveal = 0.6; }
     SFX.tap();
     beep(330, 0.12, 'sawtooth', 0.05);
-    // 開出停車場 → 沿著外圍道路 → 從上面的路開進候車格
-    const pts = [];
-    const sx = slotX(k), sy = slotY();
-    if (b.dir === 'U') pts.push([cx, roadT()]);
-    else if (b.dir === 'L') pts.push([roadL(), cy], [roadL(), roadT()]);
-    else if (b.dir === 'R') pts.push([roadR(), cy], [roadR(), roadT()]);
-    else {
-      const side = cx < G.LX + G.W / 2 ? roadL() : roadR();
-      pts.push([cx, roadB()], [side, roadB()], [side, roadT()]);
-    }
-    pts.push([sx, roadT()], [sx, sy]);
-    drive(b, pts, 13, () => { b.st = 'slot'; b.ang = -Math.PI / 2; beep(520, 0.08, 'triangle', 0.08); }, 0.74);
+    // 先直直開出停車場,再沿著停車場外圍繞到上面,開進候車格
+    let s = 0;
+    while (!busOutside(b.x + ca * s, b.y + sa * s, b.len / 2 + 0.15) && s < 40) s += 0.1;
+    const ex = x0 + ca * s, ey = y0 + sa * s, pts = [[ex, ey]];
+    const sx = slotX(k), top = [sx, ringT];
+    const outT = b.y + sa * s < 0, outB = b.y + sa * s > BUS_LH, outL = b.x + ca * s < 0;
+    if (outT) pts.push([Math.max(ringL, Math.min(ringR, ex)), ringT]);
+    else if (outB) { const side = ex < TW / 2 ? ringL : ringR; pts.push([ex, ringB], [side, ringB], [side, ringT]); }
+    else { const side = outL ? ringL : ringR; pts.push([side, ey], [side, ringT]); }
+    pts.push(top, [sx, slotY()]);
+    drive(b, pts, 14, () => { b.st = 'slot'; b.ang = -Math.PI / 2; beep(520, 0.08, 'triangle', 0.08); }, 0.86);
   }
 
-  // ---------- 轉向道具 ----------
-  const OPP = { L: 'R', R: 'L', U: 'D', D: 'U' };
-  function updTurn() {
+  // ---------- 道具:轉向、加一格 ----------
+  function updTools() {
     $('b', turnBtn).textContent = G.turns;
     turnBtn.disabled = !G.turns;
     turnBtn.classList.toggle('on', G.turning);
     stage.classList.toggle('turning', G.turning);
+    $('b', plusBtn).textContent = G.plusUsed ? 0 : 1;
+    plusBtn.disabled = G.plusUsed;
   }
-  function turnBus(b) { // 公車調頭:車頭變車尾,往反方向開(佔的格子不變)
+  function turnBus(b) { // 公車調頭:車頭變車尾,往反方向開
     if (G.state !== 'play' || b.st !== 'lot' || b.anim || !G.turns) return;
     G.turns--;
     G.turning = false;
-    b.dir = OPP[b.dir];
-    const to = b.ang + Math.PI;
-    b.spin = { from: b.ang, to, t: 0 };
+    const from = b.ang;
+    b.a = (b.a + Math.PI) % (Math.PI * 2);
+    b.spin = { from, to: from + Math.PI, t: 0 };
     SFX.good(); beep(480, 0.08, 'triangle', 0.1);
-    updTurn();
+    updTools();
+  }
+  function addSlot() {
+    if (G.plusUsed || G.slots >= SLOTS_MAX) return false;
+    G.plusUsed = true;
+    G.slots++;
+    updTools();
+    SFX.good();
+    return true;
   }
 
   // ---------- 每一幀 ----------
   function revealFree(flash) { // 前面沒有被擋住的「?」公車,翻開顏色
-    G.buses.forEach(b => {
-      if (!b.hid || b.st !== 'lot') return;
-      const open = busPath(b, G.W, G.H).every(([x, y]) => !G.buses.some(o => o !== b && o.st === 'lot' && busCells(o).some(c => c[0] === x && c[1] === y)));
-      if (open) { b.hid = false; if (flash) { b.reveal = 0.6; beep(760, 0.08, 'sine', 0.08); } }
+    const lot = lotBuses();
+    lot.forEach(b => {
+      if (b.hid && !busFirstHit(b, b.a, lot)) { b.hid = false; if (flash) { b.reveal = 0.6; beep(760, 0.08, 'sine', 0.08); } }
     });
   }
   function update(dt) {
-    if (G.state === 'play') revealFree(true);
+    if (G.state === 'play' && (G.revealT += dt) > 0.2) { G.revealT = 0; revealFree(true); }
     G.buses.forEach(b => {
-      if (b.spin) { b.spin.t += dt / 0.35; const u = Math.min(1, b.spin.t), e = 1 - (1 - u) ** 3; b.ang = b.spin.from + (b.spin.to - b.spin.from) * e; if (u >= 1) { b.ang = ANG[b.dir]; b.spin = null; } }
+      if (b.spin) { b.spin.t += dt / 0.35; const u = Math.min(1, b.spin.t), e = 1 - (1 - u) ** 3; b.ang = b.spin.from + (b.spin.to - b.spin.from) * e; if (u >= 1) { b.ang = b.a; b.spin = null; } }
       if (b.anim) stepAnim(b, dt);
-      else if (b.st === 'slot') b.px += (slotX(b.slot) - b.px) * Math.min(1, dt * 8); // 候車格數量變了就滑到新位置
+      else if (b.st === 'slot') b.px += (slotX(b.slot) - b.px) * Math.min(1, dt * 8);
       if (b.shake > 0) b.shake = Math.max(0, b.shake - dt);
       if (b.reveal > 0) b.reveal = Math.max(0, b.reveal - dt);
     });
     // 乘客上車
     G.walkers = G.walkers.filter(w => {
-      w.t += dt / 0.3;
+      w.t += dt / 0.32;
       if (w.t < 1) return true;
-      w.bus.incoming--; w.bus.boarded++;
+      w.bus.incoming--; w.bus.boarded++; w.bus.pop = 0.18;
       beep(700 + w.bus.boarded * 40, 0.04, 'sine', 0.05);
       return false;
     });
+    G.buses.forEach(b => { if (b.pop > 0) b.pop = Math.max(0, b.pop - dt); });
     updBar();
     if (G.state === 'play' && G.queue.length) {
       G.boardCd -= dt;
@@ -4296,25 +4396,23 @@ function busGame() {
         const bus = G.slotOf.find((b, i) => i < G.slots && b && b.st === 'slot' && b.c === c && b.boarded + b.incoming < b.cap);
         if (bus) {
           const pid = G.qid.shift();
+          const [qx, qy] = queuePos(0);
           G.queue.shift();
           bus.incoming++;
-          const [qx, qy] = queuePos(0);
           G.walkers.push({ c, bus, t: 0, fx: qx, fy: qy, id: pid });
-          G.boardCd = 0.12;
-          updBar();
+          G.boardCd = 0.11;
         }
       }
     }
-    // 坐滿就開走
+    // 坐滿就開走(往上開走、慢慢變小消失)
     G.buses.forEach(b => {
       if (b.st === 'slot' && b.boarded >= b.cap && !b.incoming) {
         b.st = 'leave';
         G.slotOf[b.slot] = null;
         beep(260, 0.25, 'sawtooth', 0.05); beep(390, 0.2, 'triangle', 0.08, 0.1);
-        drive(b, [[b.px, b.py - 0.6], [b.px + (b.slot < G.slots / 2 ? -1 : 1) * (G.TW + 2), b.py - 0.6]], 12, () => { b.st = 'gone'; });
+        drive(b, [[b.px, b.py - 0.3], [b.px + (b.slot < SLOTS_MAX / 2 ? -1 : 1) * 2.2, QH - 1.2]], 9, () => { b.st = 'gone'; }, 0.2);
       }
     });
-    // 勝負
     if (G.state === 'play') {
       if (!G.queue.length && !G.walkers.length && G.buses.every(b => b.st === 'gone')) end(true);
       else if (G.queue.length && !G.walkers.length) {
@@ -4340,105 +4438,26 @@ function busGame() {
     }
     setTimeout(() => ov.classList.add('on'), win ? 700 : 300);
   }
-  function addSlot() {
-    if (G.plusUsed || G.slots >= 7) return false;
-    G.plusUsed = true;
-    G.slots++;
-    plusBtn.disabled = true;
-    plusBtn.classList.add('used');
-    SFX.good();
-    return true;
-  }
 
-  // ---------- 畫面:假 3D(鏡頭稍微從前方往下看:東西越高,畫得越往上;車身用一層層疊出厚度) ----------
-  function queuePos(i) { // 排隊路線:從候車區正上方往右、再一排排繞上去
-    const sp = 0.46, rowH = 0.62, y0 = QH - 0.45, left = M + 0.35, right = G.TW - M - 0.35, perRow = Math.floor((right - left) / sp) + 1;
-    const startX = G.TW / 2;
-    const first = Math.floor((right - startX) / sp) + 1;
-    if (i < first) return [startX + i * sp, y0];
-    i -= first;
-    const row = 1 + Math.floor(i / perRow), k = i % perRow;
-    return [row % 2 ? right - k * sp : left + k * sp, y0 - row * rowH];
-  }
-  function makeDeco(L) { // 草地上的樹和草叢(每一關固定)
-    const r = busRng(L * 31 + 7), out = [], TW = G.TW, TH = G.TH;
-    for (let y = QH + 0.6; y < TH - 0.3; y += 0.9 + r() * 0.6) {
-      out.push({ t: r() < 0.45 ? 'tree' : 'bush', x: 0.35 + r() * 0.1, y, s: 0.75 + r() * 0.35 });
-      out.push({ t: r() < 0.45 ? 'tree' : 'bush', x: TW - 0.35 - r() * 0.1, y: y + r() * 0.4, s: 0.75 + r() * 0.35 });
-    }
-    for (let x = M + 0.4; x < TW - M; x += 1 + r() * 0.8) out.push({ t: r() < 0.5 ? 'bush' : 'flower', x, y: TH - 0.32, s: 0.7 + r() * 0.3 });
-    return out.sort((p, q) => p.y - q.y);
-  }
+  // ---------- 畫面 ----------
   const rr = (x, y, w, h, r) => { ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h); };
   function shade(hex, f) { const v = parseInt(hex.slice(1), 16), ch = k => { const x = (v >> k) & 255; return Math.round(f > 0 ? x + (255 - x) * f : x * (1 + f)); }; return `rgb(${ch(16)},${ch(8)},${ch(0)})`; }
   const blob = (x, y, rx, ry, col) => { ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); ctx.fill(); };
-  function ball(x, y, r, col) { // 有光影的球(樹冠、草叢、人頭)
-    const g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.4, r * 0.1, x, y, r);
-    g.addColorStop(0, shade(col, 0.35)); g.addColorStop(0.7, col); g.addColorStop(1, shade(col, -0.3));
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
-  }
-  function drawTree(d) {
-    const { x, y, s } = d;
-    blob(x + 0.08 * s, y + 0.06 * s, 0.34 * s, 0.13 * s, 'rgba(0,0,0,.22)');
-    ctx.fillStyle = '#7a5230'; rr(x - 0.05 * s, y - 0.32 * s, 0.1 * s, 0.34 * s, 0.03); ctx.fill();
-    ball(x - 0.13 * s, y - 0.42 * s, 0.22 * s, '#3f9a45');
-    ball(x + 0.14 * s, y - 0.45 * s, 0.21 * s, '#3f9a45');
-    ball(x, y - 0.62 * s, 0.25 * s, '#4cae4f');
-  }
-  function drawBush(d) {
-    const { x, y, s } = d;
-    blob(x + 0.05, y + 0.05, 0.3 * s, 0.1 * s, 'rgba(0,0,0,.2)');
-    ball(x - 0.13 * s, y - 0.08 * s, 0.15 * s, '#4aa64c'); ball(x + 0.13 * s, y - 0.08 * s, 0.15 * s, '#4aa64c'); ball(x, y - 0.16 * s, 0.18 * s, '#58b85a');
-  }
-  function drawFlower(d) {
-    drawBush(d);
-    [[-0.1, -0.2, '#ff6b9a'], [0.08, -0.25, '#ffd23f'], [0.14, -0.12, '#ffffff']].forEach(([dx, dy, c]) => blob(d.x + dx * d.s, d.y + dy * d.s, 0.04, 0.04, c));
-  }
-  function drawShelter(x, y, w) { // 公車候車亭
-    const hgt = 0.5;
-    blob(x + w / 2 + 0.1, y + 0.32, w / 2 + 0.15, 0.14, 'rgba(0,0,0,.22)');
-    ctx.fillStyle = '#5b6372';
-    [0.08, w - 0.14].forEach(px => { ctx.fillRect(x + px, y - hgt + 0.1, 0.06, hgt + 0.15); });
-    ctx.fillStyle = 'rgba(160,215,255,.45)'; ctx.fillRect(x + 0.14, y - hgt + 0.2, w - 0.28, hgt - 0.05); // 背板玻璃
-    ctx.fillStyle = '#8d6b4a'; rr(x + 0.3, y - 0.02, w - 0.6, 0.1, 0.03); ctx.fill(); // 椅子
-    ctx.fillStyle = '#6d7686'; rr(x - 0.05, y - hgt - 0.06, w + 0.1, 0.12, 0.05); ctx.fill(); // 屋頂側面
-    ctx.fillStyle = '#c9e9ff'; rr(x - 0.05, y - hgt - 0.34, w + 0.1, 0.3, 0.06); ctx.fill(); // 屋頂
-    ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.fillRect(x + 0.05, y - hgt - 0.3, w - 0.1, 0.05);
-    ctx.fillStyle = '#ffd23f'; rr(x + w - 0.42, y - hgt - 0.3, 0.34, 0.22, 0.05); ctx.fill();
-    ctx.fillStyle = '#1f3864'; ctx.font = '900 0.17px Fredoka, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('BUS', x + w - 0.25, y - hgt - 0.19);
-  }
-  function drawPost(x, y) {
-    blob(x + 0.04, y + 0.03, 0.07, 0.03, 'rgba(0,0,0,.25)');
-    ctx.fillStyle = '#8b93a3'; ctx.fillRect(x - 0.025, y - 0.3, 0.05, 0.3);
-    ball(x, y - 0.32, 0.05, '#c8ced9');
-  }
-  function drawPerson(x, y, c, s, now, k, face, id) {
-    const bob = Math.abs(Math.sin(now / 260 + k * 0.7)) * 0.025, col = BUS_COLORS[c];
+  function drawPerson(x, y, c, s, now, k, id) {
+    const bob = Math.abs(Math.sin(now / 260 + k * 0.7)) * 0.02;
+    blob(x, y + 0.02 * s, 0.12 * s, 0.045 * s, 'rgba(40,50,70,.22)');
     if (BUS_PEOPLE.ready && BUS_PEOPLE.base.length) {
-      const lk = busLook(id == null ? k : id), moving = face === 'l' || face === 'r', pose = lk.pose, flip = false; // 一律面向前方,走路也一樣
-      const sp = busPerson(c, pose, lk.hv, lk.sv, lk.pv);
-      const h = 0.78 * s * lk.sz, w = sp.width / sp.height * h;
-      blob(x, y + 0.07 * s, 0.17 * s, 0.06 * s, 'rgba(0,0,0,.26)');
-      ctx.save();
-      if (flip) { ctx.translate(x, 0); ctx.scale(-1, 1); ctx.translate(-x, 0); }
-      ctx.drawImage(sp, x - w / 2, y + 0.08 * s - h - bob * (moving ? 2 : 1), w, h);
-      ctx.restore();
+      const lk = busLook(id == null ? k : id), sp = busPerson(c, lk.pose, lk.hv, lk.sv, lk.pv);
+      const h = 0.6 * s * lk.sz, w = sp.width / sp.height * h;
+      ctx.drawImage(sp, x - w / 2, y + 0.03 * s - h - bob, w, h);
       return;
     }
-    blob(x + 0.03 * s, y + 0.02 * s, 0.13 * s, 0.05 * s, 'rgba(0,0,0,.25)');
-    ctx.fillStyle = shade(col, -0.45);
-    rr(x - 0.08 * s, y - 0.12 * s, 0.06 * s, 0.13 * s, 0.03 * s); ctx.fill();
-    rr(x + 0.02 * s, y - 0.12 * s, 0.06 * s, 0.13 * s, 0.03 * s); ctx.fill();
-    const g = ctx.createLinearGradient(x - 0.13 * s, 0, x + 0.13 * s, 0);
-    g.addColorStop(0, shade(col, 0.25)); g.addColorStop(0.6, col); g.addColorStop(1, shade(col, -0.3));
-    ctx.fillStyle = g;
-    rr(x - 0.12 * s, y - 0.36 * s - bob, 0.24 * s, 0.28 * s, 0.1 * s); ctx.fill();
-    ball(x, y - 0.46 * s - bob, 0.1 * s, '#ffd9b3');
-    ctx.fillStyle = shade(col, -0.2); // 帽子
-    ctx.beginPath(); ctx.arc(x, y - 0.48 * s - bob, 0.1 * s, Math.PI * 1.05, Math.PI * 1.95); ctx.fill();
+    const col = BUS_COLORS[c];
+    ctx.fillStyle = col; rr(x - 0.09 * s, y - 0.32 * s - bob, 0.18 * s, 0.3 * s, 0.08 * s); ctx.fill();
+    blob(x, y - 0.38 * s - bob, 0.08 * s, 0.08 * s, '#ffd9b3');
   }
-  function foot(b, lift, grow) { // 公車的底面(在 lift 高度),用目前的位置、角度、縮放
-    const L = b.len * 0.94 + grow * 2, Wd = 0.8 + grow * 2, sh = b.shake ? Math.sin(performance.now() / 18) * 0.06 * (b.shake / 0.35) : 0;
+  function foot(b, lift, grow) { // 公車底面(在 lift 高度):目前的位置、角度、縮放
+    const L = b.len + grow * 2, Wd = BUS_WID + grow * 2, sh = b.shake ? Math.sin(performance.now() / 18) * 0.06 * (b.shake / 0.35) : 0;
     ctx.save();
     ctx.translate(b.px + sh, b.py - lift * b.scale);
     ctx.rotate(b.ang);
@@ -4448,117 +4467,109 @@ function busGame() {
     return [L, Wd];
   }
   function drawBus(b, now) {
-    const col = b.hid ? '#9aa1ad' : BUS_COLORS[b.c], H3 = 0.5;
-    // 影子
-    ctx.save(); ctx.translate(0.1 * b.scale, 0.14 * b.scale); foot(b, 0, 0.05); ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fill(); ctx.restore(); ctx.restore();
+    const col = b.hid ? '#a3a9b5' : BUS_COLORS[b.c], H3 = 0.36, pop = b.pop ? 1 + b.pop * 0.25 : 1;
+    if (pop !== 1) { ctx.save(); ctx.translate(b.px, b.py); ctx.scale(pop, pop); ctx.translate(-b.px, -b.py); }
+    // 影子(柔和、往右下)
+    ctx.save(); ctx.translate(0.08 * b.scale, 0.12 * b.scale); foot(b, 0, 0.06); ctx.fillStyle = 'rgba(40,50,75,.22)'; ctx.fill(); ctx.restore(); ctx.restore();
     // 輪子
-    const [L, Wd] = foot(b, 0, 0); ctx.restore();
-    foot(b, 0.02, 0);
-    ctx.fillStyle = '#1c1f26';
-    [[-L / 2 + 0.28, -Wd / 2 - 0.02], [L / 2 - 0.36, -Wd / 2 - 0.02], [-L / 2 + 0.28, Wd / 2 - 0.08], [L / 2 - 0.36, Wd / 2 - 0.08]].forEach(([x, y]) => { rr(x, y, 0.2, 0.1, 0.04); ctx.fill(); });
+    const [L, Wd] = foot(b, 0.01, 0); ctx.fillStyle = '#1c1f26';
+    [[-L / 2 + 0.22, -Wd / 2 - 0.03], [L / 2 - 0.4, -Wd / 2 - 0.03], [-L / 2 + 0.22, Wd / 2 - 0.06], [L / 2 - 0.4, Wd / 2 - 0.06]].forEach(([x, y]) => { rr(x, y, 0.18, 0.09, 0.04); ctx.fill(); });
     ctx.restore();
-    // 車身:一層一層往上疊(下裙 → 車身 → 車窗玻璃 → 車身上緣)
-    const N = 12;
+    // 車身側面:下裙 → 車身 → 車窗玻璃 → 上緣
+    const N = 9;
     for (let i = 0; i <= N; i++) {
       const f = i / N;
       foot(b, f * H3, 0);
-      ctx.fillStyle = f < 0.14 ? shade(col, -0.55) : f < 0.42 ? shade(col, -0.2) : f < 0.82 ? (f < 0.5 ? '#1b2735' : '#26384c') : shade(col, -0.08);
+      ctx.fillStyle = f < 0.15 ? shade(col, -0.5) : f < 0.45 ? shade(col, -0.18) : f < 0.85 ? (f < 0.55 ? '#1d2a3c' : '#2c4462') : shade(col, -0.06);
       ctx.fill();
       ctx.restore();
     }
     // 車頂
     foot(b, H3, 0);
-    const rg = ctx.createLinearGradient(0, -Wd / 2, 0, Wd / 2);
-    rg.addColorStop(0, shade(col, 0.28)); rg.addColorStop(1, shade(col, 0.02));
+    const rg = ctx.createLinearGradient(-L / 2, -Wd / 2, L / 2, Wd / 2);
+    rg.addColorStop(0, shade(col, 0.3)); rg.addColorStop(1, shade(col, 0));
     ctx.fillStyle = rg; ctx.fill();
+    ctx.strokeStyle = shade(col, -0.25); ctx.lineWidth = 0.035; ctx.stroke();
     if (b.reveal) { ctx.fillStyle = `rgba(255,255,255,${b.reveal})`; ctx.fill(); }
-    ctx.fillStyle = '#1b2735'; // 前擋風玻璃、後窗
-    rr(L / 2 - 0.2, -Wd / 2 + 0.08, 0.15, Wd - 0.16, 0.06); ctx.fill();
-    rr(-L / 2 + 0.05, -Wd / 2 + 0.12, 0.08, Wd - 0.24, 0.04); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.fillRect(L / 2 - 0.17, -Wd / 2 + 0.12, 0.03, Wd - 0.24);
+    ctx.fillStyle = '#1d2a3c'; // 前擋風玻璃
+    rr(L / 2 - 0.2, -Wd / 2 + 0.07, 0.14, Wd - 0.14, 0.06); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.45)'; ctx.fillRect(L / 2 - 0.17, -Wd / 2 + 0.11, 0.03, Wd - 0.22);
     ctx.fillStyle = 'rgba(255,255,255,.4)'; // 車頂邊的亮線
-    rr(-L / 2 + 0.18, -Wd / 2 + 0.06, L - 0.42, 0.05, 0.02); ctx.fill();
+    rr(-L / 2 + 0.14, -Wd / 2 + 0.05, L - 0.4, 0.045, 0.02); ctx.fill();
     if (b.st === 'lot' || b.st === 'go') {
-      if (b.hid) { // 神秘車
-        ctx.fillStyle = '#fff'; ctx.font = '900 0.5px Fredoka, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      if (b.hid) {
+        ctx.fillStyle = '#fff'; ctx.font = '900 0.46px Fredoka, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.save(); ctx.rotate(-b.ang); ctx.fillText('?', 0, 0.02); ctx.restore();
-      } else { // 車頂的方向箭頭
-        ctx.fillStyle = '#fff';
-        ctx.strokeStyle = shade(col, -0.4); ctx.lineWidth = 0.035;
-        const ax = b.len === 3 ? 0.05 : 0.0;
-        ctx.beginPath(); ctx.moveTo(ax + 0.26, 0); ctx.lineTo(ax - 0.04, -0.22); ctx.lineTo(ax - 0.04, -0.08); ctx.lineTo(ax - 0.26, -0.08); ctx.lineTo(ax - 0.26, 0.08); ctx.lineTo(ax - 0.04, 0.08); ctx.lineTo(ax - 0.04, 0.22); ctx.closePath();
-        ctx.fill(); ctx.stroke();
+      } else { // 車頂的白色箭頭
+        const ax = -0.05, s2 = b.len > 1.8 ? 1.1 : 0.95;
+        ctx.save(); ctx.translate(ax, 0); ctx.scale(s2, s2);
+        ctx.beginPath(); ctx.moveTo(0.27, 0); ctx.lineTo(-0.02, -0.21); ctx.lineTo(-0.02, -0.08); ctx.lineTo(-0.26, -0.08); ctx.lineTo(-0.26, 0.08); ctx.lineTo(-0.02, 0.08); ctx.lineTo(-0.02, 0.21); ctx.closePath();
+        ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.save(); ctx.translate(0.02, 0.03); ctx.fill(); ctx.restore();
+        ctx.fillStyle = '#fff'; ctx.fill();
+        ctx.restore();
       }
-    } else { // 候車中:車頂的冷氣機 + 座位
-      const n = b.cap, cols = n / 2, gx = (L - 0.6) / cols;
+    } else { // 候車中:座位上的人頭
+      const n = b.cap, cols = n / 2, gx = (L - 0.55) / cols;
       for (let i = 0; i < n; i++) {
-        const sx = -L / 2 + 0.3 + (i % cols) * gx + gx / 2, sy = i < cols ? -0.15 : 0.15;
-        ctx.fillStyle = i < b.boarded ? '#fff' : 'rgba(0,0,0,.28)';
-        ctx.beginPath(); ctx.arc(sx, sy, 0.08, 0, Math.PI * 2); ctx.fill();
+        const sx = -L / 2 + 0.25 + (i % cols) * gx + gx / 2, sy = i < cols ? -0.15 : 0.15;
+        if (i < b.boarded) { blob(sx, sy, 0.1, 0.1, shade(col, 0.55)); blob(sx - 0.03, sy - 0.03, 0.04, 0.04, 'rgba(255,255,255,.7)'); }
+        else blob(sx, sy, 0.085, 0.085, 'rgba(0,0,0,.2)');
       }
     }
     ctx.restore();
+    if (pop !== 1) ctx.restore();
+  }
+  function drawLamp(x, y) {
+    blob(x + 0.05, y + 0.03, 0.12, 0.05, 'rgba(40,50,70,.2)');
+    ctx.fillStyle = '#9aa3b2'; rr(x - 0.04, y - 1.05, 0.08, 1.05, 0.03); ctx.fill();
+    ctx.fillStyle = '#7d8798'; rr(x - 0.04, y - 1.08, 0.36, 0.07, 0.03); ctx.fill();
+    blob(x + 0.3, y - 1.0, 0.09, 0.05, '#fff3c4');
   }
   function draw(now) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = '#5fae4c';
-    ctx.fillRect(0, 0, cv.width, cv.height);
+    const bg = ctx.createLinearGradient(0, 0, 0, cv.height);
+    bg.addColorStop(0, '#eef1f6'); bg.addColorStop(1, '#e2e6ee');
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, cv.width, cv.height);
     ctx.setTransform(sc, 0, 0, sc, ox, oy);
-    const { TW, TH, LX, LY, W, H } = G;
-    // 草地(割草的條紋)
-    for (let y = 0; y < TH; y += 0.8) { ctx.fillStyle = (y / 0.8) % 2 < 1 ? '#63b34f' : '#5aa948'; ctx.fillRect(-1, y, TW + 2, 0.8); }
-    // 排隊廣場:地磚 + 路緣
-    ctx.fillStyle = '#c9b58d'; rr(0.12, 0.12, TW - 0.24, QH - 0.04, 0.25); ctx.fill();
-    ctx.fillStyle = '#f1e2bf'; rr(0.12, 0.08, TW - 0.24, QH - 0.08, 0.25); ctx.fill();
-    ctx.strokeStyle = 'rgba(160,125,70,.18)'; ctx.lineWidth = 0.02;
-    for (let x = 0.5; x < TW - 0.2; x += 0.5) { ctx.beginPath(); ctx.moveTo(x, 0.1); ctx.lineTo(x, QH - 0.05); ctx.stroke(); }
-    for (let y = 0.5; y < QH; y += 0.5) { ctx.beginPath(); ctx.moveTo(0.15, y); ctx.lineTo(TW - 0.15, y); ctx.stroke(); }
-    // 排隊的欄杆(繞行的路線之間)
-    const rowH = 0.62, y0 = QH - 0.45, left = M + 0.35, right = TW - M - 0.35;
-    for (let r = 0; r < 3; r++) {
-      const ys = y0 - (r + 0.5) * rowH + 0.18, gapR = r % 2 === 0;
-      const xa = gapR ? left - 0.15 : left + 0.75, xb = gapR ? right - 0.75 : right + 0.15;
-      ctx.strokeStyle = '#7f8796'; ctx.lineWidth = 0.035;
-      ctx.beginPath(); ctx.moveTo(xa, ys - 0.24); ctx.lineTo(xb, ys - 0.24); ctx.stroke();
-      for (let x = xa; x <= xb + 0.01; x += (xb - xa) / Math.max(1, Math.round((xb - xa) / 1.4))) drawPost(x, ys);
+    // 人龍的走道:白色的寬帶子,外框淡灰
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath(); lane.pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+    ctx.strokeStyle = '#d4d9e2'; ctx.lineWidth = 1.18; ctx.stroke();
+    ctx.strokeStyle = '#f8f9fb'; ctx.lineWidth = 1.02; ctx.stroke();
+    drawLamp(0.4, QH + 0.05); drawLamp(TW - 0.75, QH + 0.05);
+    // 候車格:深灰色的長條,裡面一格一格;還沒開的格子顯示「+」
+    ctx.fillStyle = '#c5cbd5'; rr(0.25, QH + 0.12, TW - 0.5, SH, 0.3); ctx.fill();
+    ctx.fillStyle = '#5a6170'; rr(0.25, QH + 0.05, TW - 0.5, SH, 0.3); ctx.fill();
+    for (let k = 0; k < SLOTS_MAX; k++) {
+      const x = slotX(k), w = (TW - 1.1) / SLOTS_MAX - 0.14, y = QH + 0.25, h = SH - 0.4;
+      if (k < G.slots) {
+        ctx.fillStyle = '#464c58'; rr(x - w / 2, y, w, h, 0.16); ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = 0.03; ctx.stroke();
+      } else {
+        ctx.fillStyle = '#525866'; rr(x - w / 2, y, w, h, 0.16); ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,.1)'; ctx.setLineDash([0.12, 0.09]); ctx.lineWidth = 0.035; ctx.stroke(); ctx.setLineDash([]);
+        const canBuy = !G.plusUsed && k === G.slots;
+        blob(x, y + h / 2, 0.26, 0.26, canBuy ? '#2eaa4f' : '#6a7180');
+        ctx.fillStyle = '#fff'; ctx.font = '900 0.38px Fredoka, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(canBuy ? '+' : '🔒', x, y + h / 2 + 0.02);
+      }
     }
-    drawShelter(TW - M - 2.1, 0.75, 1.75);
-    // 候車格
-    ctx.fillStyle = '#9aa0aa'; ctx.fillRect(0, QH, TW, 0.1);
-    ctx.fillStyle = '#3c4049'; ctx.fillRect(0, QH + 0.1, TW, SH);
-    for (let k = 0; k < G.slots; k++) {
-      const x = slotX(k), w = (TW - M * 2) / G.slots;
-      ctx.fillStyle = '#353941'; rr(x - w / 2 + 0.07, QH + 0.22, w - 0.14, SH - 0.3, 0.12); ctx.fill();
-      ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = 0.05; ctx.setLineDash([0.16, 0.1]);
-      rr(x - w / 2 + 0.07, QH + 0.22, w - 0.14, SH - 0.3, 0.12); ctx.stroke(); ctx.setLineDash([]);
-      if (!G.slotOf[k]) { ctx.fillStyle = 'rgba(255,255,255,.28)'; ctx.font = '900 0.46px Fredoka, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('P', x, QH + SH / 2 + 0.05); }
-    }
-    // 道路 + 路緣
-    ctx.fillStyle = '#b8bec8'; rr(M - 0.08, LY - 1, TW - M * 2 + 0.16, H + 2.08, 0.2); ctx.fill();
-    ctx.fillStyle = '#33363d'; rr(M, LY - 1, TW - M * 2, H + 2, 0.15); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 0.05; ctx.setLineDash([0.3, 0.25]);
-    ctx.beginPath(); ctx.moveTo(M + 0.5, LY - 0.5); ctx.lineTo(TW - M - 0.5, LY - 0.5); ctx.lineTo(TW - M - 0.5, LY + H + 0.5); ctx.lineTo(M + 0.5, LY + H + 0.5); ctx.closePath(); ctx.stroke(); ctx.setLineDash([]);
-    // 停車場
-    ctx.fillStyle = '#41454e'; rr(LX - 0.1, LY - 0.1, W + 0.2, H + 0.2, 0.12); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineWidth = 0.04; ctx.setLineDash([0.14, 0.1]);
-    rr(LX - 0.1, LY - 0.1, W + 0.2, H + 0.2, 0.12); ctx.stroke(); ctx.setLineDash([]);
-    ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = 0.025;
-    for (let x = 1; x < W; x++) { ctx.beginPath(); ctx.moveTo(LX + x, LY); ctx.lineTo(LX + x, LY + H); ctx.stroke(); }
-    for (let y = 1; y < H; y++) { ctx.beginPath(); ctx.moveTo(LX, LY + y); ctx.lineTo(LX + W, LY + y); ctx.stroke(); }
-    // 草地上的裝飾
-    G.deco.forEach(d => (d.t === 'tree' ? drawTree : d.t === 'flower' ? drawFlower : drawBush)(d));
-    // 排隊的乘客(最多畫 64 個,後面的先畫)
-    const vis = Math.min(G.queue.length, 64);
+    // 停車場的範圍
+    ctx.fillStyle = 'rgba(160,170,190,.13)'; rr(LX - 0.25, LY - 0.25, BUS_LW + 0.5, BUS_LH + 0.5, 0.4); ctx.fill();
+    // 排隊的人(後面的先畫,前面的蓋在上面);太多的話顯示「+N」
+    const vis = Math.min(G.queue.length, laneCap);
     const ppl = [];
     for (let i = 0; i < vis; i++) ppl.push([i, ...queuePos(i)]);
-    ppl.sort((p, q) => p[2] - q[2]).forEach(([i, x, y]) => drawPerson(x, y + 0.12, G.queue[i], 1, now, i, null, G.qid[i]));
-    if (G.queue.length > vis) { ctx.fillStyle = '#6b4a14'; ctx.font = '900 0.34px Fredoka, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(`+${G.queue.length - vis}`, 0.35, 0.4); }
-    // 公車:由遠到近畫(y 小的先畫),疊起來才自然
-    G.buses.filter(b => b.st !== 'gone').sort((p, q) => p.py - q.py).forEach(b => drawBus(b, now));
+    ppl.sort((p, q) => p[2] - q[2]).forEach(([i, x, y]) => drawPerson(x, y, G.queue[i], 1, now, i, G.qid[i]));
+    if (G.queue.length > vis) { ctx.fillStyle = '#5a6170'; ctx.font = '900 0.36px Fredoka, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(`+${G.queue.length - vis}`, TW - 1.05, QH - 0.05); }
+    // 公車:由遠到近畫
+    G.buses.filter(b => b.st !== 'gone').sort((p, q) => p.py - q.py).forEach(b => {
+      if (b.st === 'leave') { ctx.globalAlpha = Math.max(0, Math.min(1, b.scale * 2 - 0.3)); drawBus(b, now); ctx.globalAlpha = 1; }
+      else drawBus(b, now);
+    });
     G.walkers.forEach((w, k) => {
-      const tx = w.bus.px, ty = w.bus.py - 0.15, u = w.t;
-      const dx = tx - w.fx, face = Math.abs(dx) > 0.5 ? (dx < 0 ? 'l' : 'r') : 'f';
-      drawPerson(w.fx + dx * u, w.fy + 0.12 + (ty - w.fy) * u - Math.sin(u * Math.PI) * 0.3, w.c, 1 - u * 0.35, now, k, face, w.id);
+      const tx = w.bus.px, ty = w.bus.py - 0.3, u = w.t;
+      drawPerson(w.fx + (tx - w.fx) * u, w.fy + (ty - w.fy) * u - Math.sin(u * Math.PI) * 0.35, w.c, 1 - u * 0.35, now, k, w.id);
     });
   }
   function frame(now) {
@@ -4574,20 +4585,23 @@ function busGame() {
     if (!G) return;
     e.preventDefault();
     const r = cv.getBoundingClientRect(), dpr = cv.width / r.width;
-    const wx = ((e.clientX - r.left) * dpr - ox) / sc - G.LX, wy = ((e.clientY - r.top) * dpr - oy) / sc - G.LY;
-    // 車有高度、車頂畫得比較上面:重疊的時候,依「畫在最前面的那台」來決定點到誰
-    const inRect = (b, dy) => busCells(b).some(c => wx >= c[0] - 0.02 && wx <= c[0] + 1.02 && wy + dy >= c[1] - 0.02 && wy + dy <= c[1] + 1.02);
-    const cand = [];
-    G.buses.forEach(o => { if (o.st === 'lot' && (inRect(o, 0.4) || inRect(o, 0.2) || inRect(o, 0))) cand.push({ bus: o, z: busCenter(o)[1] - G.LY + (o.dir === 'U' || o.dir === 'D' ? o.len / 2 - 0.5 : 0) }); });
-    cand.sort((p, q) => q.z - p.z);
-    const top = cand[0], b = top && top.bus;
-    if (G.turning) { // 轉向模式:點一台公車讓它調頭,點別的地方取消
-      if (b) turnBus(b); else { G.turning = false; updTurn(); }
+    const x = ((e.clientX - r.left) * dpr - ox) / sc, y = ((e.clientY - r.top) * dpr - oy) / sc;
+    // 點到還沒開的「+」候車格
+    if (G.state === 'play' && !G.plusUsed && G.slots < SLOTS_MAX) {
+      const sxp = slotX(G.slots);
+      if (Math.abs(x - sxp) < 0.6 && y > QH && y < QH + SH) { addSlot(); return; }
+    }
+    // 公車有高度:車頂畫在上面一點。重疊時以畫在最前面(y 最大)的那台為準
+    const inBus = (b, lift) => { const dx = x - b.px, dy = y + lift - b.py, c = Math.cos(-b.ang), s = Math.sin(-b.ang), lx = dx * c - dy * s, ly = dx * s + dy * c; return Math.abs(lx) <= b.len / 2 + 0.06 && Math.abs(ly) <= BUS_WID / 2 + 0.06; };
+    const cand = lotBuses().filter(b => inBus(b, 0.36) || inBus(b, 0.18) || inBus(b, 0)).sort((p, q) => q.py - p.py);
+    const b = cand[0];
+    if (G.turning) {
+      if (b) turnBus(b); else { G.turning = false; updTools(); }
       return;
     }
-    if (b) return tap(b);
+    if (b) tap(b);
   });
-  turnBtn.addEventListener('click', () => { if (G && G.state === 'play' && G.turns) { G.turning = !G.turning; updTurn(); if (G.turning) toast('點一台公車讓它調頭'); } });
+  turnBtn.addEventListener('click', () => { if (G && G.state === 'play' && G.turns) { G.turning = !G.turning; updTools(); if (G.turning) toast('點一台公車讓它調頭'); } });
   plusBtn.addEventListener('click', () => { if (G && G.state === 'play') addSlot(); });
   $('.bgback', scr).addEventListener('click', () => { cancelAnimationFrame(raf); home(); });
   $('.bgretry', scr).addEventListener('click', () => { if (G) start(level); });
@@ -4622,12 +4636,11 @@ function busGame() {
   }
   function jumpTo() {
     const inp = $('.bgjump', ov);
-    const n = Math.max(1, Math.min(999, parseInt(inp && inp.value, 10) || 1));
-    level = n;
+    level = Math.max(1, Math.min(999, parseInt(inp && inp.value, 10) || 1));
     showMenu();
   }
   $('.bglv', scr).addEventListener('click', () => { if (G && G.state !== 'menu') showMenu(); }); // 點上面的「第 N 關」可以隨時回到選關畫面
-  const ro = new ResizeObserver(() => { if (!cv.isConnected) return ro.disconnect(); if (G) { layout(); G.buses.forEach(b => { if (b.st === 'lot' && !b.anim) { const [x, y] = busCenter(b); b.px = x; b.py = y; } }); } });
+  const ro = new ResizeObserver(() => { if (!cv.isConnected) return ro.disconnect(); if (G) layout(); });
   ro.observe(stage);
 
   function showMenu() { // 選關畫面:可以回去玩已經過的關卡
@@ -4636,7 +4649,7 @@ function busGame() {
     G.state = 'menu';
     lvEl.textContent = level;
     ov.innerHTML = `<div class="bgcard"><div class="bgbig">🚌</div><h2>公車大塞車</h2>
-      <p>點公車把它開出停車場,讓排隊的乘客坐上<b>同顏色</b>的公車!<br>候車格塞滿、又沒人能上車就輸了</p>
+      <p>點公車,它會往箭頭的方向開出停車場(被擋住會彈回來),停進上面的候車格;排隊的乘客會坐上<b>同顏色</b>的公車!<br>候車格塞滿、又沒人能上車就輸了</p>
       <div class="bglvsel"><button class="bgprev" ${level <= 1 ? 'disabled' : ''}>‹</button><span>第 <b>${level}</b> 關<i class="bgtier" data-t="${G.tier}">${G.tier}</i></span><button class="bgnextlv" ${level >= maxLv() ? 'disabled' : ''}>›</button></div>
       ${unlocked() ? `<div class="bgjumprow"><input class="bgjump" type="number" inputmode="numeric" min="1" max="999" value="${level}" aria-label="跳到第幾關"><button class="btn white sm bgjumpgo">跳關</button></div>` : ''}
       <button class="btn big green bggo"><span class="bi">▶</span><span class="bt">開始</span></button>

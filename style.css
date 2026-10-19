@@ -1812,3 +1812,16 @@ button:disabled { cursor: not-allowed; }
 .bgbar { gap: 6px; }
 .bgtools { gap: 6px; }
 .bgturn, .bgplus { font-size: .85rem; padding: 7px 11px; }
+
+/* 公車大塞車 v2:淺灰色、乾淨的畫面;下方道具改成圓形按鈕 */
+.screen.busg { background: linear-gradient(#f4f6fa, #e4e8ef); }
+.bgstage .bgcv { border-radius: 0; }
+.bgtools { display: flex; gap: 10px; }
+.bgturn, .bgplus { position: relative; width: 58px; height: 58px; padding: 0; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; background: radial-gradient(circle at 50% 35%, #ffffff, #dbe4f3); color: var(--ink); text-shadow: none; border: 3px solid var(--ink); box-shadow: 0 4px 0 var(--ink); font-weight: 900; }
+.bgturn span, .bgplus span { font-size: 1.35rem; line-height: 1.1; }
+.bgturn small, .bgplus small { font-size: .62rem; line-height: 1; }
+.bgturn b, .bgplus b { position: absolute; top: -8px; right: -6px; min-width: 22px; height: 22px; padding: 0 5px; border-radius: 999px; background: #2eaa4f; color: #fff; border: 2px solid var(--ink); font: 900 .8rem/18px "Fredoka", var(--font); text-align: center; }
+.bgturn:disabled b, .bgplus:disabled b { background: #9aa3b2; }
+.bgturn.on { background: radial-gradient(circle at 50% 35%, #e9ffe9, #8be39b); animation: pulse .5s ease-in-out infinite alternate; }
+.bgturn:disabled, .bgplus:disabled { opacity: .55; }
+.bgleft { background: #fff; }
