@@ -1881,19 +1881,9 @@ button:disabled { cursor: not-allowed; }
 .pktip.off { opacity: 0; transform: translateY(-10px); }
 .pkpadw { flex: none; padding: 8px 10px max(10px, env(safe-area-inset-bottom)); }
 .pkpad { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; touch-action: none; user-select: none; -webkit-user-select: none; }
-.pkwheel { flex: 0 0 auto; width: 128px; display: flex; flex-direction: column; align-items: center; gap: 2px; touch-action: none; }
-.pkwh { width: 104px; height: 104px; filter: drop-shadow(0 4px 0 rgba(0,0,0,.25)); transition: transform .05s linear; }
-.pkwheel.on .pkwh { filter: drop-shadow(0 2px 0 rgba(0,0,0,.25)) brightness(1.08); }
-.pkwheel small { font-size: .68rem; font-weight: 800; opacity: .6; }
 .pkhorn { width: 56px; height: 56px; border-radius: 50%; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(circle at 50% 35%, #fff, #ffe9a8); border: 3px solid var(--ink); box-shadow: 0 4px 0 var(--ink); font-size: 1.3rem; line-height: 1; touch-action: none; }
 .pkhorn small { font-size: .62rem; font-weight: 900; }
 .pkhorn:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink); }
-.pkpeds { display: flex; flex-direction: column; gap: 8px; }
-.pkgo, .pkrev { width: 112px; height: 52px; border-radius: 16px; display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 900; font-size: 1.05rem; color: #fff; text-shadow: var(--ol-sm); border: 3px solid var(--ink); box-shadow: 0 5px 0 var(--ink); touch-action: none; }
-.pkgo { background: linear-gradient(#92ea6e, #34b347); }
-.pkrev { background: linear-gradient(#ffb36b, #ff7a1a); }
-.pkgo b, .pkrev b { font-size: 1.2rem; }
-.pkgo.on, .pkrev.on { transform: translateY(4px); box-shadow: 0 1px 0 var(--ink); filter: brightness(1.1); }
 .pkstars { display: flex; gap: 6px; font-size: 3rem; line-height: 1; }
 .pkstars span { color: #cfd5df; -webkit-text-stroke: 3px var(--ink); }
 .pkstars span.on { color: #ffd23f; animation: pop .5s both; }
@@ -1927,3 +1917,15 @@ button:disabled { cursor: not-allowed; }
 .pkcover.on { display: flex; }
 .pkcover .small { font-size: .85rem; opacity: .9; }
 .pkcover .ffinal small { opacity: .8; font-size: .75rem; }
+
+/* 停車大師:單指搖桿 */
+.pkjarea { position: relative; flex: 1; height: 150px; border-radius: 22px; background: rgba(255,255,255,.55); border: 3px dashed rgba(43,47,56,.25); touch-action: none; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 6px; }
+.pkjarea small { position: absolute; left: 10px; right: 10px; top: 4px; font-size: .6rem; font-weight: 800; opacity: .5; pointer-events: none; text-align: left; }
+.pkjbase { position: absolute; left: 50%; top: 54%; width: 128px; height: 128px; margin: -64px 0 0 -64px; border-radius: 50%; background: radial-gradient(circle, rgba(43,47,56,.1), rgba(43,47,56,.22)); border: 3px solid rgba(43,47,56,.35); pointer-events: none; opacity: .65; transition: opacity .15s; }
+.pkjbase.on { opacity: 1; transition: none; }
+.pkjknob { position: absolute; left: 50%; top: 50%; width: 58px; height: 58px; margin: -29px 0 0 -29px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #ffb36b, #ff7a1a); border: 3px solid var(--ink); box-shadow: 0 4px 0 rgba(0,0,0,.25); }
+.pkjl { position: absolute; font-size: .66rem; font-weight: 900; color: rgba(43,47,56,.6); white-space: nowrap; }
+.pkjl.u { top: 5px; left: 50%; transform: translateX(-50%); color: #2e9b3f; }
+.pkjl.d { bottom: 5px; left: 50%; transform: translateX(-50%); color: #e8590c; }
+.pkjl.l { left: 8px; top: 50%; transform: translateY(-50%); }
+.pkjl.r { right: 8px; top: 50%; transform: translateY(-50%); }

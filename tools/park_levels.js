@@ -18,7 +18,7 @@ for (let n = 1; n <= 30; n++) {
   const c = p.slice(1).map(q => String.fromCharCode(97 + q[4])).join('');
   const rp = api.pkReplay(L, c), e = rp[rp.length - 1];
   const ok = api.pkIn(L, e[0], e[1], e[2]) && rp.every(q => !api.pkHit(L, q[0], q[1], q[2]));
-  const par = Math.ceil(api.pkPathTime(p, 3.6, 2.2, 1.0) * 1.3 + 5);
+  const par = Math.ceil(api.pkPathTime(p, 3.6, 2.2, 1.0) * 1.15 + 3);
   pars.push(par); paths.push(c);
   console.log(`第 ${n} 關 ${L.name}:${ok ? 'OK' : '重播失敗!'} ${c.length} 步,三星 ${par} 秒(${Date.now() - t0}ms)`);
 }
