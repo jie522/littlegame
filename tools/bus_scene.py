@@ -165,6 +165,25 @@ rbox('ConeBase', 0.2, 0.2, 0, 0.03, MAT['cone'], cone, bevel=0.01, seg=1)
 cyl('ConeBody', 0.075, 0.3, (0, 0, 0.18), MAT['cone'], cone, seg=14, r2=0.015)
 cyl('ConeBand', 0.056, 0.05, (0, 0, 0.2), MAT['white'], cone, seg=14, r2=0.045)
 
+# ---------------- 乘客(Q 版小人,臉朝 -Y;網頁依材質名稱上色:衣服和帽子 = 乘客的顏色) ----------------
+for k, (nm, col) in enumerate((('PShirt', '#e53935'), ('PCap', '#e53935'), ('PSkin', '#f5d0b0'), ('PHair', '#5a3a22'), ('PPants', '#3b5b8c'), ('PEye', '#1d2129'))):
+    MAT[nm] = make_mat(nm, col, rough=0.6)
+person = empty('Person', (7, 0, 0))
+for s in (-1, 1):
+    cyl('Leg', 0.042, 0.15, (s * 0.05, 0, 0.075), MAT['PPants'], person, seg=10)
+    ball('Arm', 0.05, (s * 0.125, 0, 0.25), MAT['PShirt'], person, scale=(0.75, 0.75, 1.6), sub=2)
+    ball('Eye', 0.018, (s * 0.042, -0.112, 0.49), MAT['PEye'], person, sub=1)
+ball('Body', 0.12, (0, 0, 0.27), MAT['PShirt'], person, scale=(1, 0.82, 1.18), sub=3)
+ball('Head', 0.125, (0, 0, 0.48), MAT['PSkin'], person, sub=3)
+ball('Hair', 0.128, (0, 0.025, 0.495), MAT['PHair'], person, scale=(1.02, 1, 1), sub=3)
+cap = ball('Cap', 0.132, (0, 0.005, 0.52), MAT['PCap'], person, scale=(1, 1, 0.78), sub=3)
+bm = bmesh.new()
+bm.from_mesh(cap.data)
+bmesh.ops.delete(bm, geom=[v for v in bm.verts if v.co.z < 0.0], context='VERTS')  # 只留上半顆
+bm.to_mesh(cap.data)
+bm.free()
+cyl('Brim', 0.075, 0.02, (0, -0.12, 0.525), MAT['PCap'], person, seg=16)
+
 # ---------------- 匯出 ----------------
 kw = dict(filepath=OUT, export_format='GLB', export_apply=True, export_yup=True, export_cameras=False, export_lights=False)
 bpy.ops.export_scene.gltf(**kw)
@@ -174,8 +193,8 @@ print('exported', OUT)
 if PREVIEW:
     cam = bpy.data.objects.new('Cam', bpy.data.cameras.new('Cam'))
     scene.collection.objects.link(cam)
-    cam.location = (2.2, -4.2, 2.6)
-    cam.rotation_euler = (math.radians(62), 0, math.radians(28))
+    cam.location = (6.6, -1.1, 0.9)
+    cam.rotation_euler = (math.radians(65), 0, math.radians(-20))
     cam.data.lens = 35
     scene.camera = cam
     world = bpy.data.worlds.new('World')
