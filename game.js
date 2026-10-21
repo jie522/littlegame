@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.03';
+const APP_VERSION = '2026.11.04';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -4208,6 +4208,269 @@ function busLook(id) {
   BUS_LOOK.set(id, o);
   return o;
 }
+/* 3D 模型:three.js 和每個 glb 都只載入一次 */
+const GLB = new Map();
+function glbLoad(url) {
+  if (!GLB.has(url)) {
+    const p = (async () => {
+      const THREE = await import('three');
+      const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
+      const gltf = await new GLTFLoader().loadAsync(url);
+      return { THREE, gltf };
+    })();
+    p.catch(() => GLB.delete(url));
+    GLB.set(url, p);
+  }
+  return GLB.get(url);
+}
+/* ---------- 公車大塞車的 3D 畫面:Blender 做的公車、路燈、樹(assets/bus.glb),用 three.js 即時畫 ----------
+   遊戲的世界座標(x 往右、y 往下)對到 three.js 的 X、Z,Y 朝上;整個場地的中心放在原點 */
+function busCreate3D(L, stage, B) {
+  const { THREE, gltf } = L, { TW, TH } = B;
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(1.75, window.devicePixelRatio || 1));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.1;
+  const cvs = renderer.domElement;
+  cvs.className = 'bg3d';
+  stage.prepend(cvs);
+  const P = (x, y, h) => new THREE.Vector3(x - TW / 2, h || 0, y - TH / 2);
+
+  const scene = new THREE.Scene();
+  scene.add(new THREE.HemisphereLight('#ffffff', '#b8c2d4', 1.25));
+  const sun = new THREE.DirectionalLight('#fff6e6', 2.1);
+  sun.position.set(-6, 14, 6);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.bias = -0.0005;
+  sun.shadow.normalBias = 0.02;
+  Object.assign(sun.shadow.camera, { left: -13, right: 13, top: 13, bottom: -13, near: 1, far: 40 });
+  scene.add(sun, sun.target);
+
+  // 地面:大片淡綠的草地,中間是有厚度的遊戲台(上面貼 2D 畫好的走道、候車格、停車場)
+  const grass = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshStandardMaterial({ color: '#bfe0ae', roughness: 1 }));
+  grass.rotation.x = -Math.PI / 2;
+  grass.position.y = -0.32;
+  grass.receiveShadow = true;
+  scene.add(grass);
+  const M = 0.35, PX = 56; // 遊戲台四周多出來的邊、每單位幾個像素
+  const boardCv = document.createElement('canvas');
+  boardCv.width = Math.round((TW + M * 2) * PX); boardCv.height = Math.round((TH + M * 2) * PX);
+  const boardTex = new THREE.CanvasTexture(boardCv);
+  boardTex.colorSpace = THREE.SRGBColorSpace;
+  boardTex.anisotropy = 4;
+  const side = new THREE.MeshStandardMaterial({ color: '#c3cad6', roughness: 0.9 });
+  const board = new THREE.Mesh(new THREE.BoxGeometry(TW + M * 2, 0.3, TH + M * 2), [side, side, new THREE.MeshStandardMaterial({ map: boardTex, roughness: 0.95 }), side, side, side]);
+  board.position.y = -0.15;
+  board.receiveShadow = true;
+  scene.add(board);
+  let boardKey = '';
+  function paintBoard() {
+    const key = B.boardKey();
+    if (key === boardKey) return;
+    boardKey = key;
+    const c = boardCv.getContext('2d');
+    c.setTransform(PX, 0, 0, PX, M * PX, M * PX);
+    B.paintGround(c, -M, -M, TW + M * 2, TH + M * 2);
+    boardTex.needsUpdate = true;
+  }
+
+  // Blender 的模型
+  const tpl = n => gltf.scene.getObjectByName(n);
+  const place = (name, x, y, rot, s) => {
+    const o = tpl(name).clone(true);
+    o.position.copy(P(x, y));
+    o.rotation.y = rot || 0;
+    if (s) o.scale.setScalar(s);
+    o.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
+    scene.add(o);
+    return o;
+  };
+  B.lamps.forEach(([x, y]) => place('Lamp', x, y + 0.05, 0, 1));
+  // 遊戲台四周的樹和樹叢(固定的亂數,每次都一樣)
+  const rnd = busRng(4242);
+  for (let i = 0; i < 46; i++) {
+    const band = i % 4; // 上、下、左、右
+    let x, y;
+    if (band < 2) { x = -1.5 + rnd() * (TW + 3); y = band ? TH + 0.7 + rnd() * 4.5 : -0.8 - rnd() * 5; }
+    else { x = band === 2 ? -0.7 - rnd() * 1.6 : TW + 0.7 + rnd() * 1.6; y = rnd() * TH; }
+    place(rnd() < 0.55 ? 'Tree' : 'Bush', x, y, rnd() * 6, 0.85 + rnd() * 0.45);
+  }
+  [[0.1, B.LY - 0.15], [TW - 0.1, B.LY - 0.15]].forEach(([x, y]) => place('Cone', x, y, 0, 1.1));
+
+  // 公車:每種顏色共用材質;「?」車是灰色
+  const mats = new Map();
+  function busMats(key) {
+    if (!mats.has(key)) {
+      const col = key === 'hid' ? '#a3a9b5' : BUS_COLORS[key];
+      mats.set(key, {
+        BusPaint: new THREE.MeshStandardMaterial({ color: col, roughness: 0.35, metalness: 0.05 }),
+        BusRoof: new THREE.MeshStandardMaterial({ color: B.shade(col, 0.22), roughness: 0.4 }),
+        head: new THREE.MeshStandardMaterial({ color: B.shade(col, 0.45), roughness: 0.5 }),
+      });
+    }
+    return mats.get(key);
+  }
+  const arrowShape = new THREE.Shape();
+  [[0.27, 0], [-0.02, -0.21], [-0.02, -0.08], [-0.26, -0.08], [-0.26, 0.08], [-0.02, 0.08], [-0.02, 0.21]].forEach(([x, y], i) => (i ? arrowShape.lineTo(x - 0.05, y) : arrowShape.moveTo(x - 0.05, y)));
+  const arrowGeo = new THREE.ShapeGeometry(arrowShape).rotateX(-Math.PI / 2);
+  const arrowMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.5, emissive: '#ffffff', emissiveIntensity: 0.25, polygonOffset: true, polygonOffsetFactor: -2 });
+  const qCv = document.createElement('canvas');
+  qCv.width = qCv.height = 64;
+  { const q = qCv.getContext('2d'); q.font = '900 54px Fredoka, sans-serif'; q.textAlign = 'center'; q.textBaseline = 'middle'; q.lineWidth = 8; q.strokeStyle = '#5a6170'; q.strokeText('?', 32, 35); q.fillStyle = '#fff'; q.fillText('?', 32, 35); }
+  const qMat = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(qCv), depthTest: false });
+  const seatGeo = new THREE.SphereGeometry(0.095, 14, 10), emptyGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.02, 14);
+  const emptyMat = new THREE.MeshStandardMaterial({ color: '#3a4150', roughness: 0.8 });
+  let objs = new Map(), objsFor = null;
+  function makeBus(b) {
+    const o = tpl(b.cap === 6 ? 'Bus6' : 'Bus4').clone(true);
+    o.position.set(0, 0, 0);
+    o.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; if (m.material.name === 'BusPaint' || m.material.name === 'BusRoof') m.userData.paint = m.material.name; } });
+    const arrow = new THREE.Mesh(arrowGeo, arrowMat);
+    arrow.position.y = 0.652;
+    arrow.scale.setScalar(b.len > 1.8 ? 1.1 : 0.95);
+    o.add(arrow);
+    const q = new THREE.Sprite(qMat);
+    q.scale.set(0.5, 0.5, 1);
+    q.position.y = 0.95;
+    o.add(q);
+    const n = b.cap, cols = n / 2, gx = (b.len - 0.55) / cols, seats = [];
+    for (let i = 0; i < n; i++) {
+      const s = new THREE.Mesh(seatGeo, emptyMat);
+      s.position.set(-b.len / 2 + 0.25 + (i % cols) * gx + gx / 2, 0.69, i < cols ? -0.15 : 0.15);
+      s.castShadow = true;
+      o.add(s);
+      seats.push(s);
+    }
+    o.userData = { arrow, q, seats, key: null };
+    scene.add(o);
+    return o;
+  }
+  function syncBus(b, o) {
+    const key = b.hid ? 'hid' : b.c, u = o.userData;
+    if (u.key !== key) { u.key = key; const m = busMats(key); o.traverse(x => { if (x.userData.paint) x.material = m[x.userData.paint]; }); }
+    const sh = b.shake ? Math.sin(performance.now() / 18) * 0.06 * (b.shake / 0.35) : 0;
+    const pop = (b.pop ? 1 + b.pop * 0.25 : 1) * (b.reveal ? 1 + b.reveal * 0.25 : 1);
+    o.visible = b.st !== 'gone';
+    o.position.copy(P(b.px + sh, b.py));
+    o.rotation.y = -b.ang;
+    o.scale.setScalar(b.scale * pop);
+    const parked = b.st === 'lot' || b.st === 'go';
+    u.arrow.visible = parked && !b.hid;
+    u.q.visible = parked && b.hid;
+    u.seats.forEach((s, i) => {
+      s.visible = !parked;
+      const full = i < b.boarded;
+      s.geometry = full ? seatGeo : emptyGeo;
+      s.material = full ? busMats(b.c).head : emptyMat;
+    });
+  }
+
+  // 乘客:2D 的人物圖貼在一直面向鏡頭的 Sprite 上
+  const texs = new Map();
+  const texOf = cv => { let t = texs.get(cv); if (!t) { t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; texs.set(cv, t); } return t; };
+  const plain = new Map(); // 人物圖還沒載好時,先用簡單的小人
+  function plainPerson(c) {
+    if (!plain.has(c)) {
+      const p = document.createElement('canvas'), x = p.getContext('2d');
+      p.width = 24; p.height = 52;
+      x.fillStyle = BUS_COLORS[c]; x.beginPath(); x.roundRect ? x.roundRect(4, 18, 16, 30, 7) : x.rect(4, 18, 16, 30); x.fill();
+      x.fillStyle = '#ffd9b3'; x.beginPath(); x.arc(12, 11, 8, 0, Math.PI * 2); x.fill();
+      plain.set(c, p);
+    }
+    return plain.get(c);
+  }
+  const pool = [];
+  function sprite(i) {
+    if (!pool[i]) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, alphaTest: 0.3 })); s.center.set(0.5, 0); scene.add(s); pool[i] = s; }
+    return pool[i];
+  }
+  function person(i, x, y, h, c, id, s) {
+    const sp = sprite(i);
+    let cv, sz = 1;
+    if (BUS_PEOPLE.ready && BUS_PEOPLE.base.length) { const lk = busLook(id); cv = busPerson(c, lk.pose, lk.hv, lk.sv, lk.pv); sz = lk.sz; }
+    else cv = plainPerson(c);
+    const t = texOf(cv);
+    if (sp.material.map !== t) { sp.material.map = t; sp.material.needsUpdate = true; }
+    const hh = 0.62 * sz * s;
+    sp.scale.set(hh * cv.width / cv.height, hh, 1);
+    sp.position.copy(P(x, y, h));
+    sp.visible = true;
+  }
+
+  // 鏡頭:斜斜往下看,整個遊戲台剛好塞進畫面
+  const camera = new THREE.PerspectiveCamera(20, 1, 0.5, 300);
+  const TILT = 0.85; // 跟垂直方向的夾角(弧度)
+  let w = 0, h = 0;
+  const fitCam = () => {
+    const corners = [];
+    for (const x of [-TW / 2 - 0.15, TW / 2 + 0.15]) for (const z of [-TH / 2 - 0.15, TH / 2 + 0.15]) for (const y of [0, 0.7]) corners.push(new THREE.Vector3(x, y, z));
+    const v = new THREE.Vector3();
+    let tz = 0, d = 30;
+    for (let pass = 0; pass < 6; pass++) {
+      let lo = 5, hi = 250;
+      for (let k = 0; k < 30; k++) {
+        d = (lo + hi) / 2;
+        camera.position.set(0, Math.cos(TILT) * d, tz + Math.sin(TILT) * d);
+        camera.lookAt(0, 0, tz);
+        camera.updateMatrixWorld();
+        const ok = corners.every(c => { v.copy(c).project(camera); return Math.abs(v.x) <= 0.985 && Math.abs(v.y) <= 0.985; });
+        if (ok) hi = d; else lo = d;
+      }
+      d = hi;
+      camera.position.set(0, Math.cos(TILT) * d, tz + Math.sin(TILT) * d);
+      camera.lookAt(0, 0, tz);
+      camera.updateMatrixWorld();
+      let y0 = 9, y1 = -9;
+      corners.forEach(c => { v.copy(c).project(camera); y0 = Math.min(y0, v.y); y1 = Math.max(y1, v.y); });
+      tz -= (y0 + y1) / 2 * TH * 0.5; // 上下留白平均一點
+    }
+  };
+  const fit = () => {
+    const r = stage.getBoundingClientRect();
+    if (!r.width || (r.width === w && r.height === h)) return;
+    w = r.width; h = r.height;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    fitCam();
+  };
+  const ray = new THREE.Raycaster(), hit = new THREE.Vector3();
+
+  return {
+    render(now) {
+      fit();
+      const G = B.G();
+      if (!G) return;
+      paintBoard();
+      if (objsFor !== G) { objs.forEach(o => scene.remove(o)); objs = new Map(); objsFor = G; G.buses.forEach(b => objs.set(b, makeBus(b))); }
+      G.buses.forEach(b => syncBus(b, objs.get(b)));
+      // 排隊的人、上車中的人
+      let n = 0;
+      const vis = Math.min(G.queue.length, B.laneCap);
+      for (let i = 0; i < vis; i++) {
+        const [x, y] = B.queuePos(i), bob = Math.abs(Math.sin(now / 260 + i * 0.7)) * 0.03;
+        person(n++, x, y, bob, G.queue[i], G.qid[i], 1);
+      }
+      G.walkers.forEach(wk => {
+        const u = wk.t, tx = wk.bus.px, ty = wk.bus.py;
+        person(n++, wk.fx + (tx - wk.fx) * u, wk.fy + (ty - wk.fy) * u, Math.sin(u * Math.PI) * 0.6 + u * 0.4, wk.c, wk.id, 1 - u * 0.35);
+      });
+      for (let i = n; i < pool.length; i++) pool[i].visible = false;
+      renderer.render(scene, camera);
+    },
+    probes(cx, cy) { // 點的位置往下穿過車頂、車身中間、地面三個高度,換成遊戲座標
+      const r = cvs.getBoundingClientRect();
+      camera.updateMatrixWorld();
+      ray.setFromCamera(new THREE.Vector2((cx - r.left) / r.width * 2 - 1, -((cy - r.top) / r.height) * 2 + 1), camera);
+      return [0.65, 0.33, 0].map(y => (ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -y), hit) ? [hit.x + TW / 2, hit.z + TH / 2] : [-99, -99]));
+    },
+    dispose() { renderer.dispose(); renderer.forceContextLoss(); cvs.remove(); },
+  };
+}
 function busGame() {
   resetView();
   app.innerHTML = '';
@@ -4226,7 +4489,8 @@ function busGame() {
     <div class="bgbar"><span class="bgleft" title="還在排隊的乘客">🧍 <b>0</b></span>
       <div class="bgtools"><button class="bgturn" aria-label="轉向"><span>🔄</span><b>2</b><small>轉向</small></button><button class="bgplus" aria-label="加一個候車格"><span>🅿️</span><b>1</b><small>加格</small></button></div></div>`;
   app.appendChild(scr);
-  const stage = $('.bgstage', scr), cv = $('.bgcv', scr), ctx = cv.getContext('2d'), ov = $('.bgov', scr);
+  const stage = $('.bgstage', scr), cv = $('.bgcv', scr), ov = $('.bgov', scr);
+  let ctx = cv.getContext('2d');
   const leftEl = $('.bgleft b', scr), plusBtn = $('.bgplus', scr), turnBtn = $('.bgturn', scr), lvEl = $('.bglv b', scr), tierEl = $('.bgtier', scr);
   let G = null, sc = 1, ox = 0, oy = 0, raf = 0, last = 0;
 
@@ -4530,18 +4794,12 @@ function busGame() {
     ctx.fillStyle = '#7d8798'; rr(x - 0.04, y - 1.08, 0.36, 0.07, 0.03); ctx.fill();
     blob(x + 0.3, y - 1.0, 0.09, 0.05, '#fff3c4');
   }
-  function draw(now) {
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    const bg = ctx.createLinearGradient(0, 0, 0, cv.height);
-    bg.addColorStop(0, '#eef1f6'); bg.addColorStop(1, '#e2e6ee');
-    ctx.fillStyle = bg; ctx.fillRect(0, 0, cv.width, cv.height);
-    ctx.setTransform(sc, 0, 0, sc, ox, oy);
-    // 人龍的走道:白色的寬帶子,外框淡灰
+  function drawGround(lamps) { // 地面:人龍的走道(白色寬帶子)、路燈、候車格、停車場
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     ctx.beginPath(); lane.pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
     ctx.strokeStyle = '#d4d9e2'; ctx.lineWidth = 1.18; ctx.stroke();
     ctx.strokeStyle = '#f8f9fb'; ctx.lineWidth = 1.02; ctx.stroke();
-    drawLamp(0.4, QH + 0.05); drawLamp(TW - 0.75, QH + 0.05);
+    if (lamps) { drawLamp(0.4, QH + 0.05); drawLamp(TW - 0.75, QH + 0.05); }
     // 候車格:深灰色的長條,裡面一格一格;還沒開的格子顯示「+」
     ctx.fillStyle = '#c5cbd5'; rr(0.25, QH + 0.12, TW - 0.5, SH, 0.3); ctx.fill();
     ctx.fillStyle = '#5a6170'; rr(0.25, QH + 0.05, TW - 0.5, SH, 0.3); ctx.fill();
@@ -4561,6 +4819,23 @@ function busGame() {
     }
     // 停車場的範圍
     ctx.fillStyle = 'rgba(160,170,190,.13)'; rr(LX - 0.25, LY - 0.25, BUS_LW + 0.5, BUS_LH + 0.5, 0.4); ctx.fill();
+  }
+  function paintGround(c, x, y, w, h) { // 3D 版:把地面畫在遊戲台的貼圖上(不畫路燈,路燈是 3D 模型)
+    const keep = ctx;
+    ctx = c;
+    const g = c.createLinearGradient(0, y, 0, y + h);
+    g.addColorStop(0, '#f1f3f8'); g.addColorStop(1, '#e3e7ee');
+    c.fillStyle = g; c.fillRect(x, y, w, h);
+    drawGround(false);
+    ctx = keep;
+  }
+  function draw(now) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const bg = ctx.createLinearGradient(0, 0, 0, cv.height);
+    bg.addColorStop(0, '#eef1f6'); bg.addColorStop(1, '#e2e6ee');
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.setTransform(sc, 0, 0, sc, ox, oy);
+    drawGround(true);
     // 排隊的人(後面的先畫,前面的蓋在上面);太多的話顯示「+N」
     const vis = Math.min(G.queue.length, laneCap);
     const ppl = [];
@@ -4577,11 +4852,17 @@ function busGame() {
       drawPerson(w.fx + (tx - w.fx) * u, w.fy + (ty - w.fy) * u - Math.sin(u * Math.PI) * 0.35, w.c, 1 - u * 0.35, now, k, w.id);
     });
   }
-  function frame(now) {
+  let g3 = null; // 3D 畫面(舊手機、沒網路載入失敗就用 2D)
+  glbLoad('assets/bus.glb').then(L => {
     if (!cv.isConnected) return;
+    g3 = busCreate3D(L, stage, { TW, TH, LY, lamps: [[0.4, QH + 0.05], [TW - 0.75, QH + 0.05]], G: () => G, queuePos, laneCap, shade, paintGround, boardKey: () => (G ? G.slots + ',' + G.plusUsed : '') });
+    stage.classList.add('g3');
+  }).catch(e => console.warn('公車 3D 畫面載入失敗,改用 2D', e));
+  function frame(now) {
+    if (!cv.isConnected) { if (g3) g3.dispose(); return; }
     const dt = Math.min(0.05, (now - last) / 1000 || 0);
     last = now;
-    if (G) { update(dt); draw(now); }
+    if (G) { update(dt); if (g3) g3.render(now); else draw(now); }
     raf = requestAnimationFrame(frame);
   }
 
@@ -4589,16 +4870,22 @@ function busGame() {
   cv.addEventListener('pointerdown', e => {
     if (!G) return;
     e.preventDefault();
-    const r = cv.getBoundingClientRect(), dpr = cv.width / r.width;
-    const x = ((e.clientX - r.left) * dpr - ox) / sc, y = ((e.clientY - r.top) * dpr - oy) / sc;
+    let probes; // [x, y, 往上偏移]:2D 時車頂畫在上面一點;3D 時是車頂、車身、地面三個高度穿過的位置
+    if (g3) probes = g3.probes(e.clientX, e.clientY).map(([px, py]) => [px, py, 0]);
+    else {
+      const r = cv.getBoundingClientRect(), dpr = cv.width / r.width;
+      const px = ((e.clientX - r.left) * dpr - ox) / sc, py = ((e.clientY - r.top) * dpr - oy) / sc;
+      probes = [[px, py, 0.36], [px, py, 0.18], [px, py, 0]];
+    }
+    const [x, y] = probes[2];
     // 點到還沒開的「+」候車格
     if (G.state === 'play' && !G.plusUsed && G.slots < SLOTS_MAX) {
       const sxp = slotX(G.slots);
       if (Math.abs(x - sxp) < 0.6 && y > QH && y < QH + SH) { addSlot(); return; }
     }
     // 公車有高度:車頂畫在上面一點。重疊時以畫在最前面(y 最大)的那台為準
-    const inBus = (b, lift) => { const dx = x - b.px, dy = y + lift - b.py, c = Math.cos(-b.ang), s = Math.sin(-b.ang), lx = dx * c - dy * s, ly = dx * s + dy * c; return Math.abs(lx) <= b.len / 2 + 0.06 && Math.abs(ly) <= BUS_WID / 2 + 0.06; };
-    const cand = lotBuses().filter(b => inBus(b, 0.36) || inBus(b, 0.18) || inBus(b, 0)).sort((p, q) => q.py - p.py);
+    const inBus = (b, [x, y, lift]) => { const dx = x - b.px, dy = y + lift - b.py, c = Math.cos(-b.ang), s = Math.sin(-b.ang), lx = dx * c - dy * s, ly = dx * s + dy * c; return Math.abs(lx) <= b.len / 2 + 0.06 && Math.abs(ly) <= BUS_WID / 2 + 0.06; };
+    const cand = lotBuses().filter(b => probes.some(p => inBus(b, p))).sort((p, q) => q.py - p.py);
     const b = cand[0];
     if (G.turning) {
       if (b) turnBus(b); else { G.turning = false; updTools(); }
@@ -4837,19 +5124,7 @@ function hBaseball(H) {
 
 /* ---------- 全壘打大賽的 3D 畫面:用 Blender 做的模型(assets/baseball.glb),在瀏覽器用 three.js 即時畫 ----------
    three.js 的座標:本壘在原點、往中外野是 -Z、一壘那側是 +X、Y 朝上,單位公尺(Blender 匯出時已經轉好) */
-let BB3D = null;
-function bbLoad3D() {
-  if (!BB3D) {
-    BB3D = (async () => {
-      const THREE = await import('three');
-      const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
-      const gltf = await new GLTFLoader().loadAsync('assets/baseball.glb');
-      return { THREE, gltf };
-    })();
-    BB3D.catch(() => { BB3D = null; });
-  }
-  return BB3D;
-}
+const bbLoad3D = () => glbLoad('assets/baseball.glb');
 const BB3_ZONE = { hx: 0.24, cy: 0.8, hy: 0.3 }; // 好球帶:半寬、中心高度、半高
 const bbZoneToWorld = (zx, zy) => [zx * BB3_ZONE.hx, BB3_ZONE.cy - zy * BB3_ZONE.hy];
 function bb3dCreate(L, wrap) {

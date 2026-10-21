@@ -1853,3 +1853,8 @@ button:disabled { cursor: not-allowed; }
 .play-baseball .bb3d { position: absolute; inset: 3px; width: calc(100% - 6px); height: calc(100% - 6px); border-radius: 11px; display: block; }
 .play-baseball.bb3 .tcv { position: relative; z-index: 1; }
 .play-baseball.bb3 .tov { z-index: 2; }
+
+/* 公車大塞車 3D:three.js 的畫布在下面,原本的 2D 畫布變透明、只用來接點擊 */
+.bgstage .bg3d { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.bgstage.g3 .bgcv { opacity: 0; }
+.bgstage.g3.turning .bg3d { outline: 4px solid #22c55e; outline-offset: -4px; }
