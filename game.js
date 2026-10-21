@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.01';
+const APP_VERSION = '2026.11.03';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -473,6 +473,11 @@ const GAMES = [
     id: 'flood', emoji: '🌊', name: '填色大作戰', tag: '益智+競速', color: '#3b82f6', desc: '一樣的棋盤,比誰先填滿!',
     rules: ['大家拿到一模一樣的彩色棋盤,同時開始比賽', '點下面的顏色按鈕,左上角的區域就會變成那個顏色,吞掉相連的同色格子', '在步數限制內把整個棋盤變成同一個顏色就完成了!', '最先完成得 3 分、第二名 2 分、之後 1 分;步數用完或時間到還沒完成就沒分', '共 3 局:14×14、18×18、22×22,可以看到每個人的小棋盤進度'],
     host: hFlood, view: vFlood, noCountdown: true,
+  },
+  {
+    id: 'baseball', emoji: '⚾', name: '全壘打大賽', tag: '運動+對戰', color: '#2e8b57', desc: '5 局棒球,投打對決!',
+    rules: ['大家分成紅隊、藍隊(2 人就是一對一),5 局、輪流攻守', '當投手:選球種(直球快、曲球會轉彎、變速球慢),再點要投的位置;中間 3x3 是好球帶,外圈是壞球', '當打者:球飛到好球帶的瞬間,點畫面上「球的位置」揮棒 —— 時機和位置越準,打得越遠,完美就是全壘打!', '壞球不要揮:3 壞球保送、3 好球三振、3 出局換局,每半局最多 5 分', '5 局後得分多的隊伍獲勝(平手會打 1 局延長賽)'],
+    host: hBaseball, view: vBaseball, noCountdown: true,
   },
 ];
 const GAME = Object.fromEntries(GAMES.map(g => [g.id, g]));
@@ -4658,6 +4663,656 @@ function busGame() {
   }
   showMenu(); // 直接開選關畫面(不要等 requestAnimationFrame,背景分頁時它會暫停)
   raf = requestAnimationFrame(t => { last = t; frame(t); });
+}
+
+/* =========================================================
+   全壘打大賽 ⚾(5 局的棒球):分成紅隊、藍隊輪流攻守
+   投手:選球種(直球/曲球/變速球)+ 點要投的位置(中間 3x3 是好球帶)
+   打者:從本壘後方看球飛過來,在球到的瞬間點「球的位置」揮棒 —— 時機和位置越準,打得越遠
+   3 壞球保送、3 好球三振、3 出局換局;每個半局最多 5 分,5 局後比分高的隊伍獲勝
+   ========================================================= */
+const BB = { INN: 5, CAP: 5, OUTS: 3, BALLS: 3, STRIKES: 3, T: [620, 860, 940], NAMES: ['直球', '曲球', '變速球'], TEAM: ['紅隊', '藍隊'], TC: ['#e53935', '#1e6fe0'] };
+const BB_RES = { // 結果:文字、類型(h=安打 o=出局 s=好球 b=壞球 f=界外)
+  HR: ['全壘打!', 'h'], T3: ['三壘安打!', 'h'], D2: ['二壘安打!', 'h'], S1: ['一壘安打!', 'h'], BB: ['四壞球保送', 'h'],
+  FO: ['高飛球接殺', 'o'], GO: ['滾地球出局', 'o'], PO: ['內野飛球出局', 'o'], K: ['三振出局!', 'o'],
+  ST: ['好球!', 's'], SW: ['揮棒落空!', 's'], BL: ['壞球', 'b'], FL: ['界外球', 'f'],
+};
+// 揮棒結果:err 是時機誤差(毫秒,負的是太早),dist 是點的位置和球的距離(好球帶的半寬 = 1)
+function bbSwing(err, dist, inZone, r) {
+  let q = 1 - Math.abs(err) / 150 - dist * 0.5;
+  if (!inZone) q *= 0.7;
+  if (q < 0.15) return 'SW';
+  const x = r();
+  if (q > 0.85) return x < 0.5 ? 'HR' : x < 0.8 ? 'D2' : 'T3'; // 打得超準:一定是長打,一半是全壘打
+  if (q > 0.68) return x < 0.25 ? 'D2' : x < 0.7 ? 'S1' : x < 0.9 ? 'FO' : 'GO';
+  if (q > 0.48) return x < 0.3 ? 'S1' : x < 0.65 ? 'GO' : x < 0.85 ? 'FO' : 'FL';
+  if (q > 0.3) return x < 0.12 ? 'S1' : x < 0.45 ? 'GO' : x < 0.7 ? 'PO' : 'FL';
+  return x < 0.45 ? 'FL' : x < 0.7 ? 'GO' : x < 0.85 ? 'PO' : 'SW';
+}
+
+function hBaseball(H) {
+  const P = shuffle(H.players.slice()), teams = [[], []];
+  P.forEach((s, i) => teams[i % 2].push(s));
+  let inning = 1, half = 0, outs = 0, balls = 0, strikes = 0, bases = [null, null, null], halfRuns = 0, batter = null, pitcher = null, phase = 'idle', pitch = null, pid = 0, tok = 0, over = false, last = null;
+  const runs = [0, 0], line = [[], []], bi = [0, 0], pi = [0, 0];
+  const bat = () => half, fld = () => 1 - half;
+  const st = ev => H.bc({ t: 'g', e: 'st', ev, teams, inning, half, outs, balls, strikes, bases, runs, line, batter, pitcher, phase, pitch, last, INN: BB.INN });
+  const arm = (ms, fn) => { const my = ++tok; H.s.after(ms, () => { if (my === tok && !over) fn(); }); };
+  const isBot = s => { const p = NET.players.find(x => x.slot === s); return !!(p && p.bot); };
+  const score = n => {
+    for (let i = 0; i < n; i++) { runs[bat()]++; line[bat()][inning - 1] = (line[bat()][inning - 1] || 0) + 1; halfRuns++; }
+    teams.forEach((t, k) => t.forEach(s => { H.scores[s] = runs[k]; }));
+  };
+
+  function newHalf() {
+    outs = 0; bases = [null, null, null]; halfRuns = 0;
+    line[bat()][inning - 1] = line[bat()][inning - 1] || 0;
+    const ft = teams[fld()];
+    pitcher = ft[pi[fld()]++ % ft.length];
+    phase = 'half';
+    st('half');
+    H.s.after(1800, nextBatter);
+  }
+  function nextBatter() {
+    if (over) return;
+    balls = 0; strikes = 0;
+    const bt = teams[bat()];
+    batter = bt[bi[bat()]++ % bt.length];
+    choose();
+  }
+  function choose() {
+    phase = 'choose'; pitch = null;
+    st('choose');
+    if (isBot(pitcher) || !H.online(pitcher)) arm(rand(900, 1600), () => botPitch());
+    else arm(9000, () => botPitch()); // 太久沒選就自動投
+  }
+  function botPitch() {
+    if (phase !== 'choose') return;
+    const inZ = Math.random() < 0.68, t = rand(0, 2);
+    const zx = inZ ? pick([-0.6, 0, 0.6]) : pick([-1.2, 1.2, -0.6, 0.6]), zy = inZ ? pick([-0.6, 0, 0.6]) : (Math.abs(zx) > 1 ? pick([-0.6, 0, 0.6]) : pick([-1.2, 1.2]));
+    throwPitch(t, zx, zy);
+  }
+  function throwPitch(t, zx, zy) {
+    tok++;
+    zx += (Math.random() - 0.5) * 0.18; zy += (Math.random() - 0.5) * 0.18; // 投球會有一點點誤差
+    pitch = { id: ++pid, t, zx, zy, T: Math.round(BB.T[t] * (0.95 + Math.random() * 0.1)), curve: t === 1 ? (Math.random() < 0.5 ? -1 : 1) * rand(30, 48) : 0 };
+    phase = 'flight';
+    st('pitch');
+    const my = pitch.id;
+    if (isBot(batter) || !H.online(batter)) H.s.after(pitch.T, () => botBat(my));
+    else arm(pitch.T + 2600, () => resolve(my, null)); // 沒回應就當作沒揮棒
+  }
+  function botBat(id) {
+    if (!pitch || pitch.id !== id || phase !== 'flight') return;
+    const k = botSkill(), inZ = Math.abs(pitch.zx) <= 1 && Math.abs(pitch.zy) <= 1;
+    const swing = inZ ? Math.random() < 0.75 + k.sk * 0.2 : Math.random() < 0.35 - k.sk * 0.2;
+    if (!swing) return resolve(id, null);
+    const g = () => (Math.random() + Math.random() + Math.random() - 1.5) / 1.5;
+    resolve(id, { err: g() * (290 - k.sk * 160), dx: pitch.zx + g() * (1.25 - k.sk * 0.6), dy: pitch.zy + g() * (1.25 - k.sk * 0.6) });
+  }
+  function advance(n, walk) {
+    let r = 0;
+    if (walk) { // 保送:只有被擠到的跑者才往前
+      if (bases[0] != null) { if (bases[1] != null) { if (bases[2] != null) r++; bases[2] = bases[1]; } bases[1] = bases[0]; }
+      bases[0] = batter;
+    } else {
+      const nb = [null, null, null];
+      for (let i = 2; i >= 0; i--) if (bases[i] != null) { if (i + n >= 3) r++; else nb[i + n] = bases[i]; }
+      if (n >= 4) r++; else nb[n - 1] = batter;
+      bases = nb;
+    }
+    score(r);
+    return r;
+  }
+  function resolve(id, sw) {
+    if (!pitch || pitch.id !== id || phase !== 'flight' || over) return;
+    tok++;
+    const inZone = Math.abs(pitch.zx) <= 1 && Math.abs(pitch.zy) <= 1;
+    let kind, scored = 0, ab = false; // ab = 這個打者的打席結束了
+    if (!sw) {
+      if (inZone) { strikes++; kind = strikes >= BB.STRIKES ? 'K' : 'ST'; }
+      else { balls++; kind = balls >= BB.BALLS ? 'BB' : 'BL'; }
+    } else {
+      const dist = Math.hypot(sw.dx - pitch.zx, sw.dy - pitch.zy);
+      kind = bbSwing(sw.err, dist, inZone, Math.random);
+      if (kind === 'SW') { strikes++; if (strikes >= BB.STRIKES) kind = 'K'; }
+      if (kind === 'FL' && strikes < BB.STRIKES - 1) strikes++;
+    }
+    if (kind === 'K' || BB_RES[kind][1] === 'o') { outs++; ab = true; }
+    else if (kind === 'BB') { scored = advance(1, true); ab = true; }
+    else if (BB_RES[kind][1] === 'h') { scored = advance({ S1: 1, D2: 2, T3: 3, HR: 4 }[kind]); ab = true; }
+    const dir = sw ? Math.max(-1, Math.min(1, -sw.err / 120)) : 0; // 太早揮會往左邊(拉打)、太晚往右邊
+    last = { kind, scored, dir, by: batter, id: pitch.id, swing: !!sw, sx: sw ? sw.dx : 0, sy: sw ? sw.dy : 0 };
+    phase = 'res';
+    st('res');
+    H.s.after(scored ? 2600 : kind === 'HR' ? 2800 : 1900, () => afterPlay(ab));
+  }
+  function afterPlay(ab) {
+    if (over) return;
+    // 下半局(或延長賽)主隊超前就直接結束(再見安打)
+    if (half === 1 && inning >= BB.INN && runs[1] > runs[0]) return end('再見得分!');
+    if (outs >= BB.OUTS || halfRuns >= BB.CAP) return endHalf();
+    if (ab) nextBatter(); else choose();
+  }
+  function endHalf() {
+    if (half === 0) {
+      if (inning >= BB.INN && runs[1] > runs[0]) return end('比賽結束!'); // 最後一局上半結束主隊已經領先,不用打下半
+      half = 1;
+    } else {
+      inning++; half = 0;
+      if (inning > BB.INN) {
+        if (runs[0] !== runs[1]) return end('比賽結束!');
+        if (inning > BB.INN + 1) return end('延長賽還是平手!');
+      }
+    }
+    newHalf();
+  }
+  function end(reason) {
+    over = true; phase = 'over';
+    teams.forEach((t, k) => t.forEach(s => { H.scores[s] = runs[k]; }));
+    last = { reason, win: runs[0] === runs[1] ? -1 : runs[0] > runs[1] ? 0 : 1 };
+    st('end');
+    H.bc({ t: 'score', scores: H.scores });
+    H.s.after(3800, H.finish);
+  }
+  return {
+    start() { phase = 'intro'; st('intro'); H.s.after(2400, newHalf); },
+    input(slot, m) {
+      if (over) return;
+      if (m.e === 'pitch' && phase === 'choose' && slot === pitcher) {
+        const t = [0, 1, 2].includes(m.t) ? m.t : 0, zx = Math.max(-1.4, Math.min(1.4, +m.zx || 0)), zy = Math.max(-1.4, Math.min(1.4, +m.zy || 0));
+        throwPitch(t, zx, zy);
+      } else if ((m.e === 'swing' || m.e === 'take') && phase === 'flight' && slot === batter) {
+        resolve(+m.id, m.e === 'swing' ? { err: Math.max(-600, Math.min(600, +m.err || 0)), dx: +m.dx || 0, dy: +m.dy || 0 } : null);
+      }
+    },
+    presence() {
+      if (over) return;
+      if (!teams[0].some(H.online) || !teams[1].some(H.online)) return end('有一隊的人都離開了');
+      if (phase === 'choose' && !H.online(pitcher)) { tok++; botPitch(); }
+      else if (phase === 'flight' && !H.online(batter) && pitch) botBat(pitch.id);
+    },
+  };
+}
+
+/* ---------- 全壘打大賽的 3D 畫面:用 Blender 做的模型(assets/baseball.glb),在瀏覽器用 three.js 即時畫 ----------
+   three.js 的座標:本壘在原點、往中外野是 -Z、一壘那側是 +X、Y 朝上,單位公尺(Blender 匯出時已經轉好) */
+let BB3D = null;
+function bbLoad3D() {
+  if (!BB3D) {
+    BB3D = (async () => {
+      const THREE = await import('three');
+      const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
+      const gltf = await new GLTFLoader().loadAsync('assets/baseball.glb');
+      return { THREE, gltf };
+    })();
+    BB3D.catch(() => { BB3D = null; });
+  }
+  return BB3D;
+}
+const BB3_ZONE = { hx: 0.24, cy: 0.8, hy: 0.3 }; // 好球帶:半寬、中心高度、半高
+const bbZoneToWorld = (zx, zy) => [zx * BB3_ZONE.hx, BB3_ZONE.cy - zy * BB3_ZONE.hy];
+function bb3dCreate(L, wrap) {
+  const { THREE, gltf } = L;
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(1.75, window.devicePixelRatio || 1));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+  const cvs = renderer.domElement;
+  cvs.className = 'bb3d';
+  wrap.prepend(cvs);
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color('#8fd0ff');
+  scene.fog = new THREE.Fog('#bfe3ff', 160, 420);
+  scene.add(new THREE.HemisphereLight('#dff2ff', '#3c6b34', 1.05));
+  const sun = new THREE.DirectionalLight('#fff4dc', 2.4);
+  sun.position.set(-30, 60, 25);
+  sun.target.position.set(0, 0, -20);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(1024, 1024);
+  Object.assign(sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 10, far: 160 });
+  scene.add(sun, sun.target);
+  // 天空:上深下淺的大球
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(500, 24, 12), new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthWrite: false, fog: false,
+    uniforms: { top: { value: new THREE.Color('#3f97e8') }, bot: { value: new THREE.Color('#cdeeff') } },
+    vertexShader: 'varying float h; void main(){ h = normalize(position).y; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: 'uniform vec3 top; uniform vec3 bot; varying float h; void main(){ gl_FragColor = vec4(mix(bot, top, clamp(h * 2.2, 0.0, 1.0)), 1.0); }',
+  }));
+  scene.add(sky);
+
+  const root = gltf.scene;
+  const stadium = root.getObjectByName('Stadium').clone(true);
+  const toSrgb = v => (v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055);
+  stadium.traverse(o => {
+    if (!o.isMesh) return;
+    o.receiveShadow = true;
+    o.material.side = THREE.DoubleSide; // 有些面(看台)法線朝下,雙面才會被照亮
+    const c = o.geometry.attributes.color;
+    if (c && !o.geometry.userData.fixed) { // Blender 匯出的頂點色多轉了一次線性,轉回來(草皮條紋、觀眾才不會太暗)
+      o.geometry.userData.fixed = true;
+      for (let i = 0; i < c.count; i++) c.setXYZ(i, toSrgb(c.getX(i)), toSrgb(c.getY(i)), toSrgb(c.getZ(i)));
+      c.needsUpdate = true;
+    }
+  });
+  scene.add(stadium);
+  const tplPlayer = root.getObjectByName('Player'), tplBat = root.getObjectByName('Bat');
+  const teamMats = [0, 1].map(k => ({
+    TeamShirt: new THREE.MeshStandardMaterial({ color: BB.TC[k], roughness: 0.7 }),
+    TeamCap: new THREE.MeshStandardMaterial({ color: k ? '#0d47a1' : '#b71c1c', roughness: 0.6 }),
+  }));
+  const heads = new Map(); // 角色頭像(名牌)
+  function headTex(slot) {
+    const file = PLAYERS[slot].file;
+    if (!heads.has(file)) { const t = new THREE.TextureLoader().load('assets/chars/head_' + file + '.png'); t.colorSpace = THREE.SRGBColorSpace; heads.set(file, t); }
+    return heads.get(file);
+  }
+  function makePlayer(team) {
+    const p = tplPlayer.clone(true);
+    p.position.set(0, 0, 0);
+    p.traverse(o => { if (o.isMesh) { o.castShadow = true; if (teamMats[team][o.material.name]) { o.userData.tm = o.material.name; o.material = teamMats[team][o.userData.tm]; } } });
+    const tag = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthTest: false }));
+    tag.scale.set(0.7, 0.7, 1);
+    tag.position.set(0, 2.35, 0);
+    tag.visible = false;
+    p.add(tag);
+    p.userData.tag = tag;
+    p.userData.armR = p.getObjectByName('ArmR');
+    p.userData.armL = p.getObjectByName('ArmL');
+    scene.add(p);
+    return p;
+  }
+  const faceTo = (obj, x, z) => { obj.rotation.y = Math.atan2(-(x - obj.position.x), -(z - obj.position.z)); };
+  // 投手、打者、七個守備員、三個壘上的跑者
+  const pitcher = makePlayer(1), batter = makePlayer(0);
+  pitcher.position.set(0, 0.25, -18.44); faceTo(pitcher, 0, 0);
+  batter.position.set(-0.95, 0, 0.15); batter.rotation.y = -Math.PI / 2;
+  const FIELD = [[17, -22], [9, -33], [-9, -33], [-17, -22], [-30, -62], [0, -74], [30, -62]];
+  const fielders = FIELD.map(([x, z]) => { const f = makePlayer(1); f.position.set(x, 0, z); faceTo(f, 0, 0); return f; });
+  const BASES = [[19.4, -19.4], [0, -38.8], [-19.4, -19.4]];
+  const runners = BASES.map(([x, z]) => { const r = makePlayer(0); r.position.set(x + 0.6, 0, z + 0.6); faceTo(r, 0, 0); r.visible = false; return r; });
+  // 球棒:拿在打者手上,繞著肩膀揮
+  const batPivot = new THREE.Object3D();
+  batPivot.position.set(-0.62, 1.12, 0.12);
+  scene.add(batPivot);
+  const bat = tplBat.clone(true);
+  bat.position.set(0, 0, 0);
+  bat.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  bat.rotation.z = -Math.PI / 2 + 0.9; // 球棒的 +Y 指向揮棒的方向,稍微往上翹
+  batPivot.add(bat);
+  // 好球帶框
+  const zg = new THREE.BufferGeometry(), zp = [];
+  const zl = (x1, y1, x2, y2) => zp.push(x1, y1, 0.02, x2, y2, 0.02);
+  const X = BB3_ZONE.hx, Y0 = BB3_ZONE.cy - BB3_ZONE.hy, Y1 = BB3_ZONE.cy + BB3_ZONE.hy;
+  zl(-X, Y0, X, Y0); zl(X, Y0, X, Y1); zl(X, Y1, -X, Y1); zl(-X, Y1, -X, Y0);
+  for (let i = 1; i < 3; i++) { const x = -X + i * X * 2 / 3, y = Y0 + i * (Y1 - Y0) / 3; zl(x, Y0, x, Y1); zl(-X, y, X, y); }
+  zg.setAttribute('position', new THREE.Float32BufferAttribute(zp, 3));
+  const zone = new THREE.LineSegments(zg, new THREE.LineBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.75, depthTest: false }));
+  zone.renderOrder = 5;
+  scene.add(zone);
+  // 球(放大一點比較看得到)+ 殘影
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(0.08, 18, 12), new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.4, emissive: '#333333' }));
+  ball.castShadow = true;
+  scene.add(ball);
+  const seam = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.009, 6, 24), new THREE.MeshBasicMaterial({ color: '#d6283f' }));
+  ball.add(seam);
+  const trail = [0, 1, 2, 3].map(k => { const m = new THREE.Mesh(new THREE.SphereGeometry(0.07 - k * 0.012, 10, 8), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.35 - k * 0.07 })); scene.add(m); return m; });
+
+  const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 900);
+  const CAM_HOME = new THREE.Vector3(0.35, 2.5, 6.4), LOOK_HOME = new THREE.Vector3(0, 0.9, -14);
+  camera.position.copy(CAM_HOME);
+  const look = LOOK_HOME.clone();
+  let w = 0, h = 0;
+  const fit = () => {
+    const r = wrap.getBoundingClientRect();
+    if (!r.width || (r.width === w && r.height === h)) return;
+    w = r.width; h = r.height;
+    renderer.setSize(w - 6, h - 6, false);
+    camera.aspect = (w - 6) / (h - 6);
+    camera.updateProjectionMatrix();
+  };
+  const ray = new THREE.Raycaster(), plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0), hit = new THREE.Vector3();
+  let painted = -1;
+
+  function ballPath(p, u) { // 投球軌跡:從投手手上到好球帶的位置
+    const [tx, ty] = bbZoneToWorld(p.zx, p.zy), sx = 0.42, sy = 1.95, sz = -17.4;
+    return [sx + (tx - sx) * u + (p.curve / 42) * Math.sin(Math.PI * u) * 0.9, sy + (ty - sy) * u + Math.sin(Math.PI * u) * 0.35, sz + (0 - sz) * u];
+  }
+  function hitPath(h, u) { // 打出去的球:方向依揮棒早晚,距離依結果
+    const ang = h.dir * (h.kind === 'FL' ? 0.95 : 0.7);
+    const dist = { HR: 118, T3: 88, D2: 72, S1: 42, FO: 78, GO: 34, PO: 22, FL: 60 }[h.kind] || 40;
+    const peak = { HR: 32, T3: 14, D2: 13, S1: 5, FO: 30, GO: 0.6, PO: 26, FL: 14 }[h.kind] || 8;
+    const d = dist * u, x = Math.sin(ang) * d, z = -Math.cos(ang) * d;
+    let y = 1 + peak * 4 * u * (1 - u);
+    if (h.kind === 'GO') y = 0.15 + Math.abs(Math.sin(u * Math.PI * 3)) * 1.4 * (1 - u);
+    return [x, y, z];
+  }
+
+  return {
+    render(now, s) {
+      fit();
+      const st = s.st;
+      if (st) {
+        // 角色:名牌換成現在投手、打者的頭像;隊伍顏色依攻守
+        const atk = st.half, def = 1 - st.half;
+        const paint = (obj, team) => obj.traverse(o => { if (o.userData.tm) o.material = teamMats[team][o.userData.tm]; });
+        if (painted !== atk) { painted = atk; paint(batter, atk); runners.forEach(r => paint(r, atk)); paint(pitcher, def); fielders.forEach(f => paint(f, def)); }
+        const setTag = (obj, slot) => { const t = obj.userData.tag; if (slot == null) { t.visible = false; return; } t.visible = true; if (t.userData.slot !== slot) { t.userData.slot = slot; t.material.map = headTex(slot); t.material.needsUpdate = true; } };
+        setTag(pitcher, st.pitcher);
+        runners.forEach((r, i) => { r.visible = st.bases[i] != null; });
+        zone.visible = st.phase === 'choose' || st.phase === 'flight';
+      }
+      // 打者待機時輕輕晃;投手投球時手臂往前甩
+      batter.position.y = Math.abs(Math.sin(now / 420)) * 0.02;
+      const fly = s.fly, armR = pitcher.userData.armR;
+      if (armR) {
+        const tt = fly ? (now - fly.t0) / 220 : 2;
+        armR.rotation.x = tt < 1 ? -2.8 + tt * 4 : (st && st.phase === 'choose' ? -0.3 + Math.sin(now / 300) * 0.15 : 0.3);
+      }
+      // 揮棒
+      const sw = s.swingAt || (s.hitAnim && s.hitAnim.swing ? s.hitAnim.t0 - 40 : 0), su = sw ? (now - sw) / 170 : -1;
+      batPivot.rotation.y = su < 0 || su > 4 ? -2.2 : su < 1 ? -2.2 + su * 4.1 : 1.9;
+      bat.rotation.z = -Math.PI / 2 + (su < 0 || su > 4 ? 0.9 : 0.2);
+      // 球
+      let bx = 0, by = -5, bz = 0, show = false;
+      if (s.hitAnim && s.hitAnim.far) {
+        const u = Math.min(1, (now - s.hitAnim.t0) / s.hitAnim.dur);
+        [bx, by, bz] = hitPath(s.hitAnim, u); show = u < 1;
+        trail.forEach(m => { m.visible = false; });
+      } else if (fly) {
+        const u = (now - fly.t0) / fly.p.T;
+        if (u <= 1.25) { [bx, by, bz] = ballPath(fly.p, Math.min(1, u)); if (u > 1) bz += (u - 1) * 6; show = true; }
+        trail.forEach((m, k) => { const uu = Math.max(0, Math.min(1, u) - (k + 1) * 0.04); const [x, y, z] = ballPath(fly.p, uu); m.position.set(x, y, z); m.visible = show && u < 1.02; });
+      } else trail.forEach(m => { m.visible = false; });
+      ball.visible = show;
+      ball.position.set(bx, by, bz);
+      ball.rotation.x = now / 60; ball.rotation.y = now / 90;
+      // 鏡頭:打出去的時候跟著球飛,然後慢慢回到本壘後方
+      const follow = s.hitAnim && s.hitAnim.far && now - s.hitAnim.t0 < s.hitAnim.dur + 700;
+      if (follow) {
+        const tgtCam = new THREE.Vector3(bx * 0.35, 3 + by * 0.35, 6 + bz * 0.25);
+        camera.position.lerp(tgtCam, 0.06);
+        look.lerp(new THREE.Vector3(bx, by, bz), 0.12);
+      } else {
+        camera.position.lerp(CAM_HOME, 0.08);
+        look.lerp(LOOK_HOME, 0.08);
+      }
+      camera.lookAt(look);
+      renderer.render(scene, camera);
+    },
+    dispose() { renderer.dispose(); renderer.forceContextLoss(); },
+    toZone(cx, cy) { // 點的位置換成好球帶座標(穿過本壘前緣的平面)
+      const r = cvs.getBoundingClientRect();
+      camera.updateMatrixWorld();
+      ray.setFromCamera(new THREE.Vector2((cx - r.left) / r.width * 2 - 1, -((cy - r.top) / r.height) * 2 + 1), camera);
+      if (!ray.ray.intersectPlane(plane, hit)) return [9, 9];
+      return [hit.x / BB3_ZONE.hx, (BB3_ZONE.cy - hit.y) / BB3_ZONE.hy];
+    },
+  };
+}
+function vBaseball(V) {
+  const me = V.me, W = 360, HH = 480;
+  const C = canvasStage(V, W / HH), ctx = C.ctx;
+  V.root.classList.add('bbui');
+  let g3 = null; // 3D 畫面載入成功就用 3D,失敗(舊手機、沒網路)就留在 2D
+  bbLoad3D().then(L => { if (!C.alive()) return; g3 = bb3dCreate(L, $('.twrap', V.root)); V.root.classList.add('bb3'); }).catch(e => console.warn('棒球 3D 畫面載入失敗,改用 2D', e));
+  let st = null, fly = null, swingAt = 0, swung = false, hitAnim = null, msg = null, ptype = 0, fx = [];
+  const PLATE = [180, 446], ZC = [180, 352], ZW = 40, ZH = 46, REL = [186, 226];
+  const team = s => (st && st.teams[0].includes(s) ? 0 : 1);
+  const myTeam = () => (st ? (st.teams[0].includes(me) ? 0 : st.teams[1].includes(me) ? 1 : -1) : -1);
+  const who = s => (s === me ? '你' : esc(pinfo(s).name));
+
+  // ---------- 控制區:投手選球種 + 位置;打者看提示 ----------
+  V.pad.innerHTML = '<div class="bbpad"></div>';
+  const padEl = $('.bbpad', V.pad);
+  function renderPad() {
+    if (!st) return;
+    if (st.phase === 'choose' && st.pitcher === me) {
+      padEl.innerHTML = `<div class="bbtypes">${BB.NAMES.map((n, k) => `<button class="bbt${ptype === k ? ' on' : ''}" data-t="${k}"><b>${n}</b><small>${['快、直直的', '會轉彎', '慢、騙時機'][k]}</small></button>`).join('')}</div>
+        <div class="bbgrid">${Array.from({ length: 25 }, (_, i) => { const c = i % 5, r = Math.floor(i / 5), inZ = c >= 1 && c <= 3 && r >= 1 && r <= 3; return `<button class="bbz${inZ ? ' in' : ''}" data-c="${c}" data-r="${r}"></button>`; }).join('')}</div>
+        <div class="bbtip">選球種,再點要投的位置(中間是好球帶)</div>`;
+    } else if (st.batter === me && (st.phase === 'choose' || st.phase === 'flight')) {
+      padEl.innerHTML = `<div class="bbbig">🏏 輪到你打擊!</div><div class="bbtip">球飛到好球帶的瞬間,<b>點上面球的位置</b>揮棒<br>壞球(框外)不要揮,3 壞球就保送</div>`;
+    } else {
+      const s = st.phase === 'choose' ? `⚾ ${who(st.pitcher)} 正在選球…` : st.phase === 'flight' ? `🏏 ${who(st.batter)} 打擊中…` : '';
+      padEl.innerHTML = `<div class="bbwait">${s}</div><div class="bbtip">${myTeam() < 0 ? '👀 觀戰中' : `你是 <b style="color:${BB.TC[myTeam()]}">${BB.TEAM[myTeam()]}</b>`}</div>`;
+    }
+  }
+  padEl.addEventListener('pointerdown', e => {
+    const t = e.target.closest('.bbt'), z = e.target.closest('.bbz');
+    if (t) { ptype = +t.dataset.t; SFX.tap(); renderPad(); return; }
+    if (z && st && st.phase === 'choose' && st.pitcher === me) {
+      const toZ = v => (Math.abs(v - 2) === 2 ? Math.sign(v - 2) * 1.25 : (v - 2) * 0.6); // 中間 3 格在好球帶裡,外圈是壞球
+      V.send({ e: 'pitch', t: ptype, zx: toZ(+z.dataset.c), zy: toZ(+z.dataset.r) });
+      padEl.innerHTML = '<div class="bbwait">⚾ 投出去了!</div>';
+      SFX.tap();
+    }
+  });
+
+  // ---------- 打擊:點畫面揮棒 ----------
+  C.cv.addEventListener('pointerdown', e => {
+    if (!st || !fly || st.batter !== me || swung || st.phase !== 'flight') return;
+    e.preventDefault();
+    const r = C.cv.getBoundingClientRect(), x = (e.clientX - r.left) / r.width * W, y = (e.clientY - r.top) / r.height * HH;
+    swung = true; swingAt = performance.now();
+    const err = Math.round(swingAt - (fly.t0 + fly.p.T));
+    const [dx, dy] = g3 ? g3.toZone(e.clientX, e.clientY) : [(x - ZC[0]) / ZW, (y - ZC[1]) / ZH];
+    V.send({ e: 'swing', id: fly.p.id, err, dx, dy });
+    beep(220, 0.06, 'triangle', 0.08);
+  });
+
+  // ---------- 畫面 ----------
+  function ballAt(p, u) { // 球在第 u(0~1)段時的位置與大小
+    const tx = ZC[0] + p.zx * ZW, ty = ZC[1] + p.zy * ZH;
+    const k = (u * u * (0.35 + 0.65 * u) + u * 0.35) / 1.35; // 0~1,越靠近越快(透視),u=1 時剛好到本壘
+    const x = REL[0] + (tx - REL[0]) * k + p.curve * Math.sin(Math.PI * k) * (1 - k * 0.3);
+    const y = REL[1] + (ty - REL[1]) * k - Math.sin(Math.PI * k) * 26;
+    return [x, y, 2.4 + 9 * k * k, k];
+  }
+  function drawBall(x, y, r, spin) {
+    ctx.fillStyle = 'rgba(0,0,0,.18)';
+    ctx.beginPath(); ctx.ellipse(x, Math.min(PLATE[1] - 4, y + r * 3 + 8), r * 0.9, r * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+    const g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.35, r * 0.1, x, y, r);
+    g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#d9d9d9');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#d6283f'; ctx.lineWidth = Math.max(0.6, r * 0.14);
+    ctx.beginPath(); ctx.arc(x - r * 0.9, y, r * 0.75, -0.9 + spin, 0.9 + spin); ctx.stroke();
+    ctx.beginPath(); ctx.arc(x + r * 0.9, y, r * 0.75, Math.PI - 0.9 + spin, Math.PI + 0.9 + spin); ctx.stroke();
+  }
+  function drawField(now) {
+    let g = ctx.createLinearGradient(0, 0, 0, 120);
+    g.addColorStop(0, '#5fb8ff'); g.addColorStop(1, '#bfe6ff');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, 120);
+    // 看台與觀眾
+    ctx.fillStyle = '#3a4a6b'; ctx.fillRect(0, 70, W, 82);
+    const crowd = ['#ffd23f', '#ff6b6b', '#6bd0ff', '#ffffff', '#9b7bff', '#5fd38d', '#ff9f43'];
+    for (let y = 76; y < 148; y += 7) for (let x = (y / 7) % 2 ? 3 : 6; x < W; x += 7) {
+      const k = (x * 7 + y * 13) % crowd.length, hop = (Math.sin(now / 160 + x * 0.3 + y) > 0.92 && hitAnim) ? -2 : 0;
+      ctx.fillStyle = crowd[k]; ctx.fillRect(x, y + hop, 4, 4);
+    }
+    ctx.fillStyle = '#1f3864'; ctx.fillRect(0, 148, W, 8); // 全壘打牆
+    ctx.fillStyle = '#ffd23f'; ctx.fillRect(0, 148, W, 2);
+    // 外野草皮(割草的條紋)
+    for (let i = 0; i < 10; i++) { ctx.fillStyle = i % 2 ? '#3fa34d' : '#46b055'; ctx.fillRect(0, 156 + i * 16, W, 16); }
+    ctx.fillStyle = '#3fa34d'; ctx.fillRect(0, 316, W, HH - 316);
+    for (let i = 0; i < 6; i++) { ctx.fillStyle = i % 2 ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.04)'; ctx.fillRect(0, 316 + i * 28, W, 28); }
+    // 內野紅土(菱形)與壘包
+    ctx.fillStyle = '#c98b54';
+    ctx.beginPath(); ctx.moveTo(180, 196); ctx.quadraticCurveTo(345, 255, 300, 330); ctx.lineTo(180, 470); ctx.lineTo(60, 330); ctx.quadraticCurveTo(15, 255, 180, 196); ctx.fill();
+    ctx.fillStyle = '#46b055';
+    ctx.beginPath(); ctx.moveTo(180, 236); ctx.lineTo(268, 300); ctx.lineTo(180, 400); ctx.lineTo(92, 300); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(180, 446); ctx.lineTo(10, 230); ctx.moveTo(180, 446); ctx.lineTo(350, 230); ctx.stroke();
+    ctx.fillStyle = '#d9a066'; ctx.beginPath(); ctx.ellipse(180, 252, 26, 9, 0, 0, Math.PI * 2); ctx.fill(); // 投手丘
+    [[180, 214], [276, 300], [84, 300]].forEach(([x, y], i) => {
+      ctx.fillStyle = st && st.bases[[1, 0, 2][i]] != null ? '#ffe066' : '#fff';
+      ctx.beginPath(); ctx.moveTo(x, y - 5); ctx.lineTo(x + 7, y); ctx.lineTo(x, y + 5); ctx.lineTo(x - 7, y); ctx.closePath(); ctx.fill();
+    });
+    // 本壘板與打擊區
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.moveTo(165, 440); ctx.lineTo(195, 440); ctx.lineTo(195, 446); ctx.lineTo(180, 454); ctx.lineTo(165, 446); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 1.2;
+    ctx.strokeRect(120, 412, 34, 56); ctx.strokeRect(206, 412, 34, 56);
+  }
+  function drawPeople(now) {
+    if (!st) return;
+    // 投手(在投手丘上)
+    const throwing = fly && (now - fly.t0) < 160;
+    if (st.pitcher != null) C.char(st.pitcher, 180, 252 - (throwing ? 3 : 0), 42, false, true); // 換局時還沒有投手、打者
+    // 打者(右打,站在本壘左邊)
+    const bob = Math.sin(now / 300) * 1.2;
+    if (st.batter != null) C.char(st.batter, 132, 476 + bob, 92, false, true);
+    // 球棒
+    const sw = swingAt || (hitAnim && hitAnim.swing ? hitAnim.t0 - 30 : 0);
+    const u = sw ? Math.min(1, (now - sw) / 170) : 0;
+    const ang = sw && u < 1 ? -2.2 + u * 3.6 : sw && now - sw < 600 ? 1.4 : -2.2;
+    ctx.save(); ctx.translate(150, 420); ctx.rotate(ang);
+    const bg = ctx.createLinearGradient(0, -3, 0, 3); bg.addColorStop(0, '#e2b07a'); bg.addColorStop(1, '#a8743f');
+    ctx.fillStyle = bg; ctx.beginPath(); ctx.moveTo(0, -2.5); ctx.lineTo(62, -5); ctx.quadraticCurveTo(68, 0, 62, 5); ctx.lineTo(0, 2.5); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#2a2f3a'; ctx.fillRect(-4, -3, 6, 6);
+    ctx.restore();
+  }
+  function drawZone(now) {
+    const showZone = st && (st.phase === 'choose' || st.phase === 'flight');
+    if (!showZone) return;
+    ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineWidth = 2;
+    ctx.setLineDash([5, 4]); ctx.strokeRect(ZC[0] - ZW, ZC[1] - ZH, ZW * 2, ZH * 2); ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(255,255,255,.06)'; ctx.fillRect(ZC[0] - ZW, ZC[1] - ZH, ZW * 2, ZH * 2);
+    ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 1;
+    for (let i = 1; i < 3; i++) { ctx.beginPath(); ctx.moveTo(ZC[0] - ZW + i * ZW * 2 / 3, ZC[1] - ZH); ctx.lineTo(ZC[0] - ZW + i * ZW * 2 / 3, ZC[1] + ZH); ctx.moveTo(ZC[0] - ZW, ZC[1] - ZH + i * ZH * 2 / 3); ctx.lineTo(ZC[0] + ZW, ZC[1] - ZH + i * ZH * 2 / 3); ctx.stroke(); }
+  }
+  function drawHud() {
+    if (!st) return;
+    // 記分板(左上):兩隊、每局得分、總分
+    const n = Math.max(BB.INN, st.inning), bx = 6, by = 6, cw = 15, w = 48 + n * cw + 26;
+    ctx.fillStyle = 'rgba(16,24,48,.86)'; C.rr(bx, by, w, 44, 6);
+    ctx.font = '700 9px Fredoka, sans-serif'; ctx.textBaseline = 'middle';
+    for (let k = 0; k < 2; k++) {
+      const y = by + 15 + k * 18;
+      ctx.fillStyle = BB.TC[k]; C.rr(bx + 4, y - 7, 40, 14, 3);
+      ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText((st.half === k && st.phase !== 'over' ? '▶' : '') + BB.TEAM[k], bx + 24, y + 0.5);
+      for (let i = 0; i < n; i++) {
+        const v = st.line[k][i];
+        ctx.fillStyle = st.inning === i + 1 && st.half === k ? '#ffe066' : 'rgba(255,255,255,.75)';
+        ctx.fillText(v == null ? '-' : v, bx + 52 + i * cw, y + 0.5);
+      }
+      ctx.fillStyle = '#ffe066'; ctx.font = '800 11px Fredoka, sans-serif'; ctx.fillText(st.runs[k], bx + 52 + n * cw + 6, y + 0.5); ctx.font = '700 9px Fredoka, sans-serif';
+    }
+    // 壘包與好壞球、出局數(右上)
+    const rx = W - 74, ry = 6;
+    ctx.fillStyle = 'rgba(16,24,48,.86)'; C.rr(rx, ry, 68, 60, 6);
+    [[rx + 34, ry + 9], [rx + 46, ry + 21], [rx + 22, ry + 21]].forEach(([x, y], i) => {
+      ctx.fillStyle = st.bases[[1, 0, 2][i]] != null ? '#ffe066' : 'rgba(255,255,255,.25)';
+      ctx.beginPath(); ctx.moveTo(x, y - 6); ctx.lineTo(x + 6, y); ctx.lineTo(x, y + 6); ctx.lineTo(x - 6, y); ctx.closePath(); ctx.fill();
+    });
+    const row = (label, k, max, col, y) => {
+      ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.fillText(label, rx + 6, y);
+      for (let i = 0; i < max; i++) { ctx.fillStyle = i < k ? col : 'rgba(255,255,255,.2)'; ctx.beginPath(); ctx.arc(rx + 22 + i * 10, y, 3.4, 0, Math.PI * 2); ctx.fill(); }
+    };
+    row('B', st.balls, BB.BALLS - 1, '#4ade80', ry + 35); row('S', st.strikes, BB.STRIKES - 1, '#facc15', ry + 45); row('O', st.outs, BB.OUTS - 1, '#ef4444', ry + 55);
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'right'; ctx.font = '800 9px Fredoka, sans-serif';
+    ctx.fillText(`${st.inning}${st.half ? '下' : '上'}`, rx + 64, ry + 9);
+  }
+  function drawHitBall(now) {
+    if (!hitAnim) return;
+    const h = hitAnim, u = Math.min(1, (now - h.t0) / h.dur);
+    if (h.far) {
+      const sx = 180 + h.dir * 20, sy = 360, ex = 180 + h.dir * 140, ey = h.kind === 'HR' ? 60 : h.kind === 'T3' || h.kind === 'D2' ? 170 : h.kind === 'FO' ? 190 : h.kind === 'GO' ? 290 : 230;
+      const peak = h.kind === 'GO' ? 0 : h.kind === 'HR' ? 140 : 90;
+      const x = sx + (ex - sx) * u, y = sy + (ey - sy) * u - Math.sin(Math.PI * Math.min(1, u * 1.05)) * peak, r = 9 * (1 - u) + 2;
+      drawBall(x, y, r, now / 40);
+    }
+  }
+  function drawMsg(now) {
+    if (!msg) return;
+    const age = now - msg.t0;
+    if (age > msg.life) { msg = null; return; }
+    const pop = Math.min(1, age / 140), a = age > msg.life - 300 ? (msg.life - age) / 300 : 1;
+    ctx.save(); ctx.globalAlpha = a; ctx.translate(W / 2, msg.y); ctx.scale(0.7 + 0.3 * pop, 0.7 + 0.3 * pop);
+    ctx.font = `900 ${msg.size}px Fredoka, "Noto Sans TC", sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.lineWidth = msg.size / 5; ctx.strokeStyle = '#1f3864'; ctx.strokeText(msg.text, 0, 0);
+    ctx.fillStyle = msg.col; ctx.fillText(msg.text, 0, 0);
+    if (msg.sub) { ctx.font = `800 ${msg.size * 0.45}px Fredoka, "Noto Sans TC", sans-serif`; ctx.lineWidth = 3; ctx.strokeText(msg.sub, 0, msg.size * 0.85); ctx.fillStyle = '#fff'; ctx.fillText(msg.sub, 0, msg.size * 0.85); }
+    ctx.restore();
+  }
+  function draw() {
+    C.size(W);
+    const now = performance.now();
+    if (g3) { ctx.clearRect(0, 0, W, HH); g3.render(now, { st, fly, swingAt, hitAnim }); } // 3D:球場畫在下面那層,這層只畫記分板和字
+    else { drawField(now); drawPeople(now); drawZone(now); }
+    if (fly) {
+      const u = (now - fly.t0) / fly.p.T;
+      if (!g3 && u <= 1.08 && !(hitAnim && hitAnim.id === fly.p.id)) {
+        const [x, y, r] = ballAt(fly.p, Math.min(1, u));
+        // 殘影
+        for (let k = 3; k >= 1; k--) { const [tx, ty, tr] = ballAt(fly.p, Math.max(0, Math.min(1, u) - k * 0.035)); ctx.globalAlpha = 0.12 * (4 - k); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(tx, ty, tr * 0.8, 0, Math.PI * 2); ctx.fill(); }
+        ctx.globalAlpha = 1;
+        drawBall(x, y, r, now / 30);
+      }
+      if (st && st.batter === me && !swung && st.phase === 'flight' && u > 1.25) { swung = true; V.send({ e: 'take', id: fly.p.id }); }
+    }
+    if (!g3) drawHitBall(now);
+    for (let i = fx.length - 1; i >= 0; i--) { // 全壘打煙火
+      const f = fx[i], age = (now - f.t0) / 1000;
+      if (age > 1.6) { fx.splice(i, 1); continue; }
+      for (let k = 0; k < 14; k++) { const a = k / 14 * Math.PI * 2; ctx.fillStyle = f.c; ctx.globalAlpha = Math.max(0, 1 - age / 1.6); ctx.beginPath(); ctx.arc(f.x + Math.cos(a) * age * 60, f.y + Math.sin(a) * age * 60 + age * age * 30, 2.4, 0, Math.PI * 2); ctx.fill(); }
+      ctx.globalAlpha = 1;
+    }
+    drawHud();
+    drawMsg(now);
+  }
+  const loop = () => { if (!C.alive()) { if (g3) g3.dispose(); return; } draw(); requestAnimationFrame(loop); };
+  requestAnimationFrame(loop);
+
+  const say = (text, col, sub, size, life) => { msg = { text, col, sub, size: size || 34, y: 210, t0: performance.now(), life: life || 1700 }; };
+  V.on = m => {
+    if (m.e !== 'st') return;
+    const prev = st;
+    st = m;
+    if (m.ev === 'intro') {
+      const mt = myTeam();
+      C.overlay(`<div class="big">⚾</div><div>5 局棒球賽!</div><div class="vsrow">${[0, 1].map(k => `<span class="vsp"><b style="color:${BB.TC[k]}">${BB.TEAM[k]}</b><span>${m.teams[k].map(s => pinfo(s).emoji).join('')}</span></span>`).join('<span class="vs">VS</span>')}</div><div class="small">${mt < 0 ? '觀戰中' : `你是 ${BB.TEAM[mt]}`}</div>`, 2300);
+      SFX.go();
+    } else if (m.ev === 'half') {
+      const att = m.teams[m.half];
+      say(`第 ${m.inning} 局${m.half ? '下' : '上'}`, '#ffe066', `${BB.TEAM[m.half]}進攻${att.includes(me) ? '(輪到你們打!)' : ''}`, 30, 1700);
+      SFX.tick();
+    } else if (m.ev === 'choose') {
+      fly = null; swung = false; swingAt = 0; hitAnim = null;
+      if (m.pitcher === me && (!prev || prev.phase !== 'choose')) { buzz(40); }
+      if (m.batter === me && prev && prev.batter !== me) { say('換你打擊!', '#ffe066', null, 30, 1100); buzz(60); }
+    } else if (m.ev === 'pitch') {
+      fly = { p: m.pitch, t0: performance.now() };
+      swung = false; swingAt = 0; hitAnim = null;
+      beep(200, 0.08, 'triangle', 0.06);
+    } else if (m.ev === 'res') {
+      const L = m.last, R = BB_RES[L.kind], kindCls = R[1];
+      const col = kindCls === 'h' ? '#ffe066' : kindCls === 'o' ? '#ff6b6b' : kindCls === 's' ? '#ffffff' : kindCls === 'f' ? '#a5d8ff' : '#7dffb0';
+      const far = ['HR', 'T3', 'D2', 'S1', 'FO', 'GO', 'PO', 'FL'].includes(L.kind);
+      if (far) {
+        hitAnim = { id: L.id, kind: L.kind, dir: L.kind === 'FL' ? (L.dir < 0 ? -1.4 : 1.4) : L.dir, t0: performance.now(), dur: L.kind === 'HR' ? 1500 : 900, far: true, swing: true };
+        beep(L.kind === 'HR' ? 160 : 260, 0.08, 'square', 0.16);
+      }
+      let sub = L.scored ? `得 ${L.scored} 分!` : null;
+      if (L.kind === 'HR') { sub = L.scored > 1 ? `${L.scored} 分全壘打!` : '陽春全壘打'; setTimeout(() => { for (let i = 0; i < 4; i++) fx.push({ x: 60 + i * 80, y: 60 + (i % 2) * 30, c: pick(['#ffd23f', '#ff6b6b', '#6bd0ff', '#9b7bff']), t0: performance.now() + i * 150 }); }, 900); }
+      say(R[0], col, sub, L.kind === 'HR' ? 40 : 32, L.kind === 'HR' ? 2600 : 1700);
+      const mine = team(L.by) === myTeam();
+      if (kindCls === 'h' && L.kind !== 'BB') { if (mine) SFX.good(); else SFX.bad(); if (L.kind === 'HR' && mine) { SFX.win(); buzz([60, 60, 60, 60, 200]); } }
+      else if (L.kind === 'K' || kindCls === 'o') { if (mine) SFX.bad(); else SFX.good(); }
+      else if (kindCls === 's') beep(520, 0.1, 'sine', 0.08);
+    } else if (m.ev === 'end') {
+      const L = m.last;
+      const mt = myTeam();
+      const title = L.win < 0 ? '平手!' : `${BB.TEAM[L.win]} 獲勝!`;
+      setTimeout(() => C.overlay(`<div class="big">${L.win < 0 ? '🤝' : L.win === mt ? '🏆' : '⚾'}</div><div>${title}</div><div class="small">${esc(L.reason)} ${m.runs[0]} : ${m.runs[1]}</div>`), 600);
+      if (L.win === mt) SFX.win(); else if (L.win >= 0) SFX.bad();
+    }
+    renderPad();
+  };
 }
 
 /* =========================================================
