@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.06';
+const APP_VERSION = '2026.11.07';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -481,7 +481,7 @@ const GAMES = [
   },
   {
     id: 'parking', emoji: '🅿️', name: '停車大對決', tag: '競速+3D', color: '#ff7a1a', desc: '3 局停車比賽,誰停得又快又準!',
-    rules: ['大家拿到同一個停車場,倒數完一起出發', '左邊方向盤按住左右滑,右邊踩「前進」「倒車」', '把車停進發光的格子,停穩就完成;撞車 +2 秒、撞鴨子 +3 秒、撞飛三角錐 +1 秒', '香蕉皮會讓車子轉圈圈,按「叭」可以催鴨子快走', '3 局越來越難,時間最短的拿最多分'],
+    rules: ['大家拿到同一個停車場,倒數完一起出發', '左邊方向盤按住左右滑,右邊踩「前進」「倒車」', '把車停進發光的格子,停穩就完成;撞車 +2 秒、撞鴨子 +3 秒、撞飛三角錐 +1 秒', '香蕉皮會讓車子轉圈圈,按「叭」可以催鴨子快走', '有些關卡會停電、方向盤裝反、或有阿姨來搶車位!', '3 局越來越難,時間最短的拿最多分'],
     host: hParking, view: vParking, noCountdown: true,
   },
 ];
@@ -539,7 +539,7 @@ function home() {
         <button class="btn big green" id="solo"><span class="bi">▶</span><span class="bt">單人遊戲<small>對戰電腦</small></span></button>
         <button class="btn big blue" id="busg"><span class="bi">🚌</span><span class="bt">闖關模式<small>公車大塞車</small></span></button>
       </div>
-      <button class="btn big red" id="parkg"><span class="bi">🅿️</span><span class="bt">停車大師<small>3D 停車闖關 30 關</small></span></button>
+      <button class="btn big red" id="parkg"><span class="bi">🅿️</span><span class="bt">停車大師<small>3D 停車闖關 50 關</small></span></button>
       <button class="btn big orange" id="create"><span class="bi">🏠</span><span class="bt">建立房間<small>邀請朋友一起玩</small></span></button>
       <div class="joinbox">
         <input class="field" id="code" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="輸入房號" value="${esc(roomParam)}">
@@ -5680,49 +5680,70 @@ const PK_THEMES = { // 地面、線、外圍
   night: { ground: '#4c5466', line: '#e8ecff', out: '#33405a', name: '夜市' },
   street: { ground: '#868f9d', line: '#ffffff', out: '#cfd6df', name: '街道' },
 };
-// 30 關:版型、格子寬度(路邊停車是空位長度)、要不要倒車入庫、障礙物
+// 50 關:版型、格子寬度(路邊停車是空位長度)、倒車入庫、障礙物和 KUSO 機關
+// thief:阿姨會來搶車位(倒數)、dark:停電只看得到車燈、inv:方向盤裝反、robots:掃地機器人、movers:走道上開來開去的車、bumps:減速丘
 const PK_PLAN = [
-  { k: 'open', sw: 4.0, t: 'school', name: '第一次停車', tip: '手指放在下面拖搖桿:往上前進、往下倒車、左右轉彎' },
-  { k: 'open', sw: 3.6, side: 1, cones: 2, t: 'school', name: '右轉進格', tip: '先往前開,再把搖桿往右推' },
+  { k: 'open', sw: 4.0, t: 'school', name: '第一次停車', tip: '左邊搖桿左右拖轉方向,右邊按住「前進」' },
+  { k: 'open', sw: 3.6, side: 1, cones: 2, t: 'school', name: '右轉進格', tip: '先往前開,再把搖桿往右拖' },
   { k: 'row', sw: 3.3, cones: 2, t: 'day', name: '兩台車中間', tip: '車子要整台在白線裡面才算' },
   { k: 'row', sw: 3.15, cones: 4, gate: 1, t: 'day', name: '三角錐陣', tip: '格子門口有三角錐,撞飛會扣時間' },
-  { k: 'row', sw: 3.3, rev: 1, t: 'school', name: '倒車入庫', tip: '考駕照!車頭要朝外,搖桿往下倒車停進去' },
+  { k: 'row', sw: 3.3, rev: 1, t: 'school', name: '倒車入庫', tip: '考駕照!車頭要朝外,用「倒車」停進去' },
   { k: 'row', sw: 3.05, bananas: 3, gate: 1, t: 'day', name: '香蕉皮警報', tip: '壓到香蕉皮會轉圈圈 🍌' },
   { k: 'double', sw: 3.1, cones: 3, t: 'day', name: '繞一圈', tip: '格子在花台那排的另一邊,要繞過去' },
   { k: 'row', sw: 3.0, ducks: 2, gate: 1, st: 1, t: 'day', name: '鴨子過馬路', tip: '小心鴨子!按「叭」可以催牠們快走' },
-  { k: 'parallel', gap: 7.2, cones: 2, t: 'street', name: '路邊停車', tip: '停進路邊兩台車中間的空位' },
-  { k: 'angled', sw: 3.0, cones: 3, t: 'day', name: '斜斜的格子', tip: '斜的格子,車頭要對齊斜線' },
+  { k: 'parallel', gap: 7.2, cones: 2, bumps: 2, t: 'street', name: '路邊停車', tip: '黃黑條紋是減速丘,開太快會彈起來' },
+  { k: 'angled', sw: 3.0, robots: 1, t: 'day', name: '掃地機器人', tip: '停車場怎麼會有掃地機器人?!' },
   { k: 'garage', sw: 2.95, cones: 2, t: 'garage', name: '地下停車場', tip: '柱子很硬,不要撞到' },
+  { k: 'row', sw: 3.0, thief: 1, cones: 2, t: 'day', name: '搶車位!', tip: '阿姨正要來搶這個車位,倒數完前停好!' },
   { k: 'double', sw: 2.9, ducks: 1, bananas: 2, st: 1, t: 'day', name: '菜市場', tip: '阿嬤的推車跟鴨子都在路上' },
   { k: 'row', sw: 2.85, rev: 1, cones: 5, gate: 1, t: 'school', name: '教練在看', tip: '倒車入庫+三角錐門,教練皺眉中' },
   { k: 'parallel', gap: 6.7, ducks: 1, cones: 2, t: 'night', name: '夜市路邊', tip: '雞排攤前面的路邊車位!' },
   { k: 'angled', sw: 2.9, carts: 2, gate: 1, t: 'day', name: '推車暴走', tip: '購物車自己在跑?!' },
+  { k: 'row', sw: 2.95, dark: 1, cones: 2, t: 'night', name: '停電了!', tip: '整個停車場停電,只看得到車燈照到的地方' },
   { k: 'garage', sw: 2.85, rev: 1, cones: 2, t: 'garage', name: '柱子好多', tip: '倒車停進柱子旁邊' },
   { k: 'double', sw: 2.8, crooked: 1, cones: 3, st: 1, t: 'day', name: '誰停歪了', tip: '旁邊的車都停得歪七扭八…' },
+  { k: 'row', sw: 2.9, inv: 1, cones: 2, t: 'school', name: '方向盤裝反了', tip: 'KUSO!這台車左右是相反的' },
   { k: 'parallel', gap: 6.4, bananas: 3, cones: 2, t: 'street', name: '香蕉人行道', tip: '路邊怎麼一堆香蕉皮' },
   { k: 'row', sw: 2.75, ducks: 2, carts: 1, gate: 1, st: 1, t: 'day', name: '動物園停車場', tip: '鴨子家族出遊中' },
+  { k: 'double', sw: 2.8, movers: 1, cones: 2, t: 'day', name: '阿伯倒車中', tip: '有台車在走道上開來開去,小心!' },
   { k: 'garage', sw: 2.75, carts: 1, ducks: 1, gate: 1, t: 'garage', name: 'B3 迷宮', tip: '地下三樓為什麼會有鴨子' },
+  { k: 'angled', sw: 2.8, robots: 2, bumps: 2, t: 'day', name: '機器人大軍', tip: '掃地機器人開始巡邏了' },
   { k: 'double', sw: 2.72, rev: 1, bananas: 2, cones: 2, t: 'day', name: '倒車大師', tip: '倒車入庫,而且要繞一圈' },
+  { k: 'parallel', gap: 6.3, thief: 1, cones: 2, t: 'night', name: '夜市搶車位', tip: '夜市車位超搶手,阿姨已經在路上了!' },
   { k: 'angled', sw: 2.8, rev: 1, ducks: 2, cones: 2, t: 'school', name: '斜倒車', tip: '斜格子也要倒車入庫!' },
+  { k: 'garage', sw: 2.75, dark: 1, cones: 2, t: 'garage', name: '地下室停電', tip: '地下室一片黑…靠車燈找格子' },
   { k: 'parallel', gap: 6.1, cones: 3, ducks: 1, t: 'night', name: '一次到位', tip: '空位越來越小了' },
+  { k: 'row', sw: 2.72, inv: 1, gate: 1, cones: 3, t: 'school', name: '反向駕訓班', tip: '方向盤又裝反了,教練不知道' },
+  { k: 'double', sw: 2.7, movers: 2, bumps: 2, st: 1, t: 'day', name: '下班尖峰', tip: '大家都在搶著出停車場' },
   { k: 'garage', sw: 2.68, rev: 1, cones: 4, gate: 1, t: 'garage', name: '柱子+三角錐', tip: '地下室工程中' },
+  { k: 'angled', sw: 2.75, thief: 1, carts: 1, t: 'day', name: '週年慶搶位', tip: '百貨週年慶,阿姨們火力全開' },
   { k: 'double', sw: 2.65, crooked: 1, ducks: 2, carts: 1, st: 1, t: 'day', name: '百貨週年慶', tip: '週年慶停車場,大家都瘋了' },
   { k: 'parallel', gap: 5.95, ducks: 2, bananas: 2, cones: 2, t: 'night', name: '夜市大塞車', tip: '鴨子也來逛夜市' },
+  { k: 'row', sw: 2.65, robots: 3, gate: 1, t: 'day', name: '機器人罷工', tip: '三台掃地機器人在格子前面亂跑' },
+  { k: 'garage', sw: 2.65, dark: 1, rev: 1, t: 'garage', name: '停電倒車', tip: '黑漆漆的還要倒車入庫…' },
+  { k: 'double', sw: 2.65, thief: 1, movers: 1, cones: 2, t: 'day', name: '搶位大作戰', tip: '阿伯在倒車、阿姨在搶位,你在哭' },
   { k: 'row', sw: 2.62, rev: 1, crooked: 1, cones: 6, gate: 1, t: 'school', name: '駕照魔王考', tip: '過了這關直接發駕照' },
+  { k: 'angled', sw: 2.68, inv: 1, ducks: 2, t: 'day', name: '反向斜格', tip: '方向盤相反+斜格子+鴨子' },
   { k: 'garage', sw: 2.6, carts: 2, bananas: 2, gate: 1, st: 1, t: 'garage', name: '地下城', tip: '推車、香蕉皮、柱子…這是什麼地城' },
+  { k: 'parallel', gap: 5.9, bumps: 3, movers: 1, t: 'street', name: '減速丘大街', tip: '減速丘一條接一條' },
+  { k: 'double', sw: 2.6, robots: 2, ducks: 2, cones: 2, t: 'day', name: '動物機器人樂園', tip: '鴨子騎在掃地機器人上?!' },
+  { k: 'row', sw: 2.6, dark: 1, thief: 1, gate: 1, t: 'night', name: '停電搶車位', tip: '停電了阿姨還是照搶' },
+  { k: 'garage', sw: 2.58, inv: 1, rev: 1, cones: 3, t: 'garage', name: '反向地下城', tip: '方向盤相反還要倒車入庫,加油' },
   { k: 'double', sw: 2.58, rev: 1, ducks: 3, carts: 1, crooked: 1, cones: 2, t: 'day', name: '鴨子大軍', tip: '鴨子們占領了停車場' },
-  { k: 'parallel', gap: 5.8, ducks: 2, carts: 1, bananas: 2, cones: 3, t: 'night', name: '終極停車王', tip: '停進去你就是停車之神' },
+  { k: 'angled', sw: 2.62, movers: 2, robots: 1, bananas: 2, t: 'day', name: '混亂停車場', tip: '什麼東西都在動' },
+  { k: 'parallel', gap: 5.85, thief: 1, ducks: 2, bananas: 2, t: 'night', name: '夜市終極搶位', tip: '最後一個夜市車位!' },
+  { k: 'double', sw: 2.55, rev: 1, ducks: 2, carts: 1, bananas: 2, cones: 3, robots: 1, thief: 1, t: 'day', name: '終極停車王', tip: '全部機關一次來,停進去你就是停車之神' },
 ];
-const PK_SALT = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]; // 驗證有解的亂數種子
-const PK_PAR = [10,12,11,11,17,11,15,12,12,11,16,18,19,13,11,19,16,14,12,14,16,17,16,22,18,16,17,14,16,16]; // 三顆星的秒數(照自動解法算的)
-const PK_PATH = ["cccccccccccccccccccccccccccccccccccc","edcccceeebbcbcabaaaaaadeeeeeeeeeeeeef","cdccccccccccccccccccccdcccccccdccccdccba","cccdcccccccccccccccccdcccccdebcccbcccba","cbccccccccccccccccccabbbeeceeeeeeeeeefffgfffffgffggi","ccccdcccccccccccccccccdccccdebcccbcccba","feddeeeccccbdcbaaaabaccccccbaaaacccccaaabbcbdeeeeeeeed","aaaaaaaaabcccccccccbcccccccccccbcccccbcccd","eeedcccccccccdcceebaaaabaacajjfhfff","cccccccccccccccccccccccccccababceeeeeeee","eeeeeeeccaabaabbcbadbcccccbabaaaaaaaaaajjaaaaaaa","cdcbcccaaaacdccccdbcccaaabbabdbacebbcbcaaaaaaaaaaaaaajaaabaa","cccceeeeeecbbaaaaabaaaaaaaaaajjjjjjjijjjjjjjfffiffjfhi","eeeeccccccccccdcccaaaaacbaajjhfffff","ccccccccccccccccccccabaabcedbeeeedddeeccd","feeeeecadbbcbaaaabccccdbdbccccbbdabaaaaaaabaaaajjjijjjjjfg","aaaaaaaijaacaaacccdcceeeccdcdddcccdcccdebeeabaaaa","eedcccceedbccccabbbbbcccccdbdbbbaccaajjifffff","aaaaaaaacccccccbcccccccccccccbcccccccbccbcc","hedeeeeebcbccaaaaabcccccccbccccccacccccdcccec","eeeeeeccccbccbbbabaacbccaaaababaaaacdedeeefffgffhggj","cccccccccccccccccababeeeeeeeeeeeeeeeffgfgfgffffffff","eedcccccccaccdcccecdccccccdaaaabdccbajjhjffffe","feeeeeedaaaaaaiacccccdbeeecaaaaabbcaaaaaaabceedeffgffffgghhhj","cdcbccccaaaacdccccccababccacbabcbaccaaabaababaacccedeeffffgffhhh","eeccdccccccceedbbcbacbbcbdcdbabbcccccajjihfhffe","ccccccccccccccabaabceeeeeeeeeeeeeeefffffgfhfhffghigi","bbcbbbdbbcdcbacebcbdabaaaaaaaccccdbccccbcaacadeddedccd","aaaaaaccbcddebddedeecccdceeeeeeedeedccabaabjjjjjjjhgf","eeeccccccccccccccccccdccabaaaaacajjgfgffef"]; // 每關的自動解法(電腦玩家、教練示範用)
+const PK_SALT = new Array(PK_PLAN.length).fill(0); // 驗證有解的亂數種子(找不到解時改這裡)
+const PK_PAR = [10,12,11,11,17,11,15,12,12,11,16,11,14,17,14,11,11,18,15,11,15,12,16,18,11,18,14,16,16,15,11,15,18,11,19,16,11,16,18,17,11,14,14,17,11,19,18,13,14,22]; // 三顆星的秒數(照自動解法算的)
+const PK_PATH = ["cccccccccccccccccccccccccccccccccccc","edcccceeebbcbcabaaaaaadeeeeeeeeeeeeef","cdccccccccccccccccccccdcccccccdccccdccba","cccdcccccccccccccccccdcccccdebcccbcccba","cbccccccccccccccccccabbbeeceeeeeeeeeefffgfffffgffggi","ccccdcccccccccccccccccdccccdebcccbcccba","feddeeeccccbdcbaaaabaccccccbaaaacccccaaabbcbdeeeeeeeed","aaaaaaaaabcccccccccbcccccccccccbcccccbcccd","eeedcccccccccdcceebaaaabaacajjfhfff","cccccccccccccccccccccccccccababceeeeeeee","eeeeeeeccaabaabbcbadbcccccbabaaaaaaaaaajjaaaaaaa","ccccccccccccccccccccccccccccccccccccccc","bbcbbbbbecdccbbbcbdbbbaabccaaabccbccacccccbcbbaaeeecdec","cccccccccdcccccccbaabeeeeceeeeeeeeeeefffffffgfhhjfhi","eecdcccceeeaccccaacbbbcccdccdcbabacbajiiffff","ccccccccccccccccccccabaabcedbeeeedddeeccd","ccccccccccccccccccccccccccccccccccccccc","feddedecccccbcabbabadaccccaabbaaaaaabeeeeefgffffifhjj","aabbccecdcbbbebacccdbaabbbacaaacccbbbaaccccccbaaaeccceeedee","ccccccdccccccccccccccccdcccccccdcceebaaa","eedaabbccdeeeedcebceaaacccdcaaabacccajjhhffff","aaaaaaaaaccccccccccccbcccccccccccbccccbccb","aaaaaaacccdeeaeeeeedccdbcedceeedceeeeeeeffeeeeede","aaaaaacccdbeeeeeddccccecccaeeeeddddeeeecaaajjjjjijjhhhhgg","cccccccccccccccccccccccccababcceeeeedece","ibabaaaacbcceeebddedccdddeedeedceeeceecaaaabjjjjijihhhf","eeeccccccccccccccccccdcccaaaaadajjjfffee","cccccccccccccccccccededcaaaaaaaaaaaaaajjijjjjhhigff","aaaaaacccdccdedcecedddeccbeeeedceeeeeeeffeeeeeed","eeecccccccccccccccccdcccaabaadcbajjigfffe","bcccccccccccbcccccccccccccbbaccccdcedccd","cdcbcaaabdcccbcccccccadaaaacbaaccccbbabccccaaaaeceeeebdec","aaaaaadccccdeeeeecccccccdccceeeeeeeeeeefffffgffffhhhghj","ccccccccccccccccccccccccccababceeeeeecee","aaaijaaaaaacaacccdedcccdbceeedeeeeeeeccaabaajjjjjjghjf","eeecccccccccdcccccccdcbaaaaccbajjhhhffef","ccccccccccccccccccccccccdccceccccbcccbc","aaaababdcccddecceebbeececedeeedeeeeeecbaaaajjijjjjjhg","fedddeedcbccebbbaabbbcbbacbabaabbaabaaaedeeeeffgfffhfhhj","ccccccccccccccababcceeedeeeeeeeeeefffffffffhgffijhhh","ccccccccccccccccccccccccccababceeeeeecee","bbcbdcbbbacccccbcccccaaaaaaacccccccccccccaccccccdccec","eeeecceecdaaacaeccabbaaccaajijffffe","aaaaabbcbbcdedeceeccebddecedeeeeeedeeccaaaaajjjjjhgjig","ccccccccccccccccccccccccdccceccccbccbcc","gdedeeedbccccaaaaaabdcccdbccccecaaaabaaaaaaaaajjijjjjijjhf","feeeeeccbcbcdaabccbabcbbabcbaacaabaaaceeeeefffgffghhij","cccccccccccccccccccccccccccababeeeeebeeeg","eeedccccdeebacabcdabbcbbaccaajjjfffffd","aaajihjjaaaceeeeeecddbcccbcedccdeedceeeddddeeeecdcaaaajjjjjjjhgg"]; // 每關的自動解法(電腦玩家、教練示範用)
 const pkWrap = a => { while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI) a += Math.PI * 2; return a; };
 const PK_UP = -Math.PI / 2, PK_DOWN = Math.PI / 2;
 
 function parkLevel(n) {
   const P = PK_PLAN[n - 1], r = busRng(n * 7919 + PK_SALT[n - 1] * 104729 + 17), W = PK.W, H = PK.H;
   const ri = k => Math.floor(r() * k), rr = (a, b) => a + r() * (b - a);
-  const L = { n, name: P.name, tip: P.tip, theme: P.t, W, H, start: { x: W / 2, y: H - 3.4, a: PK_UP }, spot: null, obs: [], ducks: [], bananas: [], puddles: [], carts: [], slots: [], par: PK_PAR[n - 1] };
+  const L = { n, name: P.name, tip: P.tip, theme: P.t, W, H, start: { x: W / 2, y: H - 3.4, a: PK_UP }, spot: null, obs: [], ducks: [], bananas: [], carts: [], movers: [], robots: [], bumps: [], slots: [], par: PK_PAR[n - 1], dark: !!P.dark, inv: !!P.inv };
   const kinds = ['Sedan', 'Sedan', 'Hatch', 'Van'];
   const jit = P.crooked ? 0.16 : 0.035, off = P.crooked ? 0.3 : 0.1;
   const car = (x, y, axis, kind) => { // axis:車子沿著的方向(會隨機前後顛倒)
@@ -5811,6 +5832,12 @@ function parkLevel(n) {
   const laneY = () => (lanes.length ? lanes[ri(lanes.length)] : rr(8, 12));
   for (let i = 0; i < (P.ducks || 0); i++) L.ducks.push({ y: laneY(), x0: 1.6, x1: W - 1.6, n: 3 + ri(3), sp: rr(0.9, 1.4) * (1 + n / 22), t: rr(0, 20) });
   for (let i = 0; i < (P.carts || 0); i++) L.carts.push({ y: laneY(), x0: 1.2, x1: W - 1.2, sp: rr(1.4, 2.4) * (1 + n / 30), t: rr(0, 20) });
+  // 走道上開來開去的車(要比較寬的走道)
+  const wide = lanes.filter(y => { for (let x = 3; x < W - 3; x += 0.5) if (L.obs.some(o => busObbHit(x, y, 0, 2.3, 1.1, o.x, o.y, o.a, o.hl, o.hw))) return false; return true; });
+  for (let i = 0; i < (P.movers || 0); i++) L.movers.push({ y: wide.length ? wide[ri(wide.length)] : laneY(), x0: 2.6, x1: W - 2.6, sp: rr(1.3, 2.1), t: rr(0, 20), kind: kinds[ri(3)], c: ri(8) });
+  for (let i = 0; i < (P.robots || 0); i++) { const ang = rr(0, Math.PI * 2); L.robots.push({ x: rr(3, W - 3), y: rr(8, H - 6), vx: Math.cos(ang) * 1.5, vy: Math.sin(ang) * 1.5 }); }
+  for (let i = 0; i < (P.bumps || 0); i++) { const y = laneY(); if (Math.abs(y - L.start.y) > 2.5 && !L.bumps.some(b => Math.abs(b.y - y) < 2)) L.bumps.push({ y, x0: 1, x1: W - 1 }); }
+  if (P.thief) L.thief = Math.ceil(PK_PAR[n - 1] * 2 + 6); // 幾秒後阿姨來搶車位
   return L;
 }
 
@@ -5899,7 +5926,7 @@ function pkReplay(L, code) { // 把存好的解法(每個字 = 一步的檔位�
 /* ---------- 停車大師的 3D 畫面(Blender 做的車子、鴨子、香蕉皮、推車、柱子:assets/parking.glb) ---------- */
 const PK_CAR_COLORS = ['#e53935', '#1e6fe0', '#f2f3f5', '#2b2f38', '#2eaa4f', '#fbc02d', '#8e44c8', '#9aa3b1'];
 function pkView3D(LD, L, host) {
-  const { THREE, gltf } = LD, W = L.W, H = L.H, th = PK_THEMES[L.theme], dark = L.theme === 'night' || L.theme === 'garage';
+  const { THREE, gltf } = LD, W = L.W, H = L.H, th = PK_THEMES[L.theme], dark = L.theme === 'night' || L.theme === 'garage', off = L.dark; // off:停電
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(1.75, window.devicePixelRatio || 1));
   renderer.shadowMap.enabled = true;
@@ -5913,8 +5940,8 @@ function pkView3D(LD, L, host) {
   const P = (x, y, h) => new THREE.Vector3(x - W / 2, h || 0, y - H / 2);
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(th.out);
-  scene.add(new THREE.HemisphereLight('#ffffff', dark ? '#30384a' : '#b8c2d4', dark ? 0.75 : 1.2));
-  const sun = new THREE.DirectionalLight(dark ? '#c9d6ff' : '#fff4e0', dark ? 1.1 : 2.1);
+  scene.add(new THREE.HemisphereLight('#ffffff', dark ? '#30384a' : '#b8c2d4', off ? 0.07 : dark ? 0.75 : 1.2));
+  const sun = new THREE.DirectionalLight(dark ? '#c9d6ff' : '#fff4e0', off ? 0.06 : dark ? 1.1 : 2.1);
   sun.position.set(-10, 24, 8);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
@@ -5940,6 +5967,8 @@ function pkView3D(LD, L, host) {
     g.beginPath(); g.moveTo(-s.l / 2, -s.w / 2); g.lineTo(s.l / 2, -s.w / 2); g.lineTo(s.l / 2, s.w / 2); g.lineTo(-s.l / 2, s.w / 2); g.stroke();
   }));
   if (L.curb) { for (let y = 0; y < H; y += 1) { g.fillStyle = (y | 0) % 2 ? '#e53935' : '#ffffff'; g.fillRect(W - 0.32, y, 0.32, 1); } }
+  // 減速丘(黃黑斜紋)
+  L.bumps.forEach(b => { for (let x = b.x0, i = 0; x < b.x1; x += 0.5, i++) { g.fillStyle = i % 2 ? '#202228' : '#ffc61a'; g.fillRect(x, b.y - 0.3, 0.5, 0.6); } });
   // 走道上的箭頭
   g.fillStyle = 'rgba(255,255,255,.35)';
   [[W / 2, H - 9], [W / 2, 9.5]].forEach(([x, y]) => { if (L.obs.some(o => Math.hypot(o.x - x, o.y - y) < 3)) return; g.beginPath(); g.moveTo(x, y - 0.9); g.lineTo(x + 0.55, y - 0.2); g.lineTo(x + 0.2, y - 0.2); g.lineTo(x + 0.2, y + 0.8); g.lineTo(x - 0.2, y + 0.8); g.lineTo(x - 0.2, y - 0.2); g.lineTo(x - 0.55, y - 0.2); g.fill(); });
@@ -6022,7 +6051,23 @@ function pkView3D(LD, L, host) {
       model(rnd() < 0.6 ? 'Tree' : 'Bush', x, y, rnd() * 6).scale.setScalar(0.8 + rnd() * 0.5);
     }
   }
-  if (dark) { // 夜市、地下室:一盞盞的燈
+  L.bumps.forEach(b => { const m = new THREE.Mesh(new THREE.BoxGeometry(b.x1 - b.x0, 0.1, 0.6), new THREE.MeshStandardMaterial({ color: '#ffffff', transparent: true, opacity: 0.0, depthWrite: false })); m.position.copy(P((b.x0 + b.x1) / 2, b.y, 0.05)); scene.add(m); });
+  const robotObj = L.robots.map(() => { const o = model('Robot', -50, -50, 0); o.scale.setScalar(1.8); return o; }); // 放大一點才看得清楚
+  const moverObj = L.movers.map(mv => model(mv.kind, -50, -50, 0, { paint: paints[mv.c % paints.length] }));
+  let thiefObj = null;
+  if (L.thief) { // 阿姨的粉紅廂型車(頭上有名牌)
+    thiefObj = model('Van', -50, -50, 0, { paint: new THREE.MeshStandardMaterial({ color: '#ff6fae', roughness: 0.3 }) });
+    const c = document.createElement('canvas'), x = c.getContext('2d');
+    c.width = 256; c.height = 64;
+    x.font = '900 34px "Noto Sans TC", sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.lineWidth = 8; x.strokeStyle = '#1f2433'; x.strokeText('🛒 搶位阿姨', 128, 34); x.fillStyle = '#ff6fae'; x.fillText('🛒 搶位阿姨', 128, 34);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, transparent: true }));
+    sp.scale.set(3.6, 0.9, 1); sp.position.set(0, 3, 0); sp.renderOrder = 9;
+    thiefObj.add(sp);
+    thiefObj.visible = false;
+  }
+  if (dark && !off) { // 夜市、地下室:一盞盞的燈
     const lampMat = new THREE.MeshBasicMaterial({ color: '#fff3c4' }), poleMat = new THREE.MeshStandardMaterial({ color: '#59606d' });
     for (let y = 3; y < H; y += 8) for (const x of [-0.9, W + 0.9]) {
       if (L.theme === 'night') { const p = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 4, 8), poleMat); p.position.copy(P(x, y, 2)); scene.add(p); }
@@ -6086,7 +6131,14 @@ function pkView3D(LD, L, host) {
     shake() { shakeCam.t = 0.3; },
     render(now, S, dt) {
       fit();
-      if (S.car && !me) me = model('Sport', S.car.x, S.car.y, S.car.a, { paint: new THREE.MeshStandardMaterial({ color: S.color, roughness: 0.22, metalness: 0.2 }), tail: tailMat });
+      if (S.car && !me) {
+        me = model('Sport', S.car.x, S.car.y, S.car.a, { paint: new THREE.MeshStandardMaterial({ color: S.color, roughness: 0.22, metalness: 0.2 }), tail: tailMat });
+        if (off) for (const sg of [-1, 1]) { // 停電:只有車燈照得到
+          const sl = new THREE.SpotLight('#fff3cf', 260, 30, 0.5, 0.55, 1.4);
+          sl.position.set(2.1, 0.7, sg * 0.6); sl.target.position.set(10, 0, sg * 1.2);
+          me.add(sl, sl.target);
+        }
+      }
       if (me) {
         me.visible = !!S.car;
         if (S.car) { me.position.copy(P(S.car.x, S.car.y)); me.rotation.y = -S.car.a; me.rotation.z = S.car.bump || 0; }
@@ -6121,6 +6173,9 @@ function pkView3D(LD, L, host) {
         o.rotation.x = Math.sin(now / 110 + k) * 0.18;
       }));
       S.carts.forEach((c, i) => { const o = cartObj[i]; o.position.copy(P(c.x, c.y)); o.rotation.y = c.dir > 0 ? 0 : Math.PI; });
+      S.robots.forEach((r, i) => { const o = robotObj[i]; o.position.copy(P(r.x, r.y)); o.rotation.y = -Math.atan2(r.vy, r.vx); });
+      S.movers.forEach((mv, i) => { const o = moverObj[i]; o.position.copy(P(mv.x, mv.y)); o.rotation.y = mv.dir > 0 ? 0 : Math.PI; });
+      if (thiefObj) { thiefObj.visible = !!S.thief; if (S.thief) { thiefObj.position.copy(P(S.thief.x, S.thief.y)); thiefObj.rotation.y = -S.thief.a; } }
       glowMat.color.set(S.inSpot ? '#4ade80' : '#ffd23f');
       glowMat.opacity = S.inSpot ? 0.35 + S.hold * 0.4 : 0.18 + Math.abs(Math.sin(now / 420)) * 0.22;
       if (shakeCam.t > 0) { shakeCam.t -= dt; camera.position.x = Math.sin(now / 25) * 0.25 * (shakeCam.t / 0.3); } else camera.position.x = 0;
@@ -6139,23 +6194,28 @@ const PK_MSG = {
   cart: ['購物車暴衝!', '是誰沒把推車放回去!', '推車:讓我過'],
   banana: ['滑~~~', '香蕉皮!!', '瑪利歐上身', '轉圈圈~'],
   cone: ['三角錐飛走了~', '全壘打!', '錐錐掰掰'],
+  robot: ['掃地機器人:我只是在打掃', '嗶嗶嗶!機器人哭哭', '機器人翻肚了'],
+  mover: ['阿伯:你沒看到我在倒車嗎!', '叭!阿伯生氣了', '讓一下啦少年仔'],
+  bump: ['咚咚!', '減速丘!慢一點', '屁股好痛!'],
+  inv: ['方向盤裝反了!', '咦?怎麼往右轉', 'KUSO 左右相反車'],
   horn: ['叭~~!', '讓一讓~', '鴨鴨快走', '叭叭!'],
 };
 function pkSession(LD, L, o) {
-  // o: { stage, pad, color, label, spectate, onFinish, onPose, battle }
+  // o: { stage, pad, color, label, spectate, wait, battle, onFinish, onFail, onPose }
   const stage = o.stage, pad = o.pad;
-  stage.insertAdjacentHTML('beforeend', `<div class="pkhud"><span class="pkt">⏱ 0.0</span><span class="pkc">💥 0</span></div>
+  stage.insertAdjacentHTML('beforeend', `<div class="pkhud"><span class="pkt">⏱ 0.0</span><span class="pkc">💥 0</span>${L.thief ? `<span class="pkth">🛒 阿姨 ${L.thief}</span>` : ''}${L.inv ? '<span class="pkinv">↔ 反向</span>' : ''}</div>
     <div class="pkmsg"></div><div class="pkhold"><i></i><span>停穩中…</span></div>`);
-  const tEl = $('.pkt', stage), cEl = $('.pkc', stage), msgEl = $('.pkmsg', stage), holdEl = $('.pkhold', stage);
+  const tEl = $('.pkt', stage), cEl = $('.pkc', stage), thEl = $('.pkth', stage), msgEl = $('.pkmsg', stage), holdEl = $('.pkhold', stage);
   const view = pkView3D(LD, L, stage);
   const S = {
     car: o.spectate ? null : { x: L.start.x, y: L.start.y, a: L.start.a, v: 0, steer: 0, bump: 0 },
-    color: o.color || '#ffd23f', ghosts: new Map(), ducks: [], carts: [], inSpot: false, hold: 0, braking: false,
+    color: o.color || '#ffd23f', ghosts: new Map(), ducks: [], carts: [], movers: [], robots: L.robots.map(r => ({ ...r })), thief: null, inSpot: false, hold: 0, braking: false,
   };
   let steerIn = 0, thr = 0, started = false, t0 = 0, crashes = 0, pen = 0, done = false, cool = 0, spin = null, boost = 0, hornCd = 0, beepT = 0, raf = 0, last = 0, live = !o.spectate && !o.wait;
   L.obs.forEach(x => { delete x.gone; delete x.fly; });
   L.bananas.forEach(b => { delete b.gone; });
-  const dph = L.ducks.map(d => d.t * d.sp), cph = L.carts.map(c => c.t * c.sp);
+  const dph = L.ducks.map(d => d.t * d.sp), cph = L.carts.map(c => c.t * c.sp), mph = L.movers.map(m => m.t * m.sp);
+  let bumpCd = 0, failed = false;
   const pingpong = (ph, x0, x1) => { const span = x1 - x0, u = ((ph % (span * 2)) + span * 2) % (span * 2); return u < span ? [x0 + u, 1] : [x1 - (u - span), -1]; };
   const say = (list, col) => {
     msgEl.textContent = typeof list === 'string' ? list : pick(list);
@@ -6163,37 +6223,38 @@ function pkSession(LD, L, o) {
     msgEl.classList.remove('on'); void msgEl.offsetWidth; msgEl.classList.add('on');
   };
 
-  // ---------- 控制:單指搖桿(手指放下的地方就是中心;上前進、下倒車、左右轉彎,推越遠越快)+ 喇叭 ----------
+  // ---------- 控制:左邊搖桿左右拖轉方向(手指放下的地方就是中心)、右邊按住「前進」「倒車」、中間喇叭 ----------
   if (!o.spectate) {
     pad.innerHTML = `<div class="pkpad">
-      <div class="pkjarea"><div class="pkjbase"><span class="pkjl u">▲ 前進</span><span class="pkjl d">▼ 倒車</span><span class="pkjl l">◀</span><span class="pkjl r">▶</span><i class="pkjknob"></i></div>
-        <small>手指放在這裡拖:上前進、下倒車、左右轉彎</small></div>
-      <button class="pkhorn" aria-label="喇叭">📯<small>叭</small></button></div>`;
-    const area = $('.pkjarea', pad), base = $('.pkjbase', pad), knob = $('.pkjknob', pad), hornB = $('.pkhorn', pad), R = 54;
-    let jid = null, jx = 0, jy = 0;
+      <div class="pkjarea"><div class="pkjbase"><span class="pkjl l">◀</span><span class="pkjl r">▶</span><i class="pkjknob"></i></div><small>左右拖:轉方向</small>
+        <button class="pkhorn" aria-label="喇叭">📯<small>叭</small></button></div>
+      <div class="pkpeds"><button class="pkgo"><b>▲</b>前進</button><button class="pkrev"><b>▼</b>倒車</button></div></div>`;
+    const area = $('.pkjarea', pad), base = $('.pkjbase', pad), knob = $('.pkjknob', pad), hornB = $('.pkhorn', pad), R = 50;
+    let jid = null, jx = 0;
     area.addEventListener('pointerdown', e => {
       e.preventDefault();
       if (jid != null) return;
-      jid = e.pointerId; jx = e.clientX; jy = e.clientY;
+      jid = e.pointerId; jx = e.clientX;
       try { area.setPointerCapture(e.pointerId); } catch (_) { /* 模擬的觸控沒辦法捕捉 */ }
       const r = area.getBoundingClientRect();
-      base.style.left = (jx - r.left) + 'px'; base.style.top = (jy - r.top) + 'px';
+      base.style.left = (jx - r.left) + 'px'; base.style.top = (e.clientY - r.top) + 'px';
       base.classList.add('on');
       knob.style.transform = '';
     });
     area.addEventListener('pointermove', e => {
       if (e.pointerId !== jid) return;
-      let dx = e.clientX - jx, dy = e.clientY - jy;
-      const d = Math.hypot(dx, dy);
-      if (d > R) { dx *= R / d; dy *= R / d; }
-      knob.style.transform = `translate(${dx}px, ${dy}px)`;
-      const sx = dx / R, sy = -dy / R;
-      steerIn = Math.abs(sx) < 0.1 ? 0 : sx;
-      thr = Math.abs(sy) < 0.16 ? 0 : sy;
-      if (thr) press();
+      const dx = Math.max(-R, Math.min(R, e.clientX - jx));
+      knob.style.transform = `translateX(${dx}px)`;
+      steerIn = Math.abs(dx) < R * 0.08 ? 0 : dx / R;
     });
-    const jup = e => { if (e.pointerId !== jid) return; jid = null; steerIn = 0; thr = 0; base.classList.remove('on'); base.style.left = base.style.top = ''; knob.style.transform = ''; };
+    const jup = e => { if (e.pointerId !== jid) return; jid = null; steerIn = 0; base.classList.remove('on'); base.style.left = base.style.top = ''; knob.style.transform = ''; };
     area.addEventListener('pointerup', jup); area.addEventListener('pointercancel', jup);
+    const pedal = (b, val) => {
+      b.addEventListener('pointerdown', e => { e.preventDefault(); try { b.setPointerCapture(e.pointerId); } catch (_) { /* 同上 */ } thr = val; b.classList.add('on'); press(); });
+      const up = () => { if (thr === val) thr = 0; b.classList.remove('on'); };
+      b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
+    };
+    pedal($('.pkgo', pad), 1); pedal($('.pkrev', pad), -1);
     hornB.addEventListener('pointerdown', e => { e.preventDefault(); horn(); });
   }
   const keys = new Set();
@@ -6212,7 +6273,7 @@ function pkSession(LD, L, o) {
     if (F || B || S.kbGas) { thr = F ? 1 : B ? -1 : 0; S.kbGas = F || B; }
   };
   if (!o.spectate) { window.addEventListener('keydown', kd); window.addEventListener('keyup', ku); }
-  function press() { if (live && !started && !o.battle) { started = true; t0 = performance.now(); } }
+  function press() { if (live && !started && !o.battle) { started = true; t0 = performance.now(); if (L.inv) say(PK_MSG.inv, '#c4b5fd'); } }
   function horn() {
     if (!live || hornCd > 0) return;
     hornCd = 0.8; boost = 2;
@@ -6222,7 +6283,7 @@ function pkSession(LD, L, o) {
 
   // ---------- 每一幀 ----------
   function crash(hit) {
-    const kind = hit.k === 'car' ? 'crash' : hit.k === 'duck' ? 'duck' : hit.k === 'cart' ? 'cart' : hit.k === 'pillar' ? 'pillar' : hit.k === 'wall' ? 'wall' : 'crash';
+    const kind = PK_MSG[hit.k] && hit.k !== 'car' ? hit.k : 'crash';
     if (cool <= 0) {
       crashes++; pen += kind === 'duck' ? 3 : 2;
       say(PK_MSG[kind], kind === 'duck' ? '#ffe066' : '#ff8a8a');
@@ -6240,17 +6301,38 @@ function pkSession(LD, L, o) {
     // 鴨子、推車移動
     S.ducks = L.ducks.map((d, i) => { dph[i] += dt * d.sp * (boost > 0 ? 3 : 1); return Array.from({ length: d.n }, (_, k) => { const [x, dir] = pingpong(dph[i] - k * 0.62, d.x0, d.x1); return { x, y: d.y, dir }; }); });
     S.carts = L.carts.map((cc, i) => { cph[i] += dt * cc.sp; const [x, dir] = pingpong(cph[i], cc.x0, cc.x1); return { x, y: cc.y, dir }; });
+    S.movers = L.movers.map((mv, i) => { mph[i] += dt * mv.sp; const [x, dir] = pingpong(mph[i], mv.x0, mv.x1); return { x, y: mv.y, dir }; });
+    S.robots.forEach(rb => { // 掃地機器人:直直走,碰到東西就轉彎
+      const nx = rb.x + rb.vx * dt, ny = rb.y + rb.vy * dt;
+      const blocked = (x, y) => x < 1 || y < 1 || x > L.W - 1 || y > L.H - 1 || L.obs.some(ob => !ob.gone && Math.abs(ob.x - x) < 4 && Math.abs(ob.y - y) < 4 && busObbHit(x, y, 0, 0.8, 0.8, ob.x, ob.y, ob.a, ob.hl, ob.hw));
+      if (!blocked(nx, ny)) { rb.x = nx; rb.y = ny; }
+      else if (!blocked(rb.x - rb.vx * dt, ny)) rb.vx = -rb.vx;
+      else if (!blocked(nx, rb.y - rb.vy * dt)) rb.vy = -rb.vy;
+      else { rb.vx = -rb.vx; rb.vy = -rb.vy; }
+    });
+    // 阿姨搶車位:倒數完就開進格子
+    if (L.thief && started && !done) {
+      const left = L.thief - (performance.now() - t0) / 1000;
+      if (thEl) { thEl.textContent = '🛒 阿姨 ' + Math.max(0, Math.ceil(left)); thEl.classList.toggle('warn', left < 6); }
+      if (left <= 0 && !S.thief) {
+        S.thief = { u: 0 };
+        live = false; failed = true; thr = 0;
+        say('阿姨來了!!', '#ff6fae'); beep(415, 0.3, 'square', 0.09); beep(330, 0.4, 'square', 0.08, 0.3);
+      }
+    }
+    if (S.thief) {
+      const T = S.thief, Sp = L.spot, d = (1 - Math.min(1, T.u)) * (Sp.l / 2 + 9);
+      T.u += dt / 2.2;
+      T.x = Sp.x - Math.cos(Sp.a) * d; T.y = Sp.y - Math.sin(Sp.a) * d; T.a = Sp.a;
+      if (T.u >= 1.4 && !T.told) { T.told = true; if (o.onFail) o.onFail(); }
+    }
     if (!c) return;
     if (!live) { c.v *= Math.max(0, 1 - dt * 6); return; }
-    c.steer += (steerIn - c.steer) * Math.min(1, dt * 9);
+    c.steer += ((L.inv ? -steerIn : steerIn) - c.steer) * Math.min(1, dt * 9);
     S.braking = false;
     if (spin) { c.a += spin.w * dt; c.v *= Math.max(0, 1 - dt * 1.8); spin.t -= dt; if (spin.t <= 0) spin = null; }
-    else if (thr) { // 搖桿推越遠,目標速度越快;方向相反就先煞車
-      const tv = thr > 0 ? thr * PK.VF : thr * PK.VR;
-      if (c.v * tv < 0) { c.v += Math.sign(tv) * Math.min(Math.abs(c.v), 12 * dt); S.braking = true; }
-      else if (Math.abs(c.v) < Math.abs(tv)) c.v = Math.sign(tv) * Math.min(Math.abs(tv), Math.abs(c.v) + (tv > 0 ? 4.2 : 3.4) * dt);
-      else { c.v = Math.sign(tv) * Math.max(Math.abs(tv), Math.abs(c.v) - 6 * dt); S.braking = true; }
-    }
+    else if (thr > 0) { if (c.v < 0) { c.v = Math.min(0, c.v + 12 * dt); S.braking = true; } else c.v = Math.min(PK.VF, c.v + 4.2 * dt); }
+    else if (thr < 0) { if (c.v > 0) { c.v = Math.max(0, c.v - 12 * dt); S.braking = true; } else c.v = Math.max(-PK.VR, c.v - 3.4 * dt); }
     else { const s = Math.sign(c.v); c.v = s * Math.max(0, Math.abs(c.v) - 7 * dt); S.braking = Math.abs(c.v) > 0.05; }
     if (c.v < -0.1) { S.braking = true; beepT -= dt; if (beepT <= 0) { beepT = 0.5; beep(1250, 0.05, 'sine', 0.035); } } // 倒車嗶嗶
     if (Math.abs(c.v) > 0.001) {
@@ -6258,7 +6340,9 @@ function pkSession(LD, L, o) {
       const dyn = [];
       S.ducks.forEach(line => line.forEach(d => dyn.push({ k: 'duck', x: d.x, y: d.y, a: 0, hl: 0.42, hw: 0.32 })));
       S.carts.forEach(cc => dyn.push({ k: 'cart', x: cc.x, y: cc.y, a: 0, hl: 0.55, hw: 0.35 }));
-      const hit = pkHit(L, nx, ny, na) || dyn.find(d => Math.hypot(d.x - nx, d.y - ny) < 3.2 && busObbHit(nx, ny, na, PK.L / 2, PK.CW / 2, d.x, d.y, 0, d.hl, d.hw));
+      S.movers.forEach((mv, i) => dyn.push({ k: 'mover', x: mv.x, y: mv.y, a: 0, hl: PK_LEN[L.movers[i].kind] / 2, hw: PK.CW / 2 }));
+      S.robots.forEach(rb => dyn.push({ k: 'robot', x: rb.x, y: rb.y, a: 0, hl: 0.75, hw: 0.75 }));
+      const hit = pkHit(L, nx, ny, na) || dyn.find(d => Math.hypot(d.x - nx, d.y - ny) < d.hl + 2.6 && busObbHit(nx, ny, na, PK.L / 2, PK.CW / 2, d.x, d.y, 0, d.hl, d.hw));
       if (hit && hit.k === 'cone') { // 三角錐被撞飛(扣 1 秒,車子繼續走)
         hit.gone = true; hit.fly = { t0: performance.now(), vx: Math.cos(c.a) * c.v * 1.4 + (Math.random() - 0.5) * 2, vy: Math.sin(c.a) * c.v * 1.4 + (Math.random() - 0.5) * 2 };
         pen += 1; say(PK_MSG.cone, '#ffb36b'); beep(520, 0.08, 'triangle', 0.1); beep(780, 0.1, 'triangle', 0.08, 0.08);
@@ -6267,6 +6351,13 @@ function pkSession(LD, L, o) {
       else { c.x = nx; c.y = ny; c.a = na; }
     }
     c.bump *= Math.max(0, 1 - dt * 8);
+    // 減速丘:開太快會彈起來、變慢
+    bumpCd -= dt;
+    L.bumps.forEach(b => {
+      if (Math.abs(b.y - c.y) > 3 || !busObbHit(c.x, c.y, c.a, PK.L / 2, PK.CW / 2, (b.x0 + b.x1) / 2, b.y, 0, (b.x1 - b.x0) / 2, 0.3)) return;
+      if (Math.abs(c.v) > 2.3) { c.v = Math.sign(c.v) * 1.4; c.bump = 0.14; if (bumpCd <= 0) { bumpCd = 1; say(PK_MSG.bump, '#ffc61a'); beep(140, 0.08, 'square', 0.1); beep(140, 0.08, 'square', 0.1, 0.12); buzz(30); } }
+      else if (bumpCd <= 0) { bumpCd = 0.5; c.bump = 0.04; }
+    });
     // 香蕉皮
     L.bananas.forEach(b => {
       if (b.gone || Math.hypot(b.x - c.x, b.y - c.y) > 2.6) return;
@@ -6315,7 +6406,7 @@ function pkSession(LD, L, o) {
   raf = requestAnimationFrame(t => { last = t; frame(t); });
   const api = {
     S,
-    begin() { live = !o.spectate; started = true; t0 = performance.now(); }, // 連線對戰:倒數完一起開始計時
+    begin() { live = !o.spectate; started = true; t0 = performance.now(); if (L.inv) say(PK_MSG.inv, '#c4b5fd'); }, // 連線對戰:倒數完一起開始計時
     stop() { live = false; thr = 0; },
     setGhost(id, x, y, a, color, label) { const gh = S.ghosts.get(id); if (gh) Object.assign(gh, { x, y, a }); else S.ghosts.set(id, { x, y, a, color, label }); },
     dropGhost(id) { S.ghosts.delete(id); },
@@ -6335,7 +6426,7 @@ function pkSession(LD, L, o) {
   return api;
 }
 
-/* ---------- 單人闖關:30 關,有星星、可以選關、密碼 0522 跳關 ---------- */
+/* ---------- 單人闖關:50 關,有星星、可以選關、密碼 0522 跳關 ---------- */
 function pkStars(total, par) { return total <= par ? 3 : total <= par * 1.6 ? 2 : 1; }
 function pkComment(st, cr) {
   if (st === 3 && !cr) return pick(['神之停車!駕訓班教練落淚', '完美!可以去考職業停車手', '這技術…你是代客泊車的吧']);
@@ -6349,7 +6440,8 @@ function parkGame() {
   app.innerHTML = '';
   const stars = () => { const a = store.get('parkStars', []); return Array.isArray(a) ? a : []; };
   const unlocked = () => !!store.get('parkKey', false);
-  const maxLv = () => (unlocked() ? 30 : Math.min(30, Math.max(1, store.get('parkMax', 1) | 0)));
+  const NL = PK_PLAN.length;
+  const maxLv = () => (unlocked() ? NL : Math.min(NL, Math.max(1, store.get('parkMax', 1) | 0)));
   let level = Math.min(maxLv(), Math.max(1, store.get('parkLevel', 1) | 0)), sess = null, LD = null;
   const scr = el('div', 'screen pkg');
   scr.innerHTML = `
@@ -6379,18 +6471,24 @@ function parkGame() {
     if (!quiet) setTimeout(() => tipEl.classList.add('off'), 3800);
     sess = pkSession(LD, L, {
       stage, pad: padW, color: '#ffd23f',
+      onFail: () => {
+        SFX.bad(); buzz([100, 60, 160]);
+        ov.innerHTML = `<div class="bgcard"><div class="bgbig">🛒</div><h2>車位被搶走了!</h2><p class="pkcom">「${pick(['阿姨:少年仔,下次快一點', '阿姨:這格我先看到的', '阿姨已經去逛週年慶了'])}」</p>
+          <button class="btn big orange pkagain"><span class="bi">↻</span><span class="bt">再挑戰一次</span></button><div class="pkrow"><button class="btn white sm pkmenu">☰ 選關</button></div></div>`;
+        ov.classList.add('on');
+      },
       onFinish: r => {
         const st = pkStars(r.total, L.par), arr = stars();
         arr[n - 1] = Math.max(arr[n - 1] || 0, st);
         store.set('parkStars', arr);
-        store.set('parkMax', Math.max(store.get('parkMax', 1) | 0, Math.min(30, n + 1)));
+        store.set('parkMax', Math.max(store.get('parkMax', 1) | 0, Math.min(NL, n + 1)));
         if (st === 3) { SFX.win(); confetti(); } else SFX.good();
         buzz([60, 60, 120]);
         setTimeout(() => {
           ov.innerHTML = `<div class="bgcard"><div class="pkstars">${[1, 2, 3].map(k => `<span class="${k <= st ? 'on' : ''}" style="animation-delay:${k * 0.18}s">★</span>`).join('')}</div>
             <h2>第 ${n} 關 停好了!</h2><p class="pkres">⏱ <b>${r.total.toFixed(1)}</b> 秒${r.pen ? `<small>(開車 ${(r.ms / 1000).toFixed(1)} + 罰 ${r.pen})</small>` : ''} · 💥 ${r.crashes} 次</p>
             <p class="pkcom">「${pkComment(st, r.crashes)}」</p>
-            ${n < 30 ? '<button class="btn big green pknext"><span class="bi">▶</span><span class="bt">下一關</span></button>' : '<p class="pkcom">🏆 30 關全破!你是停車之神!</p>'}
+            ${n < NL ? '<button class="btn big green pknext"><span class="bi">▶</span><span class="bt">下一關</span></button>' : `<p class="pkcom">🏆 ${NL} 關全破!你是停車之神!</p>`}
             <div class="pkrow"><button class="btn white sm pkagain">↻ 再一次</button><button class="btn white sm pkmenu">☰ 選關</button></div></div>`;
           ov.classList.add('on');
         }, 700);
@@ -6402,8 +6500,8 @@ function parkGame() {
     const s = stars(), mx = maxLv(), total = s.reduce((a, b) => a + (b || 0), 0);
     ov.innerHTML = `<div class="bgcard pkmenuc"><h2>🅿️ 停車大師</h2>
       <p>左邊方向盤按住左右滑,右邊踩「前進」「倒車」,把車停進<b>發光的格子</b>!撞車、撞鴨子會扣時間 🦆</p>
-      <div class="pkgrid">${Array.from({ length: 30 }, (_, i) => { const n = i + 1, lock = n > mx; return `<button class="pkl${lock ? ' lock' : ''}${n === level ? ' cur' : ''}" data-n="${n}" ${lock ? 'disabled' : ''}><b>${lock ? '🔒' : n}</b><small>${lock ? '' : '★'.repeat(s[i] || 0) + '☆'.repeat(3 - (s[i] || 0))}</small></button>`; }).join('')}</div>
-      <p class="pktot">⭐ ${total} / 90</p>
+      <div class="pkgrid">${Array.from({ length: NL }, (_, i) => { const n = i + 1, lock = n > mx; return `<button class="pkl${lock ? ' lock' : ''}${n === level ? ' cur' : ''}" data-n="${n}" ${lock ? 'disabled' : ''}><b>${lock ? '🔒' : n}</b><small>${lock ? '' : '★'.repeat(s[i] || 0) + '☆'.repeat(3 - (s[i] || 0))}</small></button>`; }).join('')}</div>
+      <p class="pktot">⭐ ${total} / ${NL * 3}</p>
       ${unlocked() ? '' : '<button class="btn white sm pkkey">🔑 輸入密碼</button>'}</div>`;
     ov.classList.add('on');
   }
@@ -6445,7 +6543,7 @@ function parkGame() {
 const PKB = { R: 3, T: 90, PTS: [5, 3, 2, 1] };
 function hParking(H) {
   let round = 0, phase = 'idle', tok = 0, t0 = 0;
-  const tot = {}, ps = {}, lvs = [3 + rand(0, 7), 11 + rand(0, 9), 21 + rand(0, 9)];
+  const tot = {}, ps = {}, NL = PK_PLAN.length, lvs = [rand(3, 15), rand(16, 32), rand(33, NL)];
   H.players.forEach(s => { tot[s] = 0; });
   function startRound() {
     round++;
@@ -6518,6 +6616,7 @@ function vParking(V) {
         $$('.pkhud, .pkmsg, .pkhold', stage).forEach(x => x.remove());
         order = H_order(m);
         sess = pkSession(LD, L, { stage, pad: V.pad, color: pinfo(me).color, battle: true, wait: true, onPose: (x, y, a) => V.send({ e: 'pos', x: +x.toFixed(2), y: +y.toFixed(2), a: +a.toFixed(3) }),
+          onFail: () => { cover.innerHTML = '<div class="big">🛒</div><div>車位被阿姨搶走了!</div><div class="small">這局沒分…看別人停吧</div>'; cover.classList.add('on'); },
           onFinish: r => { V.send({ e: 'done', ms: r.ms, pen: r.pen, cr: r.crashes }); cover.innerHTML = `<div class="big">🅿️</div><div>停好了!${r.total.toFixed(1)} 秒</div><div class="small">等其他人停好…</div>`; setTimeout(() => cover.classList.add('on'), 600); } });
         cover.innerHTML = `<div class="small">第 ${m.rd} / ${m.R} 局 · 第 ${m.lv} 關</div><div class="big">🅿️</div><div>${esc(L.name)}</div><div class="small">${esc(L.tip)}</div>`;
         cover.classList.add('on');
@@ -6920,7 +7019,7 @@ BOTS.flood = (H, s, m, k) => {
 BOTS.parking = (H, s, m, k) => {
   if (m.t !== 'g' || m.e !== 'round' || !m.order.includes(s)) return;
   const fr = (a, b) => a + Math.random() * (b - a);
-  const path = pkReplay(parkLevel(m.lv), PK_PATH[m.lv - 1]), st = H.bs[s] = { rd: m.rd };
+  const Lv = parkLevel(m.lv), path = pkReplay(Lv, PK_PATH[m.lv - 1]), st = H.bs[s] = { rd: m.rd };
   const vf = 1.8 + k.sk * 1.4, vr = 1.1 + k.sk * 0.8, pause = 1.4 - k.sk * 0.6; // 比人慢一點,手機上才有得拚
   const cr = Math.random() < (1 - k.sk) * 0.9 ? 1 + Math.floor(Math.random() * (1 + (1 - k.sk) * 2.5)) : 0;
   let t = fr(0.6, 1.6) * k.spd;
@@ -6938,7 +7037,7 @@ BOTS.parking = (H, s, m, k) => {
     while (i < tl.length - 1 && tl[i + 1][0] < u) i++;
     const A = tl[i], B = tl[Math.min(i + 1, tl.length - 1)], f = B[0] > A[0] ? Math.max(0, Math.min(1, (u - A[0]) / (B[0] - A[0]))) : 1;
     botSend(H, s, { e: 'pos', x: A[1] + (B[1] - A[1]) * f, y: A[2] + (B[2] - A[2]) * f, a: A[3] + (B[3] - A[3]) * f });
-    if (u >= t) botSend(H, s, { e: 'done', ms: Math.round(t * stretch * 1000), pen: cr * 2, cr });
+    if (u >= t) { if (!Lv.thief || t * stretch < Lv.thief) botSend(H, s, { e: 'done', ms: Math.round(t * stretch * 1000), pen: cr * 2, cr }); }
     else H.s.after(200, tick);
   };
   H.s.after(200, tick);
