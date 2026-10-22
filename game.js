@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.10';
+const APP_VERSION = '2026.11.11';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -532,9 +532,8 @@ function home() {
         <input id="name" maxlength="8" placeholder="輸入你的暱稱" value="${esc(myName())}"></label>
       <div class="hrow2">
         <button class="btn big green" id="solo"><span class="bi">▶</span><span class="bt">單人遊戲<small>對戰電腦</small></span></button>
-        <button class="btn big blue" id="busg"><span class="bi">🚌</span><span class="bt">闖關模式<small>公車大塞車</small></span></button>
+        <button class="btn big blue" id="busg"><span class="bi">🚌</span><span class="bt">闖關模式<small>公車 · 停車</small></span></button>
       </div>
-      <button class="btn big red" id="parkg"><span class="bi">🅿️</span><span class="bt">停車大師<small>3D 停車闖關 50 關</small></span></button>
       <button class="btn big orange" id="create"><span class="bi">🏠</span><span class="bt">建立房間<small>邀請朋友一起玩</small></span></button>
       <div class="joinbox">
         <input class="field" id="code" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="輸入房號" value="${esc(roomParam)}">
@@ -549,8 +548,20 @@ function home() {
   nameIn.addEventListener('change', saveName);
   $('#create', h).addEventListener('click', () => { saveName(); createRoom(); });
   $('#solo', h).addEventListener('click', () => { saveName(); createSolo(); });
-  $('#busg', h).addEventListener('click', () => { saveName(); busGame(); });
-  $('#parkg', h).addEventListener('click', () => { saveName(); parkGame(); });
+  $('#busg', h).addEventListener('click', () => { // 闖關模式:選要玩哪一個
+    saveName();
+    const m = el('div', 'qmenu');
+    m.innerHTML = `<div class="qcard"><button class="iconbtn qx" aria-label="關閉">✕</button><h2>🏁 闖關模式</h2>
+      <button class="qopt" data-q="bus"><span class="qe">🚌</span><span><b>公車大塞車</b><small>點公車開出停車場、載乘客</small></span></button>
+      <button class="qopt" data-q="park"><span class="qe">🅿️</span><span><b>停車大師</b><small>3D 開車停進格子 · ${PK_PLAN.length} 關</small></span></button></div>`;
+    m.addEventListener('click', e => {
+      const o = e.target.closest('.qopt');
+      if (o) { m.remove(); if (o.dataset.q === 'bus') busGame(); else parkGame(); }
+      else if (e.target === m || e.target.closest('.qx')) m.remove();
+    });
+    app.appendChild(m);
+    SFX.tap();
+  });
   $('#join', h).addEventListener('click', () => { saveName(); joinRoom(codeIn.value); });
   codeIn.addEventListener('keydown', e => { if (e.key === 'Enter') { saveName(); joinRoom(codeIn.value); } });
   $('#stats', h).addEventListener('click', () => statsView());
@@ -1519,6 +1530,204 @@ function hChess(H) {
   };
 }
 
+/* ---------- 暗棋的 3D 畫面:Blender 做的木頭棋盤和棋子(assets/chess.glb),翻棋、走棋、吃子都有動畫 ----------
+   three.js 座標:棋盤中心在原點,第 c 欄在 x = c - 1.5、第 r 列在 z = r - 3.5(上面是第 0 列),Y 朝上 */
+function chess3D(LD, host) {
+  const { THREE, gltf } = LD;
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  const cvs = renderer.domElement;
+  cvs.className = 'c3d';
+  host.appendChild(cvs);
+  const scene = new THREE.Scene();
+  scene.add(new THREE.HemisphereLight('#fff6e8', '#5a3a22', 1.05));
+  const sun = new THREE.DirectionalLight('#fff1d6', 2.2);
+  sun.position.set(-3, 9, 4);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.bias = -0.0004;
+  Object.assign(sun.shadow.camera, { left: -6, right: 6, top: 7, bottom: -7, near: 1, far: 25 });
+  scene.add(sun);
+  // 木頭桌面
+  const tcv = document.createElement('canvas');
+  tcv.width = 512; tcv.height = 1024;
+  { const g = tcv.getContext('2d'), rnd = busRng(77); g.fillStyle = '#6b4226'; g.fillRect(0, 0, 512, 1024);
+    for (let i = 0; i < 90; i++) { const x = rnd() * 512; g.strokeStyle = `rgba(${rnd() < 0.5 ? '40,20,8' : '150,95,55'},${0.08 + rnd() * 0.12})`; g.lineWidth = 1 + rnd() * 4; g.beginPath(); g.moveTo(x, 0); for (let y = 0; y <= 1024; y += 64) g.lineTo(x + Math.sin(y / 90 + i) * 6, y); g.stroke(); } }
+  const ttex = new THREE.CanvasTexture(tcv);
+  ttex.colorSpace = THREE.SRGBColorSpace;
+  const table = new THREE.Mesh(new THREE.PlaneGeometry(16, 24), new THREE.MeshStandardMaterial({ map: ttex, roughness: 0.75 }));
+  table.rotation.x = -Math.PI / 2;
+  table.position.y = -0.33;
+  table.receiveShadow = true;
+  scene.add(table);
+  // 棋盤
+  gltf.scene.updateMatrixWorld(true);
+  const board = new THREE.Group();
+  glbMergeByMat(THREE, gltf.scene.getObjectByName('Board')).forEach(({ mat, geo }) => { const m = new THREE.Mesh(geo, mat); m.receiveShadow = true; m.castShadow = mat.name === 'BoardFrame'; board.add(m); });
+  scene.add(board);
+  // 棋子:木頭本體(Blender)+ 上下兩面貼字/花紋
+  const bodyParts = glbMergeByMat(THREE, gltf.scene.getObjectByName('Piece'));
+  const TOP = 0.028, PH = 0.22, BY = TOP + PH / 2;
+  const tex = new Map();
+  function faceTex(c, k) { // 正面:象牙色、雙圈、紅/黑字
+    const key = c ? c + k : 'back';
+    if (tex.has(key)) return tex.get(key);
+    const cv = document.createElement('canvas'), g = cv.getContext('2d'), S = 256;
+    cv.width = cv.height = S;
+    const bg = g.createRadialGradient(S * 0.42, S * 0.38, 10, S / 2, S / 2, S / 2);
+    bg.addColorStop(0, c ? '#fdf4e0' : '#f0dbb0'); bg.addColorStop(1, c ? '#ecd5a5' : '#d9b67c');
+    g.fillStyle = bg; g.fillRect(0, 0, S, S);
+    const ink = !c ? '#9c7240' : c === 'r' ? '#b3191f' : '#1f1d24';
+    g.strokeStyle = ink; g.lineWidth = 7; g.beginPath(); g.arc(S / 2, S / 2, S * 0.43, 0, Math.PI * 2); g.stroke();
+    g.lineWidth = 2.5; g.beginPath(); g.arc(S / 2, S / 2, S * 0.38, 0, Math.PI * 2); g.stroke();
+    if (c) {
+      g.font = `900 ${S * 0.5}px "Noto Serif TC", "Songti TC", "PMingLiU", "MingLiU", serif`;
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillStyle = 'rgba(255,255,255,.75)'; g.fillText(CHESS_NAME[c][k], S / 2 + 2, S / 2 + 6);
+      g.fillStyle = ink; g.fillText(CHESS_NAME[c][k], S / 2, S / 2 + 4);
+    } else { // 背面:刻花
+      g.lineWidth = 3;
+      for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; g.beginPath(); g.ellipse(S / 2 + Math.cos(a) * 30, S / 2 + Math.sin(a) * 30, 26, 11, a, 0, Math.PI * 2); g.stroke(); }
+      g.beginPath(); g.arc(S / 2, S / 2, 12, 0, Math.PI * 2); g.fillStyle = ink; g.fill();
+    }
+    const t = new THREE.CanvasTexture(cv);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = 4;
+    tex.set(key, t);
+    return t;
+  }
+  const discGeo = new THREE.CircleGeometry(0.355, 48);
+  const backMat = new THREE.MeshStandardMaterial({ map: faceTex(null), roughness: 0.45 });
+  const blankMat = new THREE.MeshStandardMaterial({ map: faceTex(null), roughness: 0.45 });
+  const faceMats = new Map();
+  const faceMat = (c, k) => { const key = c + k; if (!faceMats.has(key)) faceMats.set(key, new THREE.MeshStandardMaterial({ map: faceTex(c, k), roughness: 0.4 })); return faceMats.get(key); };
+  function makePiece() {
+    const g = new THREE.Group(), inner = new THREE.Group();
+    bodyParts.forEach(({ mat, geo }) => { const m = new THREE.Mesh(geo, mat); m.castShadow = true; m.receiveShadow = true; inner.add(m); });
+    inner.position.y = -PH / 2; // 讓棋子繞著自己的中心翻面
+    const top = new THREE.Mesh(discGeo, blankMat), bot = new THREE.Mesh(discGeo, backMat);
+    top.rotation.x = -Math.PI / 2; top.position.y = PH / 2 + 0.002;
+    bot.rotation.x = Math.PI / 2; bot.position.y = -PH / 2 - 0.002;
+    g.add(inner, top, bot);
+    g.userData = { top, key: null, anim: null, lift: 0 };
+    scene.add(g);
+    return g;
+  }
+  const pos = i => new THREE.Vector3((i % CHESS_COLS) - 1.5, BY, Math.floor(i / CHESS_COLS) - 3.5);
+  // 提示:選到的棋(金圈)、可以走的空格(綠點)、可以吃的棋(紅圈)、上一步(橘色格子)
+  const ringGeo = new THREE.RingGeometry(0.4, 0.47, 48).rotateX(-Math.PI / 2);
+  const mk = (geo, color, op) => { const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: op, depthWrite: false })); m.renderOrder = 2; m.visible = false; scene.add(m); return m; };
+  const selRing = mk(ringGeo, '#ffd23f', 0.95);
+  const dots = [], caps = [], lastSq = [mk(new THREE.PlaneGeometry(0.96, 0.96).rotateX(-Math.PI / 2), '#ff9f43', 0.35), mk(new THREE.PlaneGeometry(0.96, 0.96).rotateX(-Math.PI / 2), '#ff9f43', 0.2)];
+  const dotGeo = new THREE.CircleGeometry(0.13, 24).rotateX(-Math.PI / 2);
+  const pool = (arr, geo, color, op) => i => arr[i] || (arr[i] = mk(geo, color, op));
+
+  const objs = new Array(32).fill(null), flying = [];
+  let lastKey = '', selI = null, w = 0, h = 0, raf = 0;
+  const camera = new THREE.PerspectiveCamera(26, 1, 0.5, 100);
+  const fitCam = () => { // 斜斜看下去,整個棋盤剛好塞進畫面
+    const TILT = 0.34, v = new THREE.Vector3(), corners = [];
+    for (const x of [-2.55, 2.55]) for (const z of [-4.55, 4.55]) for (const y of [0, 0.3]) corners.push(new THREE.Vector3(x, y, z));
+    let tz = 0, d = 10;
+    for (let pass = 0; pass < 6; pass++) {
+      let lo = 2, hi = 80;
+      for (let k = 0; k < 28; k++) {
+        d = (lo + hi) / 2;
+        camera.position.set(0, Math.cos(TILT) * d, tz + Math.sin(TILT) * d); camera.lookAt(0, 0, tz); camera.updateMatrixWorld();
+        if (corners.every(c => { v.copy(c).project(camera); return Math.abs(v.x) <= 0.97 && Math.abs(v.y) <= 0.97; })) hi = d; else lo = d;
+      }
+      d = hi;
+      camera.position.set(0, Math.cos(TILT) * d, tz + Math.sin(TILT) * d); camera.lookAt(0, 0, tz); camera.updateMatrixWorld();
+      let y0 = 9, y1 = -9;
+      corners.forEach(c => { v.copy(c).project(camera); y0 = Math.min(y0, v.y); y1 = Math.max(y1, v.y); });
+      tz -= (y0 + y1) / 2 * 4.5;
+    }
+  };
+  const fit = () => {
+    const r = host.getBoundingClientRect();
+    if (!r.width || (r.width === w && r.height === h)) return;
+    w = r.width; h = r.height;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h; camera.updateProjectionMatrix();
+    fitCam();
+  };
+  const ease = u => 1 - Math.pow(1 - Math.min(1, u), 3);
+  function frame(now) {
+    if (!cvs.isConnected) { renderer.dispose(); renderer.forceContextLoss(); return; }
+    fit();
+    objs.forEach((o, i) => {
+      if (!o) return;
+      const ud = o.userData, a = ud.anim, p = pos(i);
+      ud.lift += ((selI === i ? 0.18 : 0) - ud.lift) * 0.25;
+      if (a) {
+        const u = (now - a.t0) / a.dur;
+        if (a.type === 'flip') { o.rotation.x = Math.PI * (1 - ease(u)); o.position.set(p.x, BY + Math.sin(Math.min(1, u) * Math.PI) * 0.7, p.z); }
+        else { const f = ease(u), A = a.from; o.position.set(A.x + (p.x - A.x) * f, BY + Math.sin(Math.min(1, u) * Math.PI) * 0.45, A.z + (p.z - A.z) * f); }
+        if (u >= 1) ud.anim = null;
+      } else { o.position.set(p.x, BY + ud.lift, p.z); o.rotation.x = ud.hid ? Math.PI : 0; }
+    });
+    for (let k = flying.length - 1; k >= 0; k--) { // 被吃掉的棋子飛出棋盤
+      const f = flying[k], u = (now - f.t0) / 900;
+      if (u > 1) { scene.remove(f.o); flying.splice(k, 1); continue; }
+      f.o.position.set(f.x + f.vx * u, BY + 2.2 * u - 2.6 * u * u + 0.3, f.z + f.vz * u);
+      f.o.rotation.x += 0.25; f.o.rotation.z += 0.18;
+    }
+    selRing.position.y = BY + PH / 2 + 0.05 + (selI != null && objs[selI] ? objs[selI].userData.lift : 0);
+    renderer.render(scene, camera);
+    raf = requestAnimationFrame(frame);
+  }
+  raf = requestAnimationFrame(frame);
+  const ray = new THREE.Raycaster(), plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -(BY + PH / 2)), hit = new THREE.Vector3();
+  return {
+    sync(st, sel, targets) {
+      const now = performance.now(), L = st.last, key = L ? JSON.stringify(L) : '';
+      if (key !== lastKey && L) { // 新的一步:做動畫
+        if (L.type === 'flip' && objs[L.to] && st.cells[L.to] && !st.cells[L.to].h) {
+          const o = objs[L.to], x = st.cells[L.to];
+          o.userData.top.material = faceMat(x.c, x.k); o.userData.key = x.c + x.k; o.userData.hid = false;
+          o.userData.anim = { type: 'flip', t0: now, dur: 520 };
+        } else if ((L.type === 'move' || L.type === 'cap') && objs[L.from]) {
+          const o = objs[L.from];
+          if (objs[L.to]) { const v = objs[L.to], p = pos(L.to); flying.push({ o: v, t0: now, x: p.x, z: p.z, vx: (p.x >= 0 ? 1 : -1) * 3.2, vz: (Math.random() - 0.5) * 2 }); }
+          o.userData.anim = { type: 'move', t0: now, dur: 420, from: pos(L.from) };
+          objs[L.to] = o; objs[L.from] = null;
+        }
+      }
+      lastKey = key;
+      // 對齊伺服器的棋盤(第一次進來、或漏掉訊息時)
+      st.cells.forEach((x, i) => {
+        if (!x) { if (objs[i]) { scene.remove(objs[i]); objs[i] = null; } return; }
+        if (!objs[i]) { objs[i] = makePiece(); objs[i].position.copy(pos(i)); }
+        const ud = objs[i].userData;
+        if (x.h) { ud.hid = true; if (!ud.anim) objs[i].rotation.x = Math.PI; }
+        else { ud.hid = false; if (ud.key !== x.c + x.k) { ud.top.material = faceMat(x.c, x.k); ud.key = x.c + x.k; } }
+      });
+      // 提示
+      selI = sel;
+      selRing.visible = sel != null;
+      if (sel != null) { const p = pos(sel); selRing.position.x = p.x; selRing.position.z = p.z; }
+      const dotAt = pool(dots, dotGeo, '#2fb36b', 0.9), capAt = pool(caps, ringGeo, '#ee4b4b', 0.95);
+      let nd = 0, nc = 0;
+      (targets || []).forEach(i => { const p = pos(i); if (st.cells[i]) { const m = capAt(nc++); m.position.set(p.x, BY + PH / 2 + 0.03, p.z); m.visible = true; } else { const m = dotAt(nd++); m.position.set(p.x, TOP + 0.01, p.z); m.visible = true; } });
+      for (let i = nd; i < dots.length; i++) dots[i].visible = false;
+      for (let i = nc; i < caps.length; i++) caps[i].visible = false;
+      [L && L.to, L && L.type !== 'flip' ? L.from : null].forEach((i, k) => { const m = lastSq[k]; m.visible = i != null && i >= 0; if (m.visible) { const p = pos(i); m.position.set(p.x, TOP + 0.004, p.z); } });
+    },
+    pick(cx, cy) { // 點的位置是哪一格(-1 = 棋盤外)
+      const r = cvs.getBoundingClientRect();
+      camera.updateMatrixWorld();
+      ray.setFromCamera(new THREE.Vector2((cx - r.left) / r.width * 2 - 1, -((cy - r.top) / r.height) * 2 + 1), camera);
+      if (!ray.ray.intersectPlane(plane, hit)) return -1;
+      const c = Math.floor(hit.x + 2), rr = Math.floor(hit.z + 4);
+      return c >= 0 && c < CHESS_COLS && rr >= 0 && rr < CHESS_ROWS ? rr * CHESS_COLS + c : -1;
+    },
+  };
+}
+
 function vChess(V) {
   let st = null, sel = null, targets = [], over = false, lastTurn = null, coverT = null;
   const chipsEl = $('.chips', V.root);
@@ -1544,6 +1753,13 @@ function vChess(V) {
   };
   V.stage('<div class="cinfo"></div>');
   showCover('<div class="big">♟️</div><div>擺棋中…</div>');
+  let g3 = null; // 3D 棋盤(載入失敗就用平面的)
+  glbLoad('assets/chess.glb').then(L => {
+    if (!boardEl.isConnected) return;
+    g3 = chess3D(L, V.pad);
+    V.root.classList.add('c3');
+    if (st) render();
+  }).catch(e => console.warn('暗棋 3D 載入失敗,改用平面棋盤', e));
 
   const fighting = () => st && st.fighters.includes(V.me);
   const myTurn = () => st && !over && st.turn === V.me;
@@ -1581,13 +1797,15 @@ function vChess(V) {
       c.innerHTML = !x ? '' : x.h ? '<div class="pc hid"><span>❖</span></div>' : `<div class="pc ${x.c}"><span>${CHESS_NAME[x.c][x.k]}</span></div>`;
     });
     V.root.classList.toggle('myturn', myTurn());
+    if (g3) g3.sync(st, sel, targets);
     renderStage();
   }
 
   V.onTap = e => {
-    const c = e.target.closest('.cell');
-    if (!c || !myTurn()) return;
-    const i = +c.dataset.i, x = st.cells[i];
+    if (!myTurn()) return;
+    const c = e.target.closest('.cell'), i = g3 ? g3.pick(e.clientX, e.clientY) : c ? +c.dataset.i : -1;
+    if (i < 0) return;
+    const x = st.cells[i];
     if (sel != null && targets.includes(i)) {
       V.send({ e: 'move', from: sel, to: i });
       sel = null;
