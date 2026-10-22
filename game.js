@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.13';
+const APP_VERSION = '2026.11.14';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -3666,6 +3666,155 @@ function hCheckers(H) {
   };
 }
 
+/* ---------- 跳棋的 3D 畫面:Blender 做的六角星木頭棋盤(assets/checkers.glb)+ 玻璃彈珠,three.js 即時畫 ----------
+   洞的位置:three.js 的 (x, 0, -y)(跟 Blender 匯出的棋盤一致);遊戲邏輯(選棋、走棋、連跳動畫)還是用原本的 SVG 那套,
+   3D 這邊每一幀把 SVG 裡的狀態(彈珠的位置、選到哪顆、可以走的洞)畫成 3D */
+function chk3D(LD, host, RoomEnv, getState) {
+  const { THREE, gltf } = LD;
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.NoToneMapping;
+  const cvs = renderer.domElement;
+  cvs.className = 'k3d';
+  host.appendChild(cvs);
+  const scene = new THREE.Scene();
+  const pm = new THREE.PMREMGenerator(renderer);
+  scene.environment = pm.fromScene(new RoomEnv(), 0.04).texture; // 玻璃彈珠的反光
+  scene.environmentIntensity = 0.55;
+  scene.add(new THREE.HemisphereLight('#fff3e0', '#3a2414', 0.4));
+  const sun = new THREE.DirectionalLight('#fff0d4', 2.3);
+  sun.position.set(-8, 22, 12);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.bias = -0.0004;
+  Object.assign(sun.shadow.camera, { left: -17, right: 17, top: 17, bottom: -17, near: 5, far: 60 });
+  scene.add(sun);
+  const fill = new THREE.DirectionalLight('#dfe8ff', 0.5);
+  fill.position.set(10, 8, -10);
+  scene.add(fill);
+  // 木頭桌面
+  const tcv = document.createElement('canvas');
+  tcv.width = tcv.height = 512;
+  { const g = tcv.getContext('2d'), rnd = busRng(91); g.fillStyle = '#6b4226'; g.fillRect(0, 0, 512, 512);
+    for (let i = 0; i < 110; i++) { const x = rnd() * 512; g.strokeStyle = `rgba(${rnd() < 0.5 ? '40,20,8' : '150,95,55'},${0.08 + rnd() * 0.12})`; g.lineWidth = 1 + rnd() * 4; g.beginPath(); g.moveTo(x, 0); for (let y = 0; y <= 512; y += 64) g.lineTo(x + Math.sin(y / 90 + i) * 6, y); g.stroke(); } }
+  const ttex = new THREE.CanvasTexture(tcv);
+  ttex.colorSpace = THREE.SRGBColorSpace; ttex.wrapS = ttex.wrapT = THREE.RepeatWrapping; ttex.repeat.set(4, 4);
+  const table = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshStandardMaterial({ map: ttex, roughness: 0.75 }));
+  table.rotation.x = -Math.PI / 2; table.position.y = -0.72; table.receiveShadow = true;
+  scene.add(table);
+  // 棋盤(Blender)
+  gltf.scene.updateMatrixWorld(true);
+  const board = new THREE.Group();
+  glbMergeByMat(THREE, gltf.scene.getObjectByName('Board')).forEach(({ mat, geo }) => {
+    const m = new THREE.Mesh(geo, mat); m.receiveShadow = true; m.castShadow = mat.name === 'BoardFrame' || mat.name === 'HoleRing'; board.add(m);
+  });
+  scene.add(board);
+  const pos = i => new THREE.Vector3(CHK.cells[i].x, 0, -CHK.cells[i].y);
+  // 家的三角形、對面終點的三角形:在洞底下鋪一圈玩家顏色
+  const discGeo = new THREE.CircleGeometry(0.56, 24).rotateX(-Math.PI / 2);
+  let triKey = '', triGroup = new THREE.Group();
+  scene.add(triGroup);
+  function paintTris(st) {
+    const key = st ? JSON.stringify([st.order, st.homes]) : '';
+    if (key === triKey) return;
+    triKey = key;
+    triGroup.clear();
+    if (!st) return;
+    for (let k = 0; k < 6; k++) {
+      const owner = st.order.find(p => st.homes[p] === k), target = st.order.find(p => chkGoal(st.homes[p]) === k), p = owner != null ? owner : target;
+      if (p == null) continue;
+      const mat = new THREE.MeshBasicMaterial({ color: pinfo(p).color, transparent: true, opacity: owner != null ? 0.62 : 0.34, depthWrite: false });
+      CHK.tri[k].forEach(i => { const m = new THREE.Mesh(discGeo, mat); m.position.copy(pos(i)); m.position.y = 0.2; m.renderOrder = 1; triGroup.add(m); });
+    }
+  }
+  // 玻璃彈珠:每個玩家一種材質,一次畫完(InstancedMesh 不好跟著動畫,所以每顆一個 Mesh,最多 40 顆)
+  const marbleGeo = new THREE.SphereGeometry(0.6, 32, 20);
+  const mats = new Map();
+  const marbleMat = col => { if (!mats.has(col)) mats.set(col, new THREE.MeshPhysicalMaterial({ color: col, roughness: 0.08, metalness: 0.05, clearcoat: 1, clearcoatRoughness: 0.04, emissive: col, emissiveIntensity: 0.18 })); return mats.get(col); };
+  const marbles = [];
+  const hlRing = new THREE.RingGeometry(0.55, 0.72, 32).rotateX(-Math.PI / 2);
+  const mk = (geo, color, op) => { const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: op, depthWrite: false })); m.renderOrder = 3; m.visible = false; scene.add(m); return m; };
+  const selRing = mk(hlRing, '#ffd23f', 0.95), destPool = [], lastPool = [];
+  const dotGeo = new THREE.CircleGeometry(0.34, 24).rotateX(-Math.PI / 2);
+
+  let w = 0, h = 0, raf = 0;
+  const camera = new THREE.PerspectiveCamera(24, 1, 1, 200);
+  const fitCam = () => { // 斜斜看下去,整個六角形剛好塞進畫面
+    const TILT = 0.5, v = new THREE.Vector3(), corners = [];
+    const portrait = camera.aspect < 1.05; // 直的螢幕:鏡頭轉 90 度,六角形的長邊對著螢幕的高度,棋盤才放得大
+    const bx = portrait ? 1 : 0, bz = portrait ? 0 : 1; // 鏡頭在棋盤的哪一側
+    const put = (tz, d) => { camera.position.set(bx * (tz + Math.sin(TILT) * d), Math.cos(TILT) * d, bz * (tz + Math.sin(TILT) * d)); camera.lookAt(bx * tz, 0, bz * tz); camera.updateMatrixWorld(); };
+    for (let k = 0; k < 6; k++) for (const y of [-0.7, 0.4]) corners.push(new THREE.Vector3(Math.cos(Math.PI / 3 * k) * 14.5, y, -Math.sin(Math.PI / 3 * k) * 14.5));
+    let tz = 0, d = 40;
+    for (let pass = 0; pass < 6; pass++) {
+      let lo = 8, hi = 200;
+      for (let k = 0; k < 28; k++) {
+        d = (lo + hi) / 2;
+        put(tz, d);
+        if (corners.every(c => { v.copy(c).project(camera); return Math.abs(v.x) <= 0.99 && Math.abs(v.y) <= 0.985; })) hi = d; else lo = d;
+      }
+      d = hi;
+      put(tz, d);
+      let y0 = 9, y1 = -9;
+      corners.forEach(c => { v.copy(c).project(camera); y0 = Math.min(y0, v.y); y1 = Math.max(y1, v.y); });
+      tz -= (y0 + y1) / 2 * 14; // 上下留白平均一點
+    }
+  };
+  const fit = () => {
+    const r = host.getBoundingClientRect(), k = r.width / (host.offsetWidth || r.width) || 1;
+    const nw = Math.round(r.width / k), nh = Math.round(r.height / k);
+    if (!nw || (nw === w && nh === h)) return;
+    w = nw; h = nh;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h; camera.updateProjectionMatrix();
+    fitCam();
+  };
+  const poolAt = (arr, i, geo, color, op) => arr[i] || (arr[i] = mk(geo, color, op));
+  function frame(now) {
+    if (!cvs.isConnected) { renderer.dispose(); renderer.forceContextLoss(); return; }
+    fit();
+    const S = getState();
+    paintTris(S.st);
+    // 彈珠:跟著 SVG 裡彈珠的位置(動畫中也會動)
+    let n = 0;
+    S.balls.forEach(b => {
+      let m = marbles[n];
+      if (!m) { m = marbles[n] = new THREE.Mesh(marbleGeo, marbleMat(b.color)); m.castShadow = true; scene.add(m); }
+      m.material = marbleMat(b.color);
+      m.visible = true;
+      const lift = b.sel ? 0.5 + Math.sin(now / 160) * 0.06 : Math.max(0, (b.scale - 1) * 6);
+      m.position.set(b.x, 0.6 + 0.12 + lift + 0.06, -b.y);
+      n++;
+    });
+    for (let i = n; i < marbles.length; i++) marbles[i].visible = false;
+    selRing.visible = S.sel != null;
+    if (S.sel != null) { selRing.position.set(CHK.cells[S.sel].x, 0.24, -CHK.cells[S.sel].y); }
+    const pulse = 0.55 + Math.abs(Math.sin(now / 280)) * 0.45;
+    S.dests.forEach(([i, jump], k) => { const m = poolAt(destPool, k, dotGeo, '#2fe08a', 1); m.material.color.set(jump ? '#ffd23f' : '#2fe08a'); m.material.opacity = pulse; m.position.set(CHK.cells[i].x, 0.26, -CHK.cells[i].y); m.visible = true; });
+    for (let i = S.dests.length; i < destPool.length; i++) destPool[i].visible = false;
+    S.lastPath.forEach((i, k) => { const m = poolAt(lastPool, k, hlRing, '#ffffff', 0.55); m.material.color.set(S.lastColor); m.position.set(CHK.cells[i].x, 0.22, -CHK.cells[i].y); m.scale.setScalar(k === 0 || k === S.lastPath.length - 1 ? 1 : 0.6); m.visible = true; });
+    for (let i = S.lastPath.length; i < lastPool.length; i++) lastPool[i].visible = false;
+    renderer.render(scene, camera);
+    raf = requestAnimationFrame(frame);
+  }
+  raf = requestAnimationFrame(frame);
+  const ray = new THREE.Raycaster(), plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.7), hit = new THREE.Vector3();
+  return {
+    pick(cx, cy) { // 點的位置是哪個洞(-1 = 沒點到)
+      const r = cvs.getBoundingClientRect();
+      camera.updateMatrixWorld();
+      ray.setFromCamera(new THREE.Vector2((cx - r.left) / r.width * 2 - 1, -((cy - r.top) / r.height) * 2 + 1), camera);
+      if (!ray.ray.intersectPlane(plane, hit)) return -1;
+      let best = -1, bd = 1.0;
+      CHK.cells.forEach((c, i) => { const d = Math.hypot(c.x - hit.x, -c.y - hit.z); if (d < bd) { bd = d; best = i; } });
+      return best;
+    },
+  };
+}
+
 function vCheckers(V) {
   const me = V.me;
   let st = null, sel = -1, dests = new Map(), animating = false, over = false, lastId = 0, timerT = null;
@@ -3717,6 +3866,24 @@ function vCheckers(V) {
   const svg = $('.chsvg', V.pad), ballsG = $('.chballs', svg), destsG = $('.chdests', svg), trail = $('.chtrail', svg), cover = $('.cover', V.pad);
   const turnEl = $('.chturn', V.pad), tipEl = $('.chtip', V.pad);
   const balls = new Map(); // 洞的編號 → 彈珠元素
+  let g3 = null; // 3D 棋盤(載入失敗就用 SVG 的)
+  const wrapEl = $('.chwrap', V.pad);
+  Promise.all([glbLoad('assets/checkers.glb'), import('three/addons/environments/RoomEnvironment.js')]).then(([L, env]) => {
+    if (!svg.isConnected) return;
+    g3 = chk3D(L, wrapEl, env.RoomEnvironment, () => {
+      const out = [];
+      balls.forEach((b, i) => {
+        const m = /translate\(([-\d.]+) ([-\d.]+)\)(?: scale\(([\d.]+)\))?/.exec(b.getAttribute('transform') || '');
+        if (m) out.push({ x: +m[1], y: +m[2], scale: m[3] ? +m[3] : 1, color: pinfo(+b.dataset.s).color, sel: b.classList.contains('sel') });
+      });
+      return {
+        st, balls: out, sel: sel >= 0 ? sel : null,
+        dests: sel >= 0 ? [...dests].map(([t, path]) => [t, path.length > 2 || chkJump(path)]) : [],
+        lastPath: st && st.last && st.last.path && !animating ? st.last.path : [], lastColor: st && st.last ? pinfo(st.last.s).color : '#fff',
+      };
+    });
+    V.root.classList.add('chk3');
+  }).catch(e => console.warn('跳棋 3D 載入失敗,改用平面棋盤', e));
 
   // 直的拿手機時提醒轉成橫的(也可以直接玩)
   const rot = el('div', 'brot', `<div class="bphone">📱</div><b>把手機轉成橫的,棋盤更大!</b><small>如果轉不過來,請先關掉手機的「螢幕方向鎖定」</small>
@@ -3836,7 +4003,8 @@ function vCheckers(V) {
 
   V.onTap = e => {
     if (!myTurn()) return;
-    const d = e.target.closest('.chdest');
+    const pk = g3 ? g3.pick(e.clientX, e.clientY) : -2;
+    const d = g3 ? (pk >= 0 && sel >= 0 && dests.has(pk) ? { dataset: { i: pk } } : null) : e.target.closest('.chdest');
     if (d) {
       const t = +d.dataset.i;
       V.send({ e: 'move', from: sel, to: t });
@@ -3844,8 +4012,8 @@ function vCheckers(V) {
       SFX.tap();
       return;
     }
-    const b = e.target.closest('.chball, .chholes circle');
-    const i = b ? +b.dataset.i : -1;
+    const b = g3 ? null : e.target.closest('.chball, .chholes circle');
+    const i = g3 ? pk : b ? +b.dataset.i : -1;
     if (i >= 0 && st.occ[i] === me) {
       sel = sel === i ? -1 : i;
       dests = sel >= 0 ? chkReach(st.occ, sel) : new Map();
@@ -4485,11 +4653,12 @@ function glbMergeByMat(THREE, root) { // 把模型裡同一種材質的零件合
     (groups[m.material.name] = groups[m.material.name] || { mat: m.material, gs: [] }).gs.push(g);
   });
   return Object.entries(groups).map(([name, { mat, gs }]) => {
-    const pos = [], nor = [];
-    gs.forEach(g => { pos.push(...g.attributes.position.array); nor.push(...g.attributes.normal.array); });
+    const total = gs.reduce((t, g) => t + g.attributes.position.array.length, 0), pos = new Float32Array(total), nor = new Float32Array(total); // 大模型用 push(...陣列) 會爆堆疊,改成直接填進去
+    let o = 0;
+    gs.forEach(g => { pos.set(g.attributes.position.array, o); nor.set(g.attributes.normal.array, o); o += g.attributes.position.array.length; });
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
     return { name, mat, geo };
   });
 }

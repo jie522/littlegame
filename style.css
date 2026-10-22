@@ -1933,3 +1933,8 @@ button:disabled { cursor: not-allowed; }
 .play-chess .topbar { display: none; }
 .play-chess .cexit { position: absolute; top: 6px; right: 6px; z-index: 4; width: 36px; height: 36px; }
 .play-chess .pcard.now { box-shadow: 0 0 0 3px var(--c), 0 0 16px 4px var(--c), 0 4px 0 var(--ink); }
+
+/* 跳棋 3D:three.js 的畫布蓋在 SVG 棋盤上(SVG 還在,負責遊戲邏輯和動畫,只是看不到) */
+.play-checkers .k3d { position: absolute; top: 0; left: 0; width: 100%; height: 100%; max-width: none; max-height: none; display: block; z-index: 1; touch-action: none; }
+.play-checkers.chk3 .chsvg { visibility: hidden; }
+.play-checkers.chk3 .cover { z-index: 3; }
