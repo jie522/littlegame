@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.08';
+const APP_VERSION = '2026.11.09';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -5626,15 +5626,16 @@ function pkSession(LD, L, o) {
   // ---------- 控制:左邊搖桿左右拖轉方向(手指放下的地方就是中心)、右邊按住「前進」「倒車」、中間喇叭 ----------
   if (!o.spectate) {
     pad.innerHTML = `<div class="pkpad">
-      <div class="pkjarea"><div class="pkjbase"><span class="pkjl l">◀</span><span class="pkjl r">▶</span><i class="pkjknob"></i></div><small>左右拖:轉方向</small>
+      <div class="pkjarea"><div class="pkjbase"><span class="pkjl u">▲</span><span class="pkjl d">▼</span><span class="pkjl l">◀</span><span class="pkjl r">▶</span><i class="pkjknob"></i></div>
         <button class="pkhorn" aria-label="喇叭">📯<small>叭</small></button></div>
       <div class="pkpeds"><button class="pkgo"><b>▲</b>前進</button><button class="pkrev"><b>▼</b>倒車</button></div></div>`;
     const area = $('.pkjarea', pad), base = $('.pkjbase', pad), knob = $('.pkjknob', pad), hornB = $('.pkhorn', pad), R = 40;
-    let jid = null, jx = 0;
+    let jid = null, jx = 0, jy = 0, jthr = 0, pthr = 0;
+    const setThr = () => { thr = pthr || jthr; if (thr) press(); }; // 按鈕和搖桿的上下都能控制前進/倒車
     area.addEventListener('pointerdown', e => {
       e.preventDefault();
       if (jid != null) return;
-      jid = e.pointerId; jx = e.clientX;
+      jid = e.pointerId; jx = e.clientX; jy = e.clientY;
       try { area.setPointerCapture(e.pointerId); } catch (_) { /* 模擬的觸控沒辦法捕捉 */ }
       const r = area.getBoundingClientRect();
       base.style.left = (jx - r.left) + 'px'; base.style.top = (e.clientY - r.top) + 'px';
@@ -5643,15 +5644,19 @@ function pkSession(LD, L, o) {
     });
     area.addEventListener('pointermove', e => {
       if (e.pointerId !== jid) return;
-      const dx = Math.max(-R, Math.min(R, e.clientX - jx));
-      knob.style.transform = `translateX(${dx}px)`;
-      steerIn = Math.abs(dx) < R * 0.08 ? 0 : dx / R;
+      let dx = e.clientX - jx, dy = e.clientY - jy;
+      const d = Math.hypot(dx, dy);
+      if (d > R) { dx *= R / d; dy *= R / d; }
+      knob.style.transform = `translate(${dx}px, ${dy}px)`;
+      steerIn = Math.abs(dx) < R * 0.12 ? 0 : dx / R; // 左右 = 轉方向
+      jthr = dy < -R * 0.35 ? 1 : dy > R * 0.35 ? -1 : 0; // 往上推 = 前進、往下拉 = 倒車
+      setThr();
     });
-    const jup = e => { if (e.pointerId !== jid) return; jid = null; steerIn = 0; base.classList.remove('on'); base.style.left = base.style.top = ''; knob.style.transform = ''; };
+    const jup = e => { if (e.pointerId !== jid) return; jid = null; steerIn = 0; jthr = 0; setThr(); base.classList.remove('on'); base.style.left = base.style.top = ''; knob.style.transform = ''; };
     area.addEventListener('pointerup', jup); area.addEventListener('pointercancel', jup);
     const pedal = (b, val) => {
-      b.addEventListener('pointerdown', e => { e.preventDefault(); try { b.setPointerCapture(e.pointerId); } catch (_) { /* 同上 */ } thr = val; b.classList.add('on'); press(); });
-      const up = () => { if (thr === val) thr = 0; b.classList.remove('on'); };
+      b.addEventListener('pointerdown', e => { e.preventDefault(); try { b.setPointerCapture(e.pointerId); } catch (_) { /* 同上 */ } pthr = val; b.classList.add('on'); setThr(); });
+      const up = () => { if (pthr === val) pthr = 0; b.classList.remove('on'); setThr(); };
       b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
     };
     pedal($('.pkgo', pad), 1); pedal($('.pkrev', pad), -1);

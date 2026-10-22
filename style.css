@@ -1911,3 +1911,5 @@ button:disabled { cursor: not-allowed; }
 .pkhud .pkth.warn { animation: pulse .5s ease-in-out infinite alternate; }
 .pkhud .pkinv { background: #7c3aed; }
 .pkjarea .pkhorn { position: absolute; top: 6px; right: 6px; width: 46px; height: 46px; font-size: 1.05rem; box-shadow: 0 3px 0 var(--ink); }
+.pkjl.u { top: 5px; left: 50%; transform: translateX(-50%); color: #2e9b3f; }
+.pkjl.d { bottom: 5px; left: 50%; transform: translateX(-50%); color: #e8590c; }
