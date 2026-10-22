@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.09';
+const APP_VERSION = '2026.11.10';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -476,7 +476,7 @@ const GAMES = [
   },
   {
     id: 'parking', emoji: '🅿️', name: '停車大對決', tag: '競速+3D', color: '#ff7a1a', desc: '3 局停車比賽,誰停得又快又準!',
-    rules: ['大家拿到同一個停車場,倒數完一起出發', '左邊方向盤按住左右滑,右邊踩「前進」「倒車」', '把車停進發光的格子,停穩就完成;撞車 +2 秒、撞鴨子 +3 秒、撞飛三角錐 +1 秒', '香蕉皮會讓車子轉圈圈,按「叭」可以催鴨子快走', '有些關卡會停電、方向盤裝反、或有阿姨來搶車位!', '3 局越來越難,時間最短的拿最多分'],
+    rules: ['大家拿到同一個停車場,倒數完一起出發', '左邊搖桿指向要去的方向(上下左右是畫面上的方向),右邊按「前進」或「倒車」', '把車停進發光的格子,停穩就完成;撞車 +2 秒、撞鴨子 +3 秒、撞飛三角錐 +1 秒', '香蕉皮會讓車子轉圈圈,按「叭」可以催鴨子快走', '有些關卡會停電、方向盤裝反、或有阿姨來搶車位!', '3 局越來越難,時間最短的拿最多分'],
     host: hParking, view: vParking, noCountdown: true,
   },
 ];
@@ -5040,11 +5040,11 @@ const PK_THEMES = { // 地面、線、外圍
 // 50 關:版型、格子寬度(路邊停車是空位長度)、倒車入庫、障礙物和 KUSO 機關
 // thief:阿姨會來搶車位(倒數)、dark:停電只看得到車燈、inv:方向盤裝反、robots:掃地機器人、movers:走道上開來開去的車、bumps:減速丘
 const PK_PLAN = [
-  { k: 'open', sw: 4.0, t: 'school', name: '第一次停車', tip: '左邊搖桿左右拖轉方向,右邊按住「前進」' },
-  { k: 'open', sw: 3.6, side: 1, cones: 2, t: 'school', name: '右轉進格', tip: '先往前開,再把搖桿往右拖' },
+  { k: 'open', sw: 4.0, t: 'school', name: '第一次停車', tip: '搖桿指向要去的方向(上下左右是畫面的方向),再按住「前進」' },
+  { k: 'open', sw: 3.6, side: 1, cones: 2, t: 'school', name: '右轉進格', tip: '先往前開,再把搖桿指向右邊' },
   { k: 'row', sw: 3.3, cones: 2, t: 'day', name: '兩台車中間', tip: '車子要整台在白線裡面才算' },
   { k: 'row', sw: 3.15, cones: 4, gate: 1, t: 'day', name: '三角錐陣', tip: '格子門口有三角錐,撞飛會扣時間' },
-  { k: 'row', sw: 3.3, rev: 1, t: 'school', name: '倒車入庫', tip: '考駕照!車頭要朝外,用「倒車」停進去' },
+  { k: 'row', sw: 3.3, rev: 1, t: 'school', name: '倒車入庫', tip: '考駕照!車頭要朝外;搖桿指向格子,按「倒車」往那邊倒進去' },
   { k: 'row', sw: 3.05, bananas: 3, gate: 1, t: 'day', name: '香蕉皮警報', tip: '壓到香蕉皮會轉圈圈 🍌' },
   { k: 'double', sw: 3.1, cones: 3, t: 'day', name: '繞一圈', tip: '格子在花台那排的另一邊,要繞過去' },
   { k: 'row', sw: 3.0, ducks: 2, gate: 1, st: 1, t: 'day', name: '鴨子過馬路', tip: '小心鴨子!按「叭」可以催牠們快走' },
@@ -5611,7 +5611,7 @@ function pkSession(LD, L, o) {
     car: o.spectate ? null : { x: L.start.x, y: L.start.y, a: L.start.a, v: 0, steer: 0, bump: 0 },
     color: o.color || '#ffd23f', ghosts: new Map(), ducks: [], carts: [], movers: [], robots: L.robots.map(r => ({ ...r })), thief: null, inSpot: false, hold: 0, braking: false,
   };
-  let steerIn = 0, thr = 0, started = false, t0 = 0, crashes = 0, pen = 0, done = false, cool = 0, spin = null, boost = 0, hornCd = 0, beepT = 0, raf = 0, last = 0, live = !o.spectate && !o.wait;
+  let steerIn = 0, thr = 0, jdir = null, started = false, t0 = 0, crashes = 0, pen = 0, done = false, cool = 0, spin = null, boost = 0, hornCd = 0, beepT = 0, raf = 0, last = 0, live = !o.spectate && !o.wait;
   L.obs.forEach(x => { delete x.gone; delete x.fly; });
   L.bananas.forEach(b => { delete b.gone; });
   const dph = L.ducks.map(d => d.t * d.sp), cph = L.carts.map(c => c.t * c.sp), mph = L.movers.map(m => m.t * m.sp);
@@ -5630,8 +5630,8 @@ function pkSession(LD, L, o) {
         <button class="pkhorn" aria-label="喇叭">📯<small>叭</small></button></div>
       <div class="pkpeds"><button class="pkgo"><b>▲</b>前進</button><button class="pkrev"><b>▼</b>倒車</button></div></div>`;
     const area = $('.pkjarea', pad), base = $('.pkjbase', pad), knob = $('.pkjknob', pad), hornB = $('.pkhorn', pad), R = 40;
-    let jid = null, jx = 0, jy = 0, jthr = 0, pthr = 0;
-    const setThr = () => { thr = pthr || jthr; if (thr) press(); }; // 按鈕和搖桿的上下都能控制前進/倒車
+    let jid = null, jx = 0, jy = 0, pthr = 0;
+    const setThr = () => { thr = pthr; if (thr) press(); }; // 前進/倒車只有按鈕管
     area.addEventListener('pointerdown', e => {
       e.preventDefault();
       if (jid != null) return;
@@ -5648,11 +5648,10 @@ function pkSession(LD, L, o) {
       const d = Math.hypot(dx, dy);
       if (d > R) { dx *= R / d; dy *= R / d; }
       knob.style.transform = `translate(${dx}px, ${dy}px)`;
-      steerIn = Math.abs(dx) < R * 0.12 ? 0 : dx / R; // 左右 = 轉方向
-      jthr = dy < -R * 0.35 ? 1 : dy > R * 0.35 ? -1 : 0; // 往上推 = 前進、往下拉 = 倒車
-      setThr();
+      // 搖桿指的是畫面上的方向(上下左右是絕對的);車子會自己轉過去,前進/倒車由按鈕決定
+      jdir = Math.hypot(dx, dy) > R * 0.35 ? Math.atan2(dy, L.inv ? -dx : dx) : null;
     });
-    const jup = e => { if (e.pointerId !== jid) return; jid = null; steerIn = 0; jthr = 0; setThr(); base.classList.remove('on'); base.style.left = base.style.top = ''; knob.style.transform = ''; };
+    const jup = e => { if (e.pointerId !== jid) return; jid = null; jdir = null; base.classList.remove('on'); base.style.left = base.style.top = ''; knob.style.transform = ''; };
     area.addEventListener('pointerup', jup); area.addEventListener('pointercancel', jup);
     const pedal = (b, val) => {
       b.addEventListener('pointerdown', e => { e.preventDefault(); try { b.setPointerCapture(e.pointerId); } catch (_) { /* 同上 */ } pthr = val; b.classList.add('on'); setThr(); });
@@ -5733,7 +5732,12 @@ function pkSession(LD, L, o) {
     }
     if (!c) return;
     if (!live) { c.v *= Math.max(0, 1 - dt * 6); S.guide = 0; return; }
-    c.steer += ((L.inv ? -steerIn : steerIn) - c.steer) * Math.min(1, dt * 9);
+    let sIn = L.inv ? -steerIn : steerIn; // 鍵盤:左右是相對方向盤
+    if (jdir != null && thr) { // 搖桿:車頭(前進)或車尾(倒車)要對準搖桿指的方向;倒車時方向盤的作用是相反的
+      const err = pkWrap((thr > 0 ? jdir : jdir + Math.PI) - c.a);
+      sIn = Math.max(-1, Math.min(1, err * 2.4)) * (thr > 0 ? 1 : -1);
+    }
+    c.steer += (sIn - c.steer) * Math.min(1, dt * 9);
     S.guide = thr ? Math.sign(thr) : c.v < -0.05 ? -1 : 1;
     S.braking = false;
     if (spin) { c.a += spin.w * dt; c.v *= Math.max(0, 1 - dt * 1.8); spin.t -= dt; if (spin.t <= 0) spin = null; }
@@ -5905,7 +5909,7 @@ function parkGame() {
     if (sess) sess.stop();
     const s = stars(), mx = maxLv(), total = s.reduce((a, b) => a + (b || 0), 0);
     ov.innerHTML = `<div class="bgcard pkmenuc"><h2>🅿️ 停車大師</h2>
-      <p>左邊方向盤按住左右滑,右邊踩「前進」「倒車」,把車停進<b>發光的格子</b>!撞車、撞鴨子會扣時間 🦆</p>
+      <p>左邊搖桿指向要去的方向(上下左右是畫面上的方向),右邊按「前進」或「倒車」,把車停進<b>發光的格子</b>!撞車、撞鴨子會扣時間 🦆</p>
       <div class="pkgrid">${Array.from({ length: NL }, (_, i) => { const n = i + 1, lock = n > mx; return `<button class="pkl${lock ? ' lock' : ''}${n === level ? ' cur' : ''}" data-n="${n}" ${lock ? 'disabled' : ''}><b>${lock ? '🔒' : n}</b><small>${lock ? '' : '★'.repeat(s[i] || 0) + '☆'.repeat(3 - (s[i] || 0))}</small></button>`; }).join('')}</div>
       <p class="pktot">⭐ ${total} / ${NL * 3}</p>
       ${unlocked() ? '' : '<button class="btn white sm pkkey">🔑 輸入密碼</button>'}</div>`;
