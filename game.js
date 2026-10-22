@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.11';
+const APP_VERSION = '2026.11.12';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -1539,13 +1539,14 @@ function chess3D(LD, host) {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMapping = THREE.NeutralToneMapping; // ACES 會把顏色洗淡、看起來霧霧的
+  renderer.toneMappingExposure = 1.05;
   const cvs = renderer.domElement;
   cvs.className = 'c3d';
   host.appendChild(cvs);
   const scene = new THREE.Scene();
-  scene.add(new THREE.HemisphereLight('#fff6e8', '#5a3a22', 1.05));
-  const sun = new THREE.DirectionalLight('#fff1d6', 2.2);
+  scene.add(new THREE.HemisphereLight('#fff6e8', '#4a2e1a', 0.55));
+  const sun = new THREE.DirectionalLight('#fff1d6', 3.1);
   sun.position.set(-3, 9, 4);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
@@ -1631,14 +1632,14 @@ function chess3D(LD, host) {
   const camera = new THREE.PerspectiveCamera(26, 1, 0.5, 100);
   const fitCam = () => { // 斜斜看下去,整個棋盤剛好塞進畫面
     const TILT = 0.34, v = new THREE.Vector3(), corners = [];
-    for (const x of [-2.55, 2.55]) for (const z of [-4.55, 4.55]) for (const y of [0, 0.3]) corners.push(new THREE.Vector3(x, y, z));
+    for (const x of [-2.47, 2.47]) for (const z of [-4.47, 4.47]) for (const y of [0, 0.25]) corners.push(new THREE.Vector3(x, y, z));
     let tz = 0, d = 10;
     for (let pass = 0; pass < 6; pass++) {
       let lo = 2, hi = 80;
       for (let k = 0; k < 28; k++) {
         d = (lo + hi) / 2;
         camera.position.set(0, Math.cos(TILT) * d, tz + Math.sin(TILT) * d); camera.lookAt(0, 0, tz); camera.updateMatrixWorld();
-        if (corners.every(c => { v.copy(c).project(camera); return Math.abs(v.x) <= 0.97 && Math.abs(v.y) <= 0.97; })) hi = d; else lo = d;
+        if (corners.every(c => { v.copy(c).project(camera); return Math.abs(v.x) <= 0.99 && Math.abs(v.y) <= 0.985; })) hi = d; else lo = d;
       }
       d = hi;
       camera.position.set(0, Math.cos(TILT) * d, tz + Math.sin(TILT) * d); camera.lookAt(0, 0, tz); camera.updateMatrixWorld();
@@ -1647,10 +1648,12 @@ function chess3D(LD, host) {
       tz -= (y0 + y1) / 2 * 4.5;
     }
   };
-  const fit = () => {
-    const r = host.getBoundingClientRect();
-    if (!r.width || (r.width === w && r.height === h)) return;
-    w = r.width; h = r.height;
+  const fit = () => { // 畫布往左右延伸到整個螢幕寬、往下到螢幕底,棋盤才能放到最大
+    const r = host.getBoundingClientRect(), k = r.width / (host.offsetWidth || r.width) || 1; // 外層有縮放動畫時,換算回自己的座標
+    const nw = Math.round(document.documentElement.clientWidth / k), nh = Math.round(Math.max(r.height, window.innerHeight - r.top) / k);
+    if (!r.width || (nw === w && nh === h)) return;
+    w = nw; h = nh;
+    Object.assign(cvs.style, { left: -Math.round(r.left / k) + 'px', width: w + 'px', height: h + 'px' });
     renderer.setSize(w, h, false);
     camera.aspect = w / h; camera.updateProjectionMatrix();
     fitCam();

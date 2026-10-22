@@ -1915,7 +1915,7 @@ button:disabled { cursor: not-allowed; }
 .pkjl.d { bottom: 5px; left: 50%; transform: translateX(-50%); color: #e8590c; }
 
 /* 暗棋 3D:three.js 的畫布蓋在平面棋盤上(平面棋盤保留位置,載入失敗時就用它) */
-.play-chess .c3d { position: absolute; inset: 0; width: 100%; height: 100%; display: block; z-index: 1; touch-action: none; }
+.play-chess .c3d { position: absolute; top: 0; left: 0; width: 100%; height: 100%; max-width: none; max-height: none; display: block; z-index: 1; touch-action: none; }
 .play-chess.c3 .cboard { visibility: hidden; }
 .play-chess.c3 .cover { z-index: 3; }
 /* 首頁:闖關模式選單 */
