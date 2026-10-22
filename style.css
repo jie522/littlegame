@@ -1928,3 +1928,8 @@ button:disabled { cursor: not-allowed; }
 .qopt .qe { font-size: 2.2rem; line-height: 1; }
 .qopt b { display: block; font-size: 1.15rem; }
 .qopt small { display: block; font-size: .75rem; font-weight: 700; opacity: .7; }
+
+/* 暗棋:拿掉上面的狀態列,離開鈕放到棋盤右上角 */
+.play-chess .topbar { display: none; }
+.play-chess .cexit { position: absolute; top: 6px; right: 6px; z-index: 4; width: 36px; height: 36px; }
+.play-chess .pcard.now { box-shadow: 0 0 0 3px var(--c), 0 0 16px 4px var(--c), 0 4px 0 var(--ink); }

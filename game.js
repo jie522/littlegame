@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.12';
+const APP_VERSION = '2026.11.13';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -1539,20 +1539,38 @@ function chess3D(LD, host) {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.toneMapping = THREE.NeutralToneMapping; // ACES 會把顏色洗淡、看起來霧霧的
-  renderer.toneMappingExposure = 1.05;
+  renderer.toneMapping = THREE.NoToneMapping; // 不壓縮顏色,木頭和紅黑字最鮮明
   const cvs = renderer.domElement;
   cvs.className = 'c3d';
   host.appendChild(cvs);
   const scene = new THREE.Scene();
-  scene.add(new THREE.HemisphereLight('#fff6e8', '#4a2e1a', 0.55));
-  const sun = new THREE.DirectionalLight('#fff1d6', 3.1);
+  scene.add(new THREE.HemisphereLight('#fff3e0', '#3a2414', 0.42));
+  const sun = new THREE.DirectionalLight('#fff0d4', 2.15);
   sun.position.set(-3, 9, 4);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.bias = -0.0004;
   Object.assign(sun.shadow.camera, { left: -6, right: 6, top: 7, bottom: -7, near: 1, far: 25 });
   scene.add(sun);
+  const fill = new THREE.DirectionalLight('#dfe8ff', 0.55); // 右前方的補光,棋子邊緣比較立體
+  fill.position.set(5, 4, 8);
+  scene.add(fill);
+  // 木紋(棋盤用):一條條深淺不一的紋路
+  const grain = (base, dark, light) => {
+    const c = document.createElement('canvas'), g = c.getContext('2d'), rnd = busRng(base.length * 31 + dark.length);
+    c.width = c.height = 512;
+    g.fillStyle = base; g.fillRect(0, 0, 512, 512);
+    for (let i = 0; i < 140; i++) {
+      const y = rnd() * 512;
+      g.strokeStyle = rnd() < 0.55 ? dark : light; g.globalAlpha = 0.12 + rnd() * 0.22; g.lineWidth = 0.8 + rnd() * 3;
+      g.beginPath(); g.moveTo(0, y); for (let x = 0; x <= 512; x += 32) g.lineTo(x, y + Math.sin(x / 70 + i) * 3 + Math.sin(x / 23 + i * 2) * 1.2); g.stroke();
+    }
+    g.globalAlpha = 1;
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8;
+    return t;
+  };
+  const GRAIN = { BoardFrame: grain('#5c3518', '#2e1608', '#8a5530'), BoardWood: grain('#efcf95', '#b98a4a', '#fff0c8'), BoardWoodDk: grain('#dcae69', '#a8763a', '#f0cc8a') };
   // 木頭桌面
   const tcv = document.createElement('canvas');
   tcv.width = 512; tcv.height = 1024;
@@ -1568,7 +1586,16 @@ function chess3D(LD, host) {
   // 棋盤
   gltf.scene.updateMatrixWorld(true);
   const board = new THREE.Group();
-  glbMergeByMat(THREE, gltf.scene.getObjectByName('Board')).forEach(({ mat, geo }) => { const m = new THREE.Mesh(geo, mat); m.receiveShadow = true; m.castShadow = mat.name === 'BoardFrame'; board.add(m); });
+  glbMergeByMat(THREE, gltf.scene.getObjectByName('Board')).forEach(({ mat, geo }) => {
+    const tex = GRAIN[mat.name];
+    if (tex) { // Blender 的方塊沒有 UV,用俯視的位置當貼圖座標
+      const p = geo.attributes.position, uv = new Float32Array(p.count * 2);
+      for (let i = 0; i < p.count; i++) { uv[i * 2] = p.getX(i) * 0.35; uv[i * 2 + 1] = p.getZ(i) * 0.12 + p.getY(i) * 0.35; }
+      geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+      mat = mat.clone(); mat.map = tex; mat.color.set('#ffffff'); mat.roughness = 0.5;
+    }
+    const m = new THREE.Mesh(geo, mat); m.receiveShadow = true; m.castShadow = mat.name === 'BoardFrame'; board.add(m);
+  });
   scene.add(board);
   // 棋子:木頭本體(Blender)+ 上下兩面貼字/花紋
   const bodyParts = glbMergeByMat(THREE, gltf.scene.getObjectByName('Piece'));
@@ -1580,9 +1607,9 @@ function chess3D(LD, host) {
     const cv = document.createElement('canvas'), g = cv.getContext('2d'), S = 256;
     cv.width = cv.height = S;
     const bg = g.createRadialGradient(S * 0.42, S * 0.38, 10, S / 2, S / 2, S / 2);
-    bg.addColorStop(0, c ? '#fdf4e0' : '#f0dbb0'); bg.addColorStop(1, c ? '#ecd5a5' : '#d9b67c');
+    bg.addColorStop(0, c ? '#fffaf0' : '#f3dfb6'); bg.addColorStop(1, c ? '#f1dfb8' : '#dcb983');
     g.fillStyle = bg; g.fillRect(0, 0, S, S);
-    const ink = !c ? '#9c7240' : c === 'r' ? '#b3191f' : '#1f1d24';
+    const ink = !c ? '#9c7240' : c === 'r' ? '#c4121c' : '#141218';
     g.strokeStyle = ink; g.lineWidth = 7; g.beginPath(); g.arc(S / 2, S / 2, S * 0.43, 0, Math.PI * 2); g.stroke();
     g.lineWidth = 2.5; g.beginPath(); g.arc(S / 2, S / 2, S * 0.38, 0, Math.PI * 2); g.stroke();
     if (c) {
@@ -1631,8 +1658,8 @@ function chess3D(LD, host) {
   let lastKey = '', selI = null, w = 0, h = 0, raf = 0;
   const camera = new THREE.PerspectiveCamera(26, 1, 0.5, 100);
   const fitCam = () => { // 斜斜看下去,整個棋盤剛好塞進畫面
-    const TILT = 0.34, v = new THREE.Vector3(), corners = [];
-    for (const x of [-2.47, 2.47]) for (const z of [-4.47, 4.47]) for (const y of [0, 0.25]) corners.push(new THREE.Vector3(x, y, z));
+    const TILT = 0.4, v = new THREE.Vector3(), corners = [];
+    for (const x of [-2.3, 2.3]) for (const z of [-4.36, 4.36]) for (const y of [0, 0.25]) corners.push(new THREE.Vector3(x, y, z));
     let tz = 0, d = 10;
     for (let pass = 0; pass < 6; pass++) {
       let lo = 2, hi = 80;
@@ -1734,7 +1761,9 @@ function chess3D(LD, host) {
 function vChess(V) {
   let st = null, sel = null, targets = [], over = false, lastTurn = null, coverT = null;
   const chipsEl = $('.chips', V.root);
-  chipsEl.className = 'cstatus'; // 上方只留一條狀態列,計分改由玩家卡顯示
+  chipsEl.className = 'cstatus'; // 狀態列藏起來(輪到誰看玩家卡的光框),棋盤才能更大
+  const exitB = $('.exit', V.root);
+  exitB.classList.add('cexit');
   chipsEl.innerHTML = '<span class="cs">對局準備中…</span>';
   V.renderChips = () => {};
   const boardEl = el('div', 'cboard');
@@ -1748,6 +1777,7 @@ function vChess(V) {
   V.pad.innerHTML = '';
   V.pad.appendChild(boardEl);
   V.pad.appendChild(cover);
+  V.pad.appendChild(exitB);
   const showCover = (html, ms) => {
     cover.innerHTML = html;
     cover.classList.add('on');
@@ -1839,7 +1869,8 @@ function vChess(V) {
           if (m.last.slot === V.me) SFX.good(); else if (fighting()) { SFX.bad(); buzz(80); } else SFX.tap();
         } else SFX.tap();
       }
-      if (myTurn() && lastTurn !== V.me) buzz(60);
+      if (myTurn() && lastTurn !== V.me) { buzz(60); if (m.turn !== lastTurn) SFX.tick(); }
+      if (m.idle >= 40 && m.idle % 3 === 1 && m.last && m.last.type === 'move') toast(`再 ${50 - m.idle} 步沒有翻棋或吃子就平手`);
       lastTurn = m.turn;
     } else if (m.e === 'over') {
       over = true;
