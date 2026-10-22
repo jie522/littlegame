@@ -1826,33 +1826,7 @@ button:disabled { cursor: not-allowed; }
 .bgturn:disabled, .bgplus:disabled { opacity: .55; }
 .bgleft { background: #fff; }
 
-/* 全壘打大賽:上面球場畫面、下面投手/打者的操作區 */
-.play-baseball { gap: 6px; padding-top: max(8px, env(safe-area-inset-top)); background: linear-gradient(#123a6b, #0b2445); }
-.play-baseball .topbar { padding: 4px; }
-.play-baseball .stage { flex: 1; min-height: 0; padding: 0; background: transparent; border: none; box-shadow: none; }
-.play-baseball .sin { height: 100%; justify-content: center; gap: 0; }
-.play-baseball .tcv { border: 3px solid #0a1a33; border-radius: 14px; touch-action: none; }
-.play-baseball .hud { display: none; }
-.play-baseball .pad { flex: 0 0 auto; min-height: 150px; padding: 8px 10px; background: rgba(255,255,255,.08); border: 3px solid #0a1a33; box-shadow: none; }
-.bbpad { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 7px; color: #fff; text-align: center; }
-.bbtypes { display: flex; gap: 6px; width: 100%; }
-.bbt { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 5px 2px; border-radius: 12px; background: rgba(255,255,255,.12); border: 2px solid rgba(255,255,255,.25); color: #fff; }
-.bbt b { font-size: .95rem; }
-.bbt small { font-size: .62rem; opacity: .8; }
-.bbt.on { background: linear-gradient(#ffe066, #ffa800); color: var(--ink); border-color: var(--ink); }
-.bbgrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; width: min(62vw, 220px); aspect-ratio: 5 / 4; padding: 4px; border-radius: 10px; background: rgba(0,0,0,.25); }
-.bbz { border-radius: 5px; background: rgba(255,255,255,.08); border: 1px dashed rgba(255,255,255,.25); }
-.bbz.in { background: rgba(255,255,255,.22); border: 1px solid rgba(255,255,255,.6); }
-.bbz:active { background: #ffe066; }
-.bbtip { font-size: .78rem; font-weight: 800; opacity: .85; line-height: 1.45; }
-.bbbig { font-size: 1.4rem; font-weight: 900; color: #ffe066; text-shadow: var(--ol-sm); animation: pulse .6s ease-in-out infinite alternate; }
-.bbwait { font-size: 1.05rem; font-weight: 900; }
-.bbwait .pe { height: 1.2em; }
 
-/* 全壘打大賽 3D:three.js 的畫布在下面,2D 畫布(記分板、字)疊在上面接點擊 */
-.play-baseball .bb3d { position: absolute; inset: 3px; width: calc(100% - 6px); height: calc(100% - 6px); border-radius: 11px; display: block; }
-.play-baseball.bb3 .tcv { position: relative; z-index: 1; }
-.play-baseball.bb3 .tov { z-index: 2; }
 
 /* 公車大塞車 3D:three.js 的畫布在下面,原本的 2D 畫布變透明、只用來接點擊 */
 .bgstage .bg3d { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
