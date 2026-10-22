@@ -5629,7 +5629,7 @@ function pkSession(LD, L, o) {
       <div class="pkjarea"><div class="pkjbase"><span class="pkjl l">◀</span><span class="pkjl r">▶</span><i class="pkjknob"></i></div><small>左右拖:轉方向</small>
         <button class="pkhorn" aria-label="喇叭">📯<small>叭</small></button></div>
       <div class="pkpeds"><button class="pkgo"><b>▲</b>前進</button><button class="pkrev"><b>▼</b>倒車</button></div></div>`;
-    const area = $('.pkjarea', pad), base = $('.pkjbase', pad), knob = $('.pkjknob', pad), hornB = $('.pkhorn', pad), R = 50;
+    const area = $('.pkjarea', pad), base = $('.pkjbase', pad), knob = $('.pkjknob', pad), hornB = $('.pkhorn', pad), R = 40;
     let jid = null, jx = 0;
     area.addEventListener('pointerdown', e => {
       e.preventDefault();

@@ -1895,9 +1895,9 @@ button:disabled { cursor: not-allowed; }
 /* 停車大師:單指搖桿 */
 .pkjarea { position: relative; flex: 1; min-width: 0; height: 128px; border-radius: 22px; background: rgba(255,255,255,.55); border: 3px dashed rgba(43,47,56,.25); touch-action: none; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 6px; }
 .pkjarea small { position: absolute; left: 10px; right: 10px; top: 4px; font-size: .6rem; font-weight: 800; opacity: .5; pointer-events: none; text-align: left; }
-.pkjbase { position: absolute; left: 44%; top: 62%; width: 150px; height: 64px; margin: -32px 0 0 -75px; border-radius: 999px; background: radial-gradient(circle, rgba(43,47,56,.1), rgba(43,47,56,.22)); border: 3px solid rgba(43,47,56,.35); pointer-events: none; opacity: .65; transition: opacity .15s; }
+.pkjbase { position: absolute; left: 42%; top: 52%; width: 116px; height: 116px; margin: -58px 0 0 -58px; border-radius: 50%; background: radial-gradient(circle, rgba(43,47,56,.1), rgba(43,47,56,.22)); border: 3px solid rgba(43,47,56,.35); pointer-events: none; opacity: .65; transition: opacity .15s; }
 .pkjbase.on { opacity: 1; transition: none; }
-.pkjknob { position: absolute; left: 50%; top: 50%; width: 58px; height: 58px; margin: -29px 0 0 -29px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #ffb36b, #ff7a1a); border: 3px solid var(--ink); box-shadow: 0 4px 0 rgba(0,0,0,.25); }
+.pkjknob { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #ffb36b, #ff7a1a); border: 3px solid var(--ink); box-shadow: 0 4px 0 rgba(0,0,0,.25); }
 .pkjl { position: absolute; font-size: .66rem; font-weight: 900; color: rgba(43,47,56,.6); white-space: nowrap; }
 .pkjl.l { left: 8px; top: 50%; transform: translateY(-50%); }
 .pkjl.r { right: 8px; top: 50%; transform: translateY(-50%); }
