@@ -37,7 +37,8 @@ const parLine = 'const PK_PAR = ' + JSON.stringify(pars) + '; // 三顆星的秒
 const saltLine = 'const PK_SALT = ' + JSON.stringify(api.PK_SALT) + '; // 每關的亂數種子(tools/park_levels.js 找不到留路的解法時會自動換)';
 const pathLine = 'const PK_PATH = ' + JSON.stringify(paths) + '; // 每關的自動解法(電腦玩家、教練示範用)';
 if (process.argv.includes('--write')) {
-  src = src.replace(/const PK_PAR = [^\n]*/, () => parLine).replace(/const PK_PATH = [^\n]*/, () => pathLine).replace(/const PK_SALT = [^\n]*/, () => saltLine);
-  fs.writeFileSync(file, src);
+  let cur = fs.readFileSync(file, 'utf8'); // 重新讀一次:解題跑很久,期間 game.js 如果改了不要蓋掉
+  cur = cur.replace(/const PK_PAR = [^\n]*/, () => parLine).replace(/const PK_PATH = [^\n]*/, () => pathLine).replace(/const PK_SALT = [^\n]*/, () => saltLine);
+  fs.writeFileSync(file, cur);
   console.log('已寫回 game.js');
 } else console.log('\n' + saltLine + '\n' + parLine + '\n' + pathLine);

@@ -2038,3 +2038,32 @@ button:disabled { cursor: not-allowed; }
 .cdmsg .pos { color: #7dffb0; }
 .cdmsg .neg { color: #ff8a8a; }
 .cdmsg .ffinal b { font-family: "Fredoka", var(--font); }
+
+/* ===== 專注力方格(舒爾特方格) ===== */
+.schseats { width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 7px; }
+.schwrap { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.schhead { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px; }
+.schtarget { padding: 4px 14px; border-radius: 999px; background: #fff; border: 3px solid var(--ink); box-shadow: 0 3px 0 var(--ink); font-weight: 900; color: var(--ink); font-size: .95rem; }
+.schtarget b { font: 900 1.5rem "Fredoka", var(--font); color: #7c5cff; margin-left: 4px; }
+.schtime { padding: 3px 12px; border-radius: 12px; background: #1b1530; color: #ffe066; font: 900 1.25rem "Fredoka", var(--font); letter-spacing: .02em; border: 2px solid #4a3a82; }
+.schboard { position: relative; flex: none; border-radius: 18px; background: linear-gradient(145deg, #5b3fd1, #3a2a8f); border: 3px solid var(--ink); box-shadow: 0 5px 0 var(--ink), inset 0 0 0 3px rgba(255,255,255,.12); padding: 6px; }
+.schgrid { width: 100%; height: 100%; display: grid; gap: 5px; }
+.sch { position: relative; min-width: 0; min-height: 0; padding: 0; border-radius: 12px; background: linear-gradient(#ffffff, #e9e4ff); color: #2b1f6b; font-family: "Fredoka", var(--font); font-weight: 900; border: 2px solid #b7a8ff; box-shadow: 0 3px 0 #7b66d6; touch-action: manipulation; }
+.sch:active { transform: translateY(2px); box-shadow: 0 1px 0 #7b66d6; }
+.sch.found { background: linear-gradient(#86e6a6, #3fbf78); color: rgba(255,255,255,.95); border-color: #2c9a5e; box-shadow: 0 1px 0 #2c9a5e; transform: translateY(2px); animation: schpop .25s ease-out; }
+.sch.found span { opacity: .55; }
+.sch.wrong { animation: shake .3s; background: linear-gradient(#ffd0d0, #ff8a8a); border-color: #e04848; }
+@keyframes schpop { 50% { transform: translateY(2px) scale(1.12); } }
+.schfoot { font-size: .8rem; font-weight: 800; color: rgba(255,255,255,.8); }
+.schmiss.bad { color: #ffb3b3; }
+.schmiss b { font-family: "Fredoka", var(--font); }
+.schrank { padding: 2px 14px; border-radius: 999px; background: #ffe066; color: var(--ink); font-weight: 900; border: 2px solid var(--ink); }
+.schrank b { font: 900 1.6rem "Fredoka", var(--font); }
+.schrank[data-r="S"] { background: linear-gradient(#fff2a8, #ffc933); }
+.play-schulte .pad { background: transparent; border: none; box-shadow: none; padding: 0 4px 6px; }
+.play-schulte .ffinal small { opacity: .75; font-size: .75rem; }
+.play-schulte { gap: 6px; }
+.play-schulte .stage { flex: none; padding: 0; background: transparent; border: none; box-shadow: none; overflow: visible; }
+.play-schulte .sin { gap: 0; }
+.play-schulte .pad { flex: 1; min-height: 0; display: flex; }
+.play-schulte .fseat { background: rgba(20,16,40,.82); }

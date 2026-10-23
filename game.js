@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.25';
+const APP_VERSION = '2026.11.27';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -506,7 +506,7 @@ const GAMES = [
   },
   {
     id: 'parking', emoji: '🅿️', name: '停車大對決', tag: '競速+3D', color: '#ff7a1a', desc: '3 局停車比賽,誰停得又快又準!',
-    rules: ['大家拿到同一個停車場,倒數完一起出發', '左邊搖桿指向要去的方向(上下左右是畫面上的方向),右邊按「前進」或「倒車」', '把車停進發光的格子,停穩就完成;撞車 +2 秒、撞鴨子 +3 秒、撞飛三角錐 +1 秒', '香蕉皮會讓車子轉圈圈,按「叭」可以催鴨子快走', '有些關卡會停電、方向盤裝反、或有阿姨來搶車位!', '3 局越來越難,時間最短的拿最多分'],
+    rules: ['大家拿到同一個停車場,倒數完一起出發', '左邊搖桿指向要去的方向(上下左右是畫面上的方向),右邊按「前進」或「倒車」', '把車停進發光的格子,停穩就完成;撞車 +2 秒、撞飛三角錐 +1 秒', '香蕉皮會讓車子轉圈圈;格子越來越窄,慢慢來', '有些關卡會停電、方向盤裝反、或有阿姨來搶車位!', '3 局越來越難,時間最短的拿最多分'],
     host: hParking, view: vParking, noCountdown: true,
   },
   {
@@ -518,6 +518,11 @@ const GAMES = [
     id: 'seven', emoji: '7️⃣', name: '排七', tag: '撲克+策略', color: '#c8102e', desc: '從 7 開始接龍,蓋牌點數最少的贏',
     rules: ['2~4 人,52 張牌全部發完,手牌只有自己看得到', '拿到 ♠7 的人先出 ♠7;之後每種花色都從 7 開始,往兩邊一張一張接(6、8、5、9…)', '能接就一定要出!一張都接不上,才要選一張「蓋牌」', '全部出完後,把自己蓋的牌點數加起來(A=1…J=11、Q=12、K=13)', '點數最少的人贏,所以大牌最好早點出掉'],
     host: hSeven, view: vSeven, noCountdown: true,
+  },
+  {
+    id: 'schulte', emoji: '🔢', name: '專注力方格', tag: '專注+競速', color: '#7c5cff', desc: '依序點 1、2、3…,比誰最快!',
+    rules: ['大家拿到同一張方格,裡面有 1 到最後一個數字,位置全部打亂', '倒數完一起開始,依序從 1 點到最後一個,越快越好', '點錯一次罰 0.5 秒,所以不要亂點!', '3 局越來越大:4×4、5×5、6×6,每局看你的速度還有等級(S 最厲害)', '每局第 1 名 5 分、第 2 名 3 分…,3 局總分最高的人贏'],
+    host: hSchulte, view: vSchulte, noCountdown: true,
   },
 ];
 const GAME = Object.fromEntries(GAMES.map(g => [g.id, g]));
@@ -5511,113 +5516,114 @@ const PK_THEMES = { // 地面、線、外圍
   street: { ground: '#868f9d', line: '#ffffff', out: '#cfd6df', name: '街道' },
 };
 // 100 關:版型、格子寬度(路邊停車是空位長度)、倒車入庫、障礙物和 KUSO 機關
-// thief:阿姨會來搶車位(倒數)、dark:停電只看得到車燈、inv:方向盤裝反、movers:走道上開來開去的車、bumps:減速丘
+// dark:停電只看得到車燈、inv:方向盤裝反、bananas:香蕉皮、bumps:減速丘、cones:三角錐、gate:格子門口兩個三角錐、st:從側邊出發
+// (不放會動的東西,難度靠格子越來越窄)
 const PK_PLAN = [
-  { k: 'open', sw: 4.0, t: 'school', name: '第一次停車', tip: '搖桿指向要去的方向(上下左右是畫面的方向),再按住「前進」' },
-  { k: 'open', sw: 3.6, side: 1, cones: 2, t: 'school', name: '右轉進格', tip: '先往前開,再把搖桿指向右邊' },
-  { k: 'row', sw: 3.3, cones: 2, t: 'day', name: '兩台車中間', tip: '車子要整台在白線裡面才算' },
-  { k: 'row', sw: 3.15, cones: 4, gate: 1, t: 'day', name: '三角錐陣', tip: '格子門口有三角錐,撞飛會扣時間' },
-  { k: 'row', sw: 3.3, rev: 1, t: 'school', name: '倒車入庫', tip: '考駕照!車頭要朝外;搖桿指向格子,按「倒車」往那邊倒進去' },
-  { k: 'row', sw: 3.05, bananas: 3, gate: 1, t: 'day', name: '香蕉皮警報', tip: '壓到香蕉皮會轉圈圈 🍌' },
-  { k: 'double', sw: 3.1, cones: 3, t: 'day', name: '繞一圈', tip: '格子在花台那排的另一邊,要繞過去' },
-  { k: 'row', sw: 3.0, ducks: 2, gate: 1, st: 1, t: 'day', name: '鴨子過馬路', tip: '小心鴨子!按「叭」可以催牠們快走' },
-  { k: 'parallel', gap: 7.2, cones: 2, bumps: 2, t: 'street', name: '路邊停車', tip: '黃黑條紋是減速丘,開太快會彈起來' },
-  { k: 'angled', sw: 3.0, carts: 1, t: 'day', name: '推車突擊', tip: '停車場裡有購物車自己在跑?!' },
-  { k: 'garage', sw: 2.95, cones: 2, t: 'garage', name: '地下停車場', tip: '柱子很硬,不要撞到' },
-  { k: 'row', sw: 3.0, thief: 1, cones: 2, t: 'day', name: '搶車位!', tip: '阿姨正要來搶這個車位,倒數完前停好!' },
-  { k: 'double', sw: 2.9, ducks: 1, bananas: 2, st: 1, t: 'day', name: '菜市場', tip: '阿嬤的推車跟鴨子都在路上' },
-  { k: 'row', sw: 2.85, rev: 1, cones: 5, gate: 1, t: 'school', name: '教練在看', tip: '倒車入庫+三角錐門,教練皺眉中' },
-  { k: 'parallel', gap: 6.7, ducks: 1, cones: 2, t: 'night', name: '夜市路邊', tip: '雞排攤前面的路邊車位!' },
-  { k: 'angled', sw: 2.9, carts: 2, gate: 1, t: 'day', name: '推車暴走', tip: '購物車自己在跑?!' },
-  { k: 'row', sw: 2.95, dark: 1, cones: 2, t: 'night', name: '停電了!', tip: '整個停車場停電,只看得到車燈照到的地方' },
-  { k: 'garage', sw: 2.85, rev: 1, cones: 2, t: 'garage', name: '柱子好多', tip: '倒車停進柱子旁邊' },
-  { k: 'double', sw: 2.8, crooked: 1, cones: 3, st: 1, t: 'day', name: '誰停歪了', tip: '旁邊的車都停得歪七扭八…' },
-  { k: 'row', sw: 2.9, inv: 1, cones: 2, t: 'school', name: '方向盤裝反了', tip: 'KUSO!這台車左右是相反的' },
-  { k: 'parallel', gap: 6.4, bananas: 3, cones: 2, t: 'street', name: '香蕉人行道', tip: '路邊怎麼一堆香蕉皮' },
-  { k: 'row', sw: 2.75, ducks: 2, carts: 1, gate: 1, st: 1, t: 'day', name: '動物園停車場', tip: '鴨子家族出遊中' },
-  { k: 'double', sw: 2.8, movers: 1, cones: 2, t: 'day', name: '阿伯倒車中', tip: '有台車在走道上開來開去,小心!' },
-  { k: 'garage', sw: 2.75, carts: 1, ducks: 1, gate: 1, t: 'garage', name: 'B3 迷宮', tip: '地下三樓為什麼會有鴨子' },
-  { k: 'angled', sw: 2.8, carts: 2, bumps: 2, t: 'day', name: '推車大軍', tip: '購物車開始巡邏了' },
-  { k: 'double', sw: 2.72, rev: 1, bananas: 2, cones: 2, t: 'day', name: '倒車大師', tip: '倒車入庫,而且要繞一圈' },
-  { k: 'parallel', gap: 6.3, thief: 1, cones: 2, t: 'night', name: '夜市搶車位', tip: '夜市車位超搶手,阿姨已經在路上了!' },
-  { k: 'angled', sw: 2.8, rev: 1, ducks: 2, cones: 2, t: 'school', name: '斜倒車', tip: '斜格子也要倒車入庫!' },
-  { k: 'garage', sw: 2.75, dark: 1, cones: 2, t: 'garage', name: '地下室停電', tip: '地下室一片黑…靠車燈找格子' },
-  { k: 'parallel', gap: 6.1, cones: 3, ducks: 1, t: 'night', name: '一次到位', tip: '空位越來越小了' },
-  { k: 'row', sw: 2.72, inv: 1, gate: 1, cones: 3, t: 'school', name: '反向駕訓班', tip: '方向盤又裝反了,教練不知道' },
-  { k: 'double', sw: 2.7, movers: 2, bumps: 2, st: 1, t: 'day', name: '下班尖峰', tip: '大家都在搶著出停車場' },
-  { k: 'garage', sw: 2.68, rev: 1, cones: 4, gate: 1, t: 'garage', name: '柱子+三角錐', tip: '地下室工程中' },
-  { k: 'angled', sw: 2.75, thief: 1, carts: 1, t: 'day', name: '週年慶搶位', tip: '百貨週年慶,阿姨們火力全開' },
-  { k: 'double', sw: 2.65, crooked: 1, ducks: 2, carts: 1, st: 1, t: 'day', name: '百貨週年慶', tip: '週年慶停車場,大家都瘋了' },
-  { k: 'parallel', gap: 5.95, ducks: 2, bananas: 2, cones: 2, t: 'night', name: '夜市大塞車', tip: '鴨子也來逛夜市' },
-  { k: 'row', sw: 2.65, carts: 3, gate: 1, t: 'day', name: '推車罷工', tip: '三台購物車在格子前面亂跑' },
-  { k: 'garage', sw: 2.65, dark: 1, rev: 1, t: 'garage', name: '停電倒車', tip: '黑漆漆的還要倒車入庫…' },
-  { k: 'double', sw: 2.65, thief: 1, movers: 1, cones: 2, t: 'day', name: '搶位大作戰', tip: '阿伯在倒車、阿姨在搶位,你在哭' },
-  { k: 'row', sw: 2.62, rev: 1, crooked: 1, cones: 6, gate: 1, t: 'school', name: '駕照魔王考', tip: '過了這關直接發駕照' },
-  { k: 'angled', sw: 2.68, inv: 1, ducks: 2, t: 'day', name: '反向斜格', tip: '方向盤相反+斜格子+鴨子' },
-  { k: 'garage', sw: 2.6, carts: 2, bananas: 2, gate: 1, st: 1, t: 'garage', name: '地下城', tip: '推車、香蕉皮、柱子…這是什麼地城' },
-  { k: 'parallel', gap: 5.9, bumps: 3, movers: 1, t: 'street', name: '減速丘大街', tip: '減速丘一條接一條' },
-  { k: 'double', sw: 2.6, carts: 2, ducks: 2, cones: 2, t: 'day', name: '動物推車樂園', tip: '鴨子騎在購物車上?!' },
-  { k: 'row', sw: 2.6, dark: 1, thief: 1, gate: 1, t: 'night', name: '停電搶車位', tip: '停電了阿姨還是照搶' },
-  { k: 'garage', sw: 2.58, inv: 1, rev: 1, cones: 3, t: 'garage', name: '反向地下城', tip: '方向盤相反還要倒車入庫,加油' },
-  { k: 'double', sw: 2.58, rev: 1, ducks: 3, carts: 1, crooked: 1, cones: 2, t: 'day', name: '鴨子大軍', tip: '鴨子們占領了停車場' },
-  { k: 'angled', sw: 2.62, movers: 2, carts: 1, bananas: 2, t: 'day', name: '混亂停車場', tip: '什麼東西都在動' },
-  { k: 'parallel', gap: 5.85, thief: 1, ducks: 2, bananas: 2, t: 'night', name: '夜市終極搶位', tip: '最後一個夜市車位!' },
-  { k: 'double', sw: 2.55, rev: 1, ducks: 2, carts: 2, bananas: 2, cones: 3, thief: 1, t: 'day', name: '終極停車王', tip: '全部機關一次來,停進去你就是停車之神' },
+  { k: 'open', sw: 3.55, t: 'school', name: '第一次停車', tip: '搖桿指向要去的方向(上下左右是畫面的方向),再按住「前進」' },
+  { k: 'open', sw: 3.19, side: 1, cones: 2, t: 'school', name: '右轉進格', tip: '先往前開,再把搖桿指向右邊' },
+  { k: 'row', sw: 2.92, cones: 2, t: 'day', name: '兩台車中間', tip: '車子要整台在白線裡面才算' },
+  { k: 'row', sw: 2.79, cones: 4, gate: 1, t: 'day', name: '三角錐陣', tip: '格子門口有三角錐,撞飛會扣時間' },
+  { k: 'row', sw: 2.92, rev: 1, t: 'school', name: '倒車入庫', tip: '考駕照!車頭要朝外;搖桿指向格子,按「倒車」往那邊倒進去' },
+  { k: 'row', sw: 2.69, bananas: 3, gate: 1, t: 'day', name: '香蕉皮警報', tip: '壓到香蕉皮會轉圈圈 🍌' },
+  { k: 'double', sw: 2.74, cones: 3, t: 'day', name: '繞一圈', tip: '格子在花台那排的另一邊,要繞過去' },
+  { k: 'row', sw: 2.65, gate: 1, st: 1, t: 'day', name: '直排 窄門 窄格', tip: '格子寬 2.65 公尺(車寬 1.9)', cones: 1 },
+  { k: 'parallel', gap: 6.4, cones: 2, bumps: 2, t: 'street', name: '路邊停車', tip: '黃黑條紋是減速丘,開太快會彈起來' },
+  { k: 'angled', sw: 2.65, t: 'day', name: '斜格 窄格', tip: '格子寬 2.65 公尺(車寬 1.9)', cones: 1 },
+  { k: 'garage', sw: 2.61, cones: 2, t: 'garage', name: '地下停車場', tip: '柱子很硬,不要撞到' },
+  { k: 'row', sw: 2.65, cones: 3, t: 'day', name: '直排 窄格', tip: '格子寬 2.65 公尺(車寬 1.9)' },
+  { k: 'double', sw: 2.56, bananas: 2, st: 1, t: 'day', name: '雙排 香蕉 窄格', tip: '格子寬 2.56 公尺(車寬 1.9),小心香蕉皮', cones: 1 },
+  { k: 'row', sw: 2.52, rev: 1, cones: 5, gate: 1, t: 'school', name: '教練在看', tip: '倒車入庫+三角錐門,教練皺眉中' },
+  { k: 'parallel', gap: 6.03, cones: 3, t: 'night', name: '路邊 標準位', tip: '空位長 6.0 公尺(車長 4.4)' },
+  { k: 'angled', sw: 2.56, gate: 1, t: 'day', name: '斜格 窄門 窄格', tip: '格子寬 2.56 公尺(車寬 1.9)', cones: 1 },
+  { k: 'row', sw: 2.61, dark: 1, cones: 2, t: 'night', name: '停電了!', tip: '整個停車場停電,只看得到車燈照到的地方' },
+  { k: 'garage', sw: 2.52, rev: 1, cones: 2, t: 'garage', name: '柱子好多', tip: '倒車停進柱子旁邊' },
+  { k: 'double', sw: 2.47, crooked: 1, cones: 3, st: 1, t: 'day', name: '誰停歪了', tip: '旁邊的車都停得歪七扭八…' },
+  { k: 'row', sw: 2.56, inv: 1, cones: 2, t: 'school', name: '方向盤裝反了', tip: 'KUSO!這台車左右是相反的' },
+  { k: 'parallel', gap: 5.8, bananas: 3, cones: 2, t: 'street', name: '香蕉人行道', tip: '路邊怎麼一堆香蕉皮' },
+  { k: 'row', sw: 2.43, gate: 1, st: 1, t: 'day', name: '直排 窄門 超窄格', tip: '格子寬 2.43 公尺(車寬 1.9)', cones: 2 },
+  { k: 'double', sw: 2.47, cones: 3, t: 'day', name: '雙排 超窄格', tip: '格子寬 2.47 公尺(車寬 1.9)' },
+  { k: 'garage', sw: 2.43, gate: 1, t: 'garage', name: '地下室 窄門 超窄格', tip: '格子寬 2.43 公尺(車寬 1.9)', cones: 1 },
+  { k: 'angled', sw: 2.47, bumps: 2, t: 'day', name: '斜格 減速丘 超窄格', tip: '格子寬 2.47 公尺(車寬 1.9),減速丘慢慢過', cones: 1 },
+  { k: 'double', sw: 2.4, rev: 1, bananas: 2, cones: 2, t: 'day', name: '倒車大師', tip: '倒車入庫,而且要繞一圈' },
+  { k: 'parallel', gap: 5.73, cones: 3, t: 'night', name: '路邊 窄位', tip: '空位長 5.7 公尺(車長 4.4)' },
+  { k: 'angled', sw: 2.47, rev: 1, cones: 3, t: 'school', name: '斜格 倒車 超窄格', tip: '格子寬 2.47 公尺(車寬 1.9),倒車入庫' },
+  { k: 'garage', sw: 2.43, dark: 1, cones: 2, t: 'garage', name: '地下室停電', tip: '地下室一片黑…靠車燈找格子' },
+  { k: 'parallel', gap: 5.58, cones: 4, t: 'night', name: '路邊 窄位', tip: '空位長 5.6 公尺(車長 4.4)' },
+  { k: 'row', sw: 2.4, inv: 1, gate: 1, cones: 3, t: 'school', name: '反向駕訓班', tip: '方向盤又裝反了,教練不知道' },
+  { k: 'double', sw: 2.38, bumps: 2, st: 1, t: 'day', name: '雙排 香蕉·減速丘 超窄格', tip: '格子寬 2.38 公尺(車寬 1.9),小心香蕉皮,減速丘慢慢過', cones: 2, bananas: 1 },
+  { k: 'garage', sw: 2.36, rev: 1, cones: 4, gate: 1, t: 'garage', name: '柱子+三角錐', tip: '地下室工程中' },
+  { k: 'angled', sw: 2.43, t: 'day', name: '斜格 超窄格', tip: '格子寬 2.43 公尺(車寬 1.9)', cones: 2 },
+  { k: 'double', sw: 2.33, crooked: 1, st: 1, t: 'day', name: '雙排 歪車 針孔格', tip: '格子寬 2.33 公尺(車寬 1.9)', cones: 2 },
+  { k: 'parallel', gap: 5.46, bananas: 2, cones: 3, t: 'night', name: '路邊 香蕉 針孔位', tip: '空位長 5.5 公尺(車長 4.4),小心香蕉皮' },
+  { k: 'row', sw: 2.33, gate: 1, t: 'day', name: '直排 窄門 針孔格', tip: '格子寬 2.33 公尺(車寬 1.9)', cones: 2 },
+  { k: 'garage', sw: 2.33, dark: 1, rev: 1, t: 'garage', name: '停電倒車', tip: '黑漆漆的還要倒車入庫…' },
+  { k: 'double', sw: 2.33, cones: 4, t: 'day', name: '雙排 香蕉 針孔格', tip: '格子寬 2.33 公尺(車寬 1.9),小心香蕉皮', bananas: 1 },
+  { k: 'row', sw: 2.31, rev: 1, crooked: 1, cones: 6, gate: 1, t: 'school', name: '駕照魔王考', tip: '過了這關直接發駕照' },
+  { k: 'angled', sw: 2.36, inv: 1, t: 'day', name: '斜格 反向 超窄格', tip: '格子寬 2.36 公尺(車寬 1.9),方向盤裝反', cones: 1 },
+  { k: 'garage', sw: 2.29, bananas: 2, gate: 1, st: 1, t: 'garage', name: '地下室 香蕉·窄門 針孔格', tip: '格子寬 2.29 公尺(車寬 1.9),小心香蕉皮', cones: 1 },
+  { k: 'parallel', gap: 5.43, bumps: 3, t: 'street', name: '路邊 減速丘 針孔位', tip: '空位長 5.4 公尺(車長 4.4),減速丘慢慢過', cones: 1 },
+  { k: 'double', sw: 2.29, cones: 4, t: 'day', name: '雙排 香蕉 針孔格', tip: '格子寬 2.29 公尺(車寬 1.9),小心香蕉皮', bananas: 1 },
+  { k: 'row', sw: 2.29, dark: 1, gate: 1, t: 'night', name: '直排 停電·窄門 針孔格', tip: '格子寬 2.29 公尺(車寬 1.9),停電看車燈', cones: 1 },
+  { k: 'garage', sw: 2.27, inv: 1, rev: 1, cones: 3, t: 'garage', name: '反向地下城', tip: '方向盤相反還要倒車入庫,加油' },
+  { k: 'double', sw: 2.27, rev: 1, crooked: 1, cones: 4, t: 'day', name: '雙排 倒車·香蕉 針孔格', tip: '格子寬 2.27 公尺(車寬 1.9),倒車入庫,小心香蕉皮', bananas: 1 },
+  { k: 'angled', sw: 2.31, bananas: 3, t: 'day', name: '斜格 香蕉 針孔格', tip: '格子寬 2.31 公尺(車寬 1.9),小心香蕉皮', cones: 3 },
+  { k: 'parallel', gap: 5.39, bananas: 3, t: 'night', name: '路邊 香蕉 針孔位', tip: '空位長 5.4 公尺(車長 4.4),小心香蕉皮', cones: 2 },
+  { k: 'double', sw: 2.25, rev: 1, bananas: 3, cones: 6, t: 'day', name: '雙排 倒車·香蕉 針孔格', tip: '格子寬 2.25 公尺(車寬 1.9),倒車入庫,小心香蕉皮' },
   // ---- 第 51~100 關:單數關開卡車連結車(車頭拖著貨櫃,倒車會折刀),雙數關是更難的轎車 ----
-  { k: 'dock', sw: 5.0, truck: 1, t: 'day', name: '第一次開卡車', tip: '卡車後面拖著貨櫃,車身超長!轉彎要轉大一點,停進最長的格子' },
-  { k: 'double', sw: 2.54, ducks: 2, bumps: 2, cones: 2, t: 'day', name: '百貨公司開幕', tip: '卡車開完換回轎車,小心鴨子' },
-  { k: 'dock', sw: 4.6, truck: 1, cones: 2, t: 'day', name: '貨櫃碼頭', tip: '整台車(車頭加車廂)都要停進格子裡才算' },
-  { k: 'garage', sw: 2.54, dark: 1, carts: 1, t: 'garage', name: '黑暗地下室', tip: '停電的地下室,靠車燈找路' },
-  { k: 'tpar', gap: 14, truck: 1, cones: 2, t: 'street', name: '路邊停卡車', tip: '卡車也要路邊停車,空位有 14 公尺長' },
-  { k: 'angled', sw: 2.56, rev: 1, thief: 1, t: 'day', name: '斜倒搶位', tip: '斜格子倒車入庫,阿姨在倒數' },
-  { k: 'alley', sw: 4.8, truck: 1, t: 'day', name: '轉進小巷', tip: '貨櫃位在左邊,車身長,要先往右拉開再轉進去' },
-  { k: 'parallel', gap: 5.75, ducks: 2, bananas: 2, cones: 2, t: 'night', name: '夜市大遊行', tip: '鴨子、香蕉皮全都上街了' },
-  { k: 'dock', sw: 4.4, truck: 1, rev: 1, t: 'school', name: '倒車入庫:卡車版', tip: '貨櫃尾巴朝格子倒進去!倒車時要讓「車廂」對準,車頭會先偏一邊' },
-  { k: 'row', sw: 2.54, inv: 1, rev: 1, gate: 1, cones: 4, t: 'school', name: '反向倒車考', tip: '方向盤裝反,還要倒車入庫' },
-  { k: 'dock', sw: 4.4, truck: 1, bananas: 2, gate: 1, t: 'day', name: '香蕉滑倒大貨車', tip: '大卡車壓到香蕉皮也會轉圈圈' },
-  { k: 'double', sw: 2.52, movers: 2, carts: 1, t: 'day', name: '尖峰時段', tip: '走道上的車跟推車都在動' },
-  { k: 'alley', sw: 4.4, truck: 1, rev: 1, t: 'night', name: '小巷倒貨櫃', tip: '往左邊的貨櫃位倒車,車廂先進去' },
-  { k: 'garage', sw: 2.54, inv: 1, bananas: 2, gate: 1, t: 'garage', name: '反向地下道', tip: '左右反了,地上還有香蕉皮' },
-  { k: 'tpar', gap: 13.4, truck: 1, ducks: 1, t: 'street', name: '鴨子擋路', tip: '路邊停卡車,還有鴨子在走道上' },
-  { k: 'angled', sw: 2.54, dark: 1, carts: 2, t: 'garage', name: '停電推車', tip: '黑暗中有購物車亂跑' },
-  { k: 'dock', sw: 4.2, truck: 1, rev: 1, cones: 3, t: 'school', name: '三角錐碼頭', tip: '倒車入庫,旁邊還有三角錐' },
-  { k: 'parallel', gap: 5.7, thief: 1, bumps: 3, t: 'street', name: '減速丘搶位', tip: '減速丘慢慢過,阿姨在倒數' },
-  { k: 'alley', sw: 4.4, truck: 1, ducks: 2, cones: 2, t: 'day', name: '鴨子大巷', tip: '小巷裡有一家鴨子在散步' },
-  { k: 'double', sw: 2.52, rev: 1, ducks: 3, carts: 2, t: 'day', name: '動物園倒車', tip: '倒車入庫,到處都是鴨子和推車' },
-  { k: 'dock', sw: 4.2, truck: 1, rev: 1, dark: 1, t: 'night', name: '停電卡車', tip: '黑漆漆的還要倒貨櫃' },
-  { k: 'row', sw: 2.52, dark: 1, rev: 1, gate: 1, cones: 5, t: 'night', name: '黑暗倒車考', tip: '停電+倒車+三角錐門' },
-  { k: 'tpar', gap: 13, truck: 1, bananas: 2, cones: 2, t: 'street', name: '香蕉路邊', tip: '路邊停卡車,路上一堆香蕉皮' },
-  { k: 'garage', sw: 2.52, movers: 1, carts: 2, thief: 1, t: 'garage', name: '地下室大亂鬥', tip: '車在倒、推車在跑、阿姨在搶' },
-  { k: 'dock', sw: 4.0, truck: 1, rev: 1, thief: 1, t: 'day', name: '搶貨櫃位', tip: '阿姨也想要這個貨櫃位,倒數中!' },
-  { k: 'angled', sw: 2.52, inv: 1, rev: 1, ducks: 2, t: 'day', name: '反向斜倒', tip: '左右相反,斜格子倒車' },
-  { k: 'alley', sw: 4.0, truck: 1, rev: 1, carts: 1, t: 'day', name: '推車擋巷', tip: '倒貨櫃的時候有購物車經過' },
-  { k: 'parallel', gap: 5.65, dark: 1, ducks: 2, bananas: 2, t: 'night', name: '黑夜路邊', tip: '停電的夜市路邊' },
-  { k: 'dock', sw: 4.0, truck: 1, rev: 1, inv: 1, t: 'school', name: '方向盤裝反的卡車', tip: 'KUSO!卡車的左右是相反的,還要倒車' },
-  { k: 'double', sw: 2.5, rev: 1, movers: 2, bananas: 2, cones: 3, t: 'day', name: '雙重倒車', tip: '倒車入庫,走道上的車也在倒' },
-  { k: 'tpar', gap: 12.8, truck: 1, carts: 2, t: 'street', name: '推車擋路', tip: '路邊停卡車,購物車在亂跑' },
-  { k: 'row', sw: 2.5, thief: 1, carts: 3, gate: 1, rev: 1, t: 'day', name: '搶位推車', tip: '推車擋在格子前,阿姨在倒數' },
-  { k: 'alley', sw: 4.1, truck: 1, rev: 1, cones: 3, t: 'night', name: '三角錐小巷', tip: '倒貨櫃,巷子裡散落著三角錐' },
-  { k: 'garage', sw: 2.5, dark: 1, inv: 1, rev: 1, t: 'garage', name: '黑暗反向地城', tip: '停電+方向盤裝反+倒車' },
-  { k: 'dock', sw: 3.9, truck: 1, rev: 1, ducks: 2, bananas: 2, t: 'day', name: '動物園貨運站', tip: '鴨子和香蕉皮一起來' },
-  { k: 'angled', sw: 2.5, movers: 2, thief: 1, ducks: 2, t: 'day', name: '週年慶終結者', tip: '週年慶最後一天,什麼都在動' },
-  { k: 'tpar', gap: 12.6, truck: 1, thief: 1, dark: 1, t: 'night', name: '黑夜搶位', tip: '停電的路邊,阿姨還是來搶' },
-  { k: 'parallel', gap: 5.6, inv: 1, thief: 1, bumps: 3, t: 'street', name: '反向路邊搶位', tip: '左右相反,還要搶時間' },
-  { k: 'dock', sw: 3.8, truck: 1, rev: 1, carts: 2, gate: 1, t: 'day', name: '推車貨運站', tip: '倒貨櫃,推車在入口亂跑' },
-  { k: 'double', sw: 2.5, dark: 1, rev: 1, carts: 2, ducks: 2, t: 'night', name: '停電大亂鬥', tip: '黑暗中倒車,鴨子和推車都在' },
-  { k: 'alley', sw: 3.8, truck: 1, rev: 1, inv: 1, t: 'day', name: '反向小巷', tip: '卡車倒車入巷,左右還是反的' },
-  { k: 'row', sw: 2.5, inv: 1, rev: 1, dark: 1, gate: 1, cones: 6, t: 'night', name: '地獄駕訓班', tip: '教練已經逃走了' },
-  { k: 'dock', sw: 3.7, truck: 1, rev: 1, gate: 1, cones: 4, t: 'school', name: '貨櫃魔王考', tip: '倒貨櫃,入口兩邊都是三角錐' },
-  { k: 'garage', sw: 2.5, rev: 1, thief: 1, carts: 2, bananas: 3, t: 'garage', name: '地下城魔王', tip: '推車、香蕉皮、阿姨…' },
+  { k: 'dock', sw: 4.49, truck: 1, t: 'day', name: '第一次開卡車', tip: '卡車後面拖著貨櫃,車身超長!轉彎要轉大一點,停進最長的格子' },
+  { k: 'double', sw: 2.24, bumps: 2, cones: 3, t: 'day', name: '雙排 減速丘 針孔格', tip: '格子寬 2.24 公尺(車寬 1.9),減速丘慢慢過' },
+  { k: 'dock', sw: 4.15, truck: 1, cones: 2, t: 'day', name: '貨櫃碼頭', tip: '整台車(車頭加車廂)都要停進格子裡才算' },
+  { k: 'garage', sw: 2.24, dark: 1, t: 'garage', name: '地下室 停電 針孔格', tip: '格子寬 2.24 公尺(車寬 1.9),停電看車燈', cones: 1 },
+  { k: 'tpar', gap: 13.07, truck: 1, cones: 2, t: 'street', name: '路邊停卡車', tip: '卡車也要路邊停車,空位有 14 公尺長' },
+  { k: 'angled', sw: 2.25, rev: 1, t: 'day', name: '斜格 倒車 針孔格', tip: '格子寬 2.25 公尺(車寬 1.9),倒車入庫', cones: 1 },
+  { k: 'alley', sw: 4.32, truck: 1, t: 'day', name: '轉進小巷', tip: '貨櫃位在左邊,車身長,要先往右拉開再轉進去' },
+  { k: 'parallel', gap: 5.31, bananas: 2, cones: 3, t: 'night', name: '路邊 香蕉 針孔位', tip: '空位長 5.3 公尺(車長 4.4),小心香蕉皮' },
+  { k: 'dock', sw: 3.98, truck: 1, rev: 1, t: 'school', name: '倒車入庫:卡車版', tip: '貨櫃尾巴朝格子倒進去!倒車時要讓「車廂」對準,車頭會先偏一邊' },
+  { k: 'row', sw: 2.24, inv: 1, rev: 1, gate: 1, cones: 4, t: 'school', name: '反向倒車考', tip: '方向盤裝反,還要倒車入庫' },
+  { k: 'dock', sw: 3.98, truck: 1, bananas: 2, gate: 1, t: 'day', name: '香蕉滑倒大貨車', tip: '大卡車壓到香蕉皮也會轉圈圈' },
+  { k: 'double', sw: 2.22, t: 'day', name: '雙排 香蕉 針孔格', tip: '格子寬 2.22 公尺(車寬 1.9),小心香蕉皮', cones: 3, bananas: 1 },
+  { k: 'alley', sw: 3.98, truck: 1, rev: 1, t: 'night', name: '小巷倒貨櫃', tip: '往左邊的貨櫃位倒車,車廂先進去' },
+  { k: 'garage', sw: 2.24, inv: 1, bananas: 2, gate: 1, t: 'garage', name: '反向地下道', tip: '左右反了,地上還有香蕉皮' },
+  { k: 'tpar', gap: 12.65, truck: 1, t: 'street', name: '卡車路邊 長位', tip: '空位長 12.7 公尺(卡車連車廂 11.2)', cones: 1 },
+  { k: 'angled', sw: 2.24, dark: 1, t: 'garage', name: '斜格 停電 針孔格', tip: '格子寬 2.24 公尺(車寬 1.9),停電看車燈', cones: 1 },
+  { k: 'dock', sw: 3.81, truck: 1, rev: 1, cones: 3, t: 'school', name: '三角錐碼頭', tip: '倒車入庫,旁邊還有三角錐' },
+  { k: 'parallel', gap: 5.28, bumps: 3, t: 'street', name: '路邊 減速丘 針孔位', tip: '空位長 5.3 公尺(車長 4.4),減速丘慢慢過', cones: 1 },
+  { k: 'alley', sw: 3.98, truck: 1, cones: 3, t: 'day', name: '小巷 標準位', tip: '貨櫃位寬 3.98 公尺(卡車寬 2.5)' },
+  { k: 'double', sw: 2.22, rev: 1, t: 'day', name: '雙排 倒車·香蕉 針孔格', tip: '格子寬 2.22 公尺(車寬 1.9),倒車入庫,小心香蕉皮', cones: 3, bananas: 1 },
+  { k: 'dock', sw: 3.81, truck: 1, rev: 1, dark: 1, t: 'night', name: '停電卡車', tip: '黑漆漆的還要倒貨櫃' },
+  { k: 'row', sw: 2.22, dark: 1, rev: 1, gate: 1, cones: 5, t: 'night', name: '黑暗倒車考', tip: '停電+倒車+三角錐門' },
+  { k: 'tpar', gap: 12.37, truck: 1, bananas: 2, cones: 2, t: 'street', name: '香蕉路邊', tip: '路邊停卡車,路上一堆香蕉皮' },
+  { k: 'garage', sw: 2.22, t: 'garage', name: '地下室 香蕉 針孔格', tip: '格子寬 2.22 公尺(車寬 1.9),小心香蕉皮', cones: 3, bananas: 1 },
+  { k: 'dock', sw: 3.64, truck: 1, rev: 1, t: 'day', name: '貨櫃碼頭 倒車 窄位', tip: '貨櫃位寬 3.64 公尺(卡車寬 2.5),倒車入庫', cones: 1 },
+  { k: 'angled', sw: 2.22, inv: 1, rev: 1, t: 'day', name: '斜格 倒車·反向 針孔格', tip: '格子寬 2.22 公尺(車寬 1.9),倒車入庫,方向盤裝反', cones: 1 },
+  { k: 'alley', sw: 4.0, truck: 1, rev: 1, t: 'day', name: '小巷 倒車 窄位', tip: '貨櫃位寬 4.00 公尺(卡車寬 2.5),倒車入庫', cones: 1 },
+  { k: 'parallel', gap: 5.24, dark: 1, bananas: 2, t: 'night', name: '路邊 停電·香蕉 針孔位', tip: '空位長 5.2 公尺(車長 4.4),停電看車燈,小心香蕉皮', cones: 1 },
+  { k: 'dock', sw: 3.64, truck: 1, rev: 1, inv: 1, t: 'school', name: '方向盤裝反的卡車', tip: 'KUSO!卡車的左右是相反的,還要倒車' },
+  { k: 'double', sw: 2.2, rev: 1, bananas: 3, cones: 5, t: 'day', name: '雙排 倒車·香蕉 針孔格', tip: '格子寬 2.20 公尺(車寬 1.9),倒車入庫,小心香蕉皮' },
+  { k: 'tpar', gap: 12.8, truck: 1, t: 'street', name: '卡車路邊 短位', tip: '空位長 12.8 公尺(卡車連車廂 11.2)', cones: 1 },
+  { k: 'row', sw: 2.2, gate: 1, rev: 1, t: 'day', name: '直排 倒車·香蕉 針孔格', tip: '格子寬 2.20 公尺(車寬 1.9),倒車入庫,小心香蕉皮', cones: 3, bananas: 1 },
+  { k: 'alley', sw: 4.2, truck: 1, rev: 1, cones: 1, t: 'night', name: '三角錐小巷', tip: '倒貨櫃,巷子裡散落著三角錐' },
+  { k: 'garage', sw: 2.2, dark: 1, inv: 1, rev: 1, t: 'garage', name: '黑暗反向地城', tip: '停電+方向盤裝反+倒車' },
+  { k: 'dock', sw: 3.55, truck: 1, rev: 1, bananas: 2, t: 'day', name: '貨櫃碼頭 倒車·香蕉 窄位', tip: '貨櫃位寬 3.55 公尺(卡車寬 2.5),倒車入庫,小心香蕉皮', cones: 1 },
+  { k: 'angled', sw: 2.2, t: 'day', name: '斜格 香蕉 針孔格', tip: '格子寬 2.20 公尺(車寬 1.9),小心香蕉皮', cones: 3, bananas: 1 },
+  { k: 'tpar', gap: 12.6, truck: 1, dark: 1, t: 'night', name: '卡車路邊 停電 短位', tip: '空位長 12.6 公尺(卡車連車廂 11.2),停電看車燈', cones: 1 },
+  { k: 'parallel', gap: 5.2, inv: 1, bumps: 3, t: 'street', name: '路邊 反向·減速丘 針孔位', tip: '空位長 5.2 公尺(車長 4.4),方向盤裝反,減速丘慢慢過', cones: 1 },
+  { k: 'dock', sw: 3.47, truck: 1, rev: 1, gate: 1, t: 'day', name: '貨櫃碼頭 倒車·窄門 窄位', tip: '貨櫃位寬 3.47 公尺(卡車寬 2.5),倒車入庫', cones: 1 },
+  { k: 'double', sw: 2.2, dark: 1, rev: 1, t: 'night', name: '雙排 倒車·停電 針孔格', tip: '格子寬 2.20 公尺(車寬 1.9),倒車入庫,停電看車燈,小心香蕉皮', cones: 2, bananas: 1 },
+  { k: 'alley', sw: 4.0, truck: 1, rev: 1, inv: 1, t: 'day', name: '反向小巷', tip: '卡車倒車入巷,左右還是反的' },
+  { k: 'row', sw: 2.2, inv: 1, rev: 1, dark: 1, gate: 1, cones: 6, t: 'night', name: '地獄駕訓班', tip: '教練已經逃走了' },
+  { k: 'dock', sw: 3.38, truck: 1, rev: 1, gate: 1, cones: 4, t: 'school', name: '貨櫃魔王考', tip: '倒貨櫃,入口兩邊都是三角錐' },
+  { k: 'garage', sw: 2.2, rev: 1, bananas: 3, t: 'garage', name: '地下室 倒車·香蕉 針孔格', tip: '格子寬 2.20 公尺(車寬 1.9),倒車入庫,小心香蕉皮', cones: 2 },
   { k: 'tpar', gap: 12.4, truck: 1, rev: 1, t: 'street', name: '倒車進路邊', tip: '卡車倒車進路邊的空位,最難的路邊停車' },
-  { k: 'angled', sw: 2.5, inv: 1, dark: 1, rev: 1, t: 'garage', name: '黑暗反向斜倒', tip: '停電、左右反、斜格子、倒車' },
-  { k: 'dock', sw: 3.7, truck: 1, rev: 1, dark: 1, thief: 1, t: 'night', name: '停電搶貨櫃', tip: '黑暗中倒貨櫃,阿姨在倒數' },
-  { k: 'parallel', gap: 5.6, rev: 1, dark: 1, thief: 1, ducks: 2, t: 'night', name: '路邊倒車大魔王', tip: '停電的路邊倒車入庫,時間有限' },
-  { k: 'alley', sw: 3.6, truck: 1, rev: 1, dark: 1, inv: 1, t: 'night', name: '終極拖板車', tip: '停電、方向盤裝反、卡車倒車入巷,祝你好運' },
-  { k: 'double', sw: 2.5, rev: 1, dark: 1, inv: 1, thief: 1, ducks: 3, carts: 3, bananas: 3, cones: 4, t: 'night', name: '百關終極停車王', tip: '所有機關全部一起來!停進去你就是停車之神' },
+  { k: 'angled', sw: 2.2, inv: 1, dark: 1, rev: 1, t: 'garage', name: '黑暗反向斜倒', tip: '停電、左右反、斜格子、倒車' },
+  { k: 'dock', sw: 3.38, truck: 1, rev: 1, dark: 1, t: 'night', name: '貨櫃碼頭 倒車·停電 窄位', tip: '貨櫃位寬 3.38 公尺(卡車寬 2.5),倒車入庫,停電看車燈', cones: 1 },
+  { k: 'parallel', gap: 5.2, rev: 1, dark: 1, t: 'night', name: '路邊 倒車·停電 針孔位', tip: '空位長 5.2 公尺(車長 4.4),倒車入庫,停電看車燈,小心香蕉皮', cones: 2, bananas: 1 },
+  { k: 'alley', sw: 4.0, truck: 1, rev: 1, dark: 1, inv: 1, t: 'night', name: '終極拖板車', tip: '停電、方向盤裝反、卡車倒車入巷,祝你好運' },
+  { k: 'double', sw: 2.2, rev: 1, dark: 1, inv: 1, bananas: 3, cones: 6, t: 'night', name: '雙排 倒車·停電 針孔格', tip: '格子寬 2.20 公尺(車寬 1.9),倒車入庫,停電看車燈,方向盤裝反,小心香蕉皮' },
 ];
-const PK_SALT = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,32,0,0,0,1,0,0,0,5,0,0,0,0,0,28,0,1,0,0,0,0,0,5,0,0,0,0,0,0,0,4,5]; // 每關的亂數種子(tools/park_levels.js 找不到留路的解法時會自動換)
-const PK_PAR = [10,10,11,11,17,11,19,12,12,11,16,11,15,17,15,11,11,18,16,11,16,12,17,18,11,18,14,16,17,15,11,15,19,11,19,16,11,17,19,17,11,14,14,18,11,22,18,13,14,18,10,18,11,14,26,17,21,15,34,17,13,18,59,20,32,13,37,17,64,21,34,19,38,16,39,16,51,16,39,21,36,17,50,16,38,11,41,17,37,18,61,18,37,19,39,16,36,15,67,26]; // 三顆星的秒數(照自動解法算的)
-const PK_PATH = ["cccccccccccccccccccccccccccccccccccc","edcccaaaddccdcddedaabddadeeeeeeeeee","cdcccccccccccbbdccccccceccdcccccccdecaaa","cccdecccccccccccccbcccccccccccbccccbcccb","cbcccccccccccccccccceedddaaaaaaaaaaaaaaaajijjjjjjijhf","ccccdcccccccccccccccccdccccdebcccbcccba","eeeffffedcddbabaaeaaaabcbaccbccccccbcbaaaacccccbaaaabeeeeedeeee","aaaaaaaaabcccccccccbcccccccccccbcccccbcccd","eeedcccccccccdcceebaaaabaacajjfhfff","cccccccccccccccccccccccccccababceeeeeeee","eeeeeeccccccaabcaadabcbccaababbaabaaaaajjaaabaaa","ccccccccccccccccccccccccccccccccccccccc","cdcbadccbccbbdbacebabbaaaaccbbcacccbcccbaccccbcccacbaedeee","cccccbcccccdccecccdecdaaaaaaaaaaaajjjjjijjhjjjjhihhg","eecddeeeecaaaabbccbcbcbccdcccedaaaaajjhfffec","ccccccccccccccccccccabaabcedbeeeedddeeccd","cccccccccccccccccdebbcccbcccccccbccccbd","jaaaaaccececcccecebbeeaddeededeedeeeeecaaaaajjijjjihihf","aaajjjaacbaaabdccccddcccdcccceedcccccceebebdaaaaa","ccccccdccccccccccccccccdcccccccdcceebaaa","eedccabbcccccdacccaecccaaaaaajijjjjjihhijjjjjjj","aaaaaaaaaccccccccccccbcccccccccccbccccbccb","jaaaaaccdcdcbeedccdedcddceedccdebeeeeeeeeeffeeeeeed","aaaaaacccdbeeeeeddccccecccaeeeeddddeeeedcbaajjjjjjiijihhgg","cccccccccccccccccccccccccababcceeeeedece","jaaaaaaacdedeeeedcdccecccbeeceeeeedeeeeabaaaajijjjjhhig","eeeccccccccccccccccccdcccaaaaadajjjfffee","cccccccccccccccccccededcaaaaaaaaaaaaaajjijjjjhhigff","aaaaaaacccdeeeecdbedebadedeeeeeeeeeeeabaaaajjjjjjihhf","eeecccccccccccccccccdcccaabaadcbajjigfffe","bcccccccccccbcccccccccccccbbaccccdcedccd","cdcbcccccccccaabbbbbcadaaaacccbbbccccbccbaaccccaaaaceeeeedcce","habaaaaacdccceeeeeddcccdcccccceeeeeeedeeeeffgfhffffgfghjgh","ccccccccccccccccccccccccccababceeeeeecee","aaaijaaaaaacaacccdedcccdbceeeedeeeeeecdbaaaajjjjjjjhhf","feeccccccccccccccccdccccabaaadcbajjifgffe","ccccccccccccccccccccccccdccceccccbcccbc","aaaababdcccddecceeeeacdcceeeeedeeeeeeaaaaajjjijjjiihf","fedddeedcccdeaaaaabcbbbccbcaaaaaaccaaaabbeeeedfffffhfgfhj","ccccccccccccccabaabceeeeeeeedeeeeeefffffffffgfhhhhhi","ccccccccccccccccccccccccccababceeeeeecee","aacccccccddcacbbccbccbaaaaaaacccccccccccccaadcdccdccde","eeeecceecdaaacaeccabbaaccaajijffffe","gdedeeedcccddcaaaaacabccebbaaaabaaaaabbceeeeegfffffifhhj","ccccccccccccccccccccccccdccceccccbccbcc","feeedeeacccbcaaaaaacdcccdcbccccabccaaaabababaaajjjijjjjajhggh","feeeeeccbcbcdaabccbabcbbcaaacbbaabbaaabeeeeefgfffffhjhj","cccccccccccccccccccccccccccababeeeeebeeeg","eeedccccdeebacabcdabbcbbaccaajjjfffffd","jabbababbbcceceeedcedbdcdcdeeeeebeeeeecaaacbajjjjjjhhihf","cccccccccccccccccccccccccccccccccc","jabbababbbcceceeedcedbdcdcdeeeeebeeeeeeaaabaajjjjjjhhhfh","cccccccccccccedeeceedeaaaaabaabcccce","feddeeeccccbcaaaaabccccbccccccccccbbaaeedccec","eeedcdeeecccbaabaabbbaaaabaabaaabaacddeegghffhjijijjjhigihhfffeeffeeeff","ccccccccccdcccccbbaaeeedeeddeeeeeeeefffffffgffffffg","ccedeeceedecdaaedaaaabdabbaaaaahjjaajaaadbaaaaacdaabacdeeeg","eedcccdccccccddcccbadccccaaabcccaajjigfgffe","edeeceedeaaaaabaabajiijjaaaaabaaiaaaaaaaaaaaaaaaaaaabbceeefgffhhhfgfffhhjhjihhhhjhjjajgihhh","bcccccccccccaaacbaddeeedeeeeedeeeeefffffffffgffhhijfh","ccedeaaabajcacccdcccdcccdcdcddcedeacc","jabbababbbcceceeedcedbdcdeeddeeddeeeddccaaaajjjjijiihf","aahjbbahjiaaabaacaeeeegffffeeffhhhjjjjjjjjijjcaajjijjhjijijijjiaajijihiihjijihffffghhjjjhhhggjjhiijjjjjjajajjaacijjhhhhhgff","jaaacaacccddceeeeeccababedeeeeedeeedccajajcbabcbccbcc","eecbaabbacdcaeccccaddcacbccbdeedcefgfjfgijjjijjjjjjijjbjjjjjhjijjijijajijijjjbbj","ccccccccccdccccccccccccccdcccaaddeedbddef","edeeceedeaaaaaaajjjihhffffffffgfdffgffeffffffffgfffeeefggffhhhfgffhjjhhhhhhhhfghfhhjjj","eecccccccdcccccccedeaaaacaaaaaaaaajjjjjijjjjijja","edeeeggdeeefgjjihjjjjjjjjjjababaabeceeeeffhijjjjjijjjijjjjjijabjjjjhiijhjijijijibaijjihhhfffghhhhhighhhhjjihgighfefefefeefeeedeeeeeeedabbaj","aajjibaaabddedbeceeeddccdeccccccdcecccccdeeeeeeeeeedffffffgffhhh","edeeegfffeeeebaaabaaaaabaaaajjijaababaaaabaaaaaaaaabaaaaaaaaccbccdeefffhfhjfihhhjjhihjijjijijigffgf","dcccccceebbaaaaaaaaaajjjjjijjhhiijhjjjgjjjjgffffhhhhi","acaaedebabaabcccedeeddfhfhjhfjhhhhjjjjjjjaiijjjjjjjjjjcaaacajhijjiihjjhhfffhfhhiiffgjjaajja","eeeeeecbcccaaacdcabacbcabcbaaabaaaabceeeeffffgffhhhj","edeeceeeeeedbaaaajhjjjjhhhfffffffffffffgffcefffffgfffffdedfffghgfffgffgjhhgjhjhihhhijjijjbjhhf","ccccccccccdccccccccedeadabaaaaaaaaaaajjjiijjjiihgff","cccabijijiaabaaaaacbeeeegfffffghhijjijjjjijjjjjjjjijjjjjijcbaajijhhhijhhjhhhhfgijijhhfhjhhjjjjajiajbijcajjjjhhfff","eedccccccccccbbccccccceedccbabaabccaajiijffffe","edeeceeeeeedbaaaajhjjjjhhhfffffffffffffgffcefffffgffffffeeedffhhhfhghihggefhhfhihiihjjjjjihihh","feeeeeeecbabaaaabcbccccbcdbbcccbaaaabbaaaaaaadeeeeeffgfffffghhhjh","eeecccdcbabcabcccaaababeecbaabcccedeehfgfgfjjihjjjjjjijjjjjjijjjjihhijabajjajbjaja","dcccccccccccccccdceeababaaaaaabaajjjjjijjjjjijjhhhhg","ccccabijijjjibbaaaaaaceeeeeegffffffhjjjijjjjjijjcaajjjhjjjjjijjajjhhhhfiijihhgijjijibajjhhhhhhijjjjjjajajjhhff","aaaaaaccdcceeeddccdddcccdedeeeeeeedaaaaajjjjijhhhfg","cabijbbaabbbbcdeeeeeeffffeeeeeeeeeeeeeeeeeeefeeeeeeeeeeccbcaajjjhjhihhjjhjhhhgghfffhhfgffgeehhhij","ccccccccccdcccccccccccccaaaaeeeeeeecdaee","eeeccababaaccbadeddcaccaccddeeeffhhhhijjijjjijjijjjjjjijjjjajijijajihhhjbjbjciajc","eeeccccccceddaabaaaaaaaaaajjjijjjjjjhijaj","ccedeeegffgjjjijhhjjjjaabaabdeeeeeeddeeffeeeeeeeeeeeeeeeeeedeeeeeeeedcbaaaijijhjhhjjhfffghgffhfghhhhfhhhhhhhh","feeeeeccbcbcdaabccbabcbbcaaacbbaaabaabbeeeeefffhffhfhhj","cccabijijiaabaabccbaceeedfffffhhhhjjjijjjjjjjijjjjjiaajjiijhijjhhijjhhijaihjhhhfhfjhhiihiheedajjjjjfedahhgeecbajjijijaajjjjihgffedbaj","ccccccccccccebbcccccbceeeeeedeeeeffhggfffffgfhffihhih","ccedeeegffgjjjijhhjjjjaabaabdeeeeeeddeeffeeedeeeeeeeeeeeeeeeeeeeeeeccabaaaiijjghhhhhfhhfghhfgffhghfhfhhhijhhh","jaaabaccccbddeeeeecccccddccccccdddcceeeeeeeeeeefffffhfgffi","eeeccccdccbabcacbcaaacaacdbcccacceceeeffgfjjihjhjjjjijjijjjijjihijjjijcaajjajbjajcjb","cccccccccccccccccccccedeaaabbaaaaaaaaabajijjjjhihffg","cajjbbaabbccccccbdceceffgffhfjhjjjjjjjjiacjjjjjjijijjjaajijjjjjjijjhhhghhhhhfgfhhhhhhhh","eeedccccdccaabaaaaaaaajjjjijjjjjjijja","edeeeggdecbeeedgffgjjjjjjjjcijjjjjcajjjijjjjjjijjjjjjjijjjjjjbajjicabjhiihhhhfgfggjijhijjijhhhhfedaajjihihjajajbjcjijcbjhhhhhff","feeeeefffgffffgffffhhhhhiffghhfghighhhggghffifffgffgjjjjjjjjjjhf"]; // 每關的自動解法(電腦玩家、教練示範用)
+const PK_SALT = [0,0,0,0,0,0,2,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,0,0,0,0,0,0,0,0,2,0,0,0,2,5,0,0,11,0,0,0,1,1,0,0,0,0,0,0,0,7,1,0,1,0,0,51,2,0,0,4,1,0,0,40,0,1,7,26,0,91,20,1,0,25,2,0,0,42,0,0,24,25,0,0,0,60,5]; // 每關的亂數種子(tools/park_levels.js 找不到留路的解法時會自動換)
+const PK_PAR = [10,10,11,11,17,11,18,12,14,13,18,11,20,18,16,11,11,22,16,11,18,12,18,20,12,18,15,17,16,15,11,19,19,13,19,17,11,16,18,17,13,25,14,19,11,19,21,13,17,29,12,22,10,17,25,17,32,19,35,18,13,22,56,22,52,14,36,17,60,22,32,20,42,18,35,17,70,19,35,29,26,18,52,17,35,14,40,18,40,21,59,19,37,32,32,16,37,19,52,25]; // 三顆星的秒數(照自動解法算的)
+const PK_PATH = ["cccccccccccccccccccccccccccccccccccc","edcccaaaddccdcddedaabddadeeeeeeeeee","cccccdccccccccbcccccdccdcccccdceeeaaabbb","dccceccccccccccccccccccccccccbcccccbccbc","cccccbccccccccccabaacecceeeeeeeeeeeeeffffgfffffgffhj","dccccccccccccdccccccccccccddecccccabbccb","feeeeeeecbabaaaabcbcdcacbccaaaaaabbaaaceeeeeffffffhhij","aaaaaaaaaaccccccccccccccccccbccbcccccccccc","eeeccdcccceecabbccccaacacaaajjifffee","cccccccccccccccccccccccccccababeeeeebeeeg","gdedeeedccccbaabacbbdbbcbcaabbaaaaaaaadceeeeffgffgfgfj","ccccccccccccccccccccccccdcccccceebaebab","aaaajjabaaaabbbddcdcccdecceeeddbeeeeeeebcaabajjjjjjjihfi","dcedeedcbccbbaabcccccaaaabdcbaaaaaajijjjjjijjhjjihhhhh","eecceeceedacaaabcccbbcbccdccccebaaacaajjfffgfe","ccccccccccdcccccccbaaacadeeeeeddcccdedcdc","ccccccccccccccccccccccccdccccceebbaccbc","jaaaaaaacdedcfffeeeccabdcabedbddeedeeddeeeeecaaaajjjjijjighf","aaajjjaacbaacaaeccccecccccdcceedceeeeeaaaaaabdbba","dccccccccccccccdccccccccccccddeecaabcbca","eedccabbcccccdacccaecccaaaaaajijjjjjihhjjjjjhjja","aaaaaaaaaccccccccccccccbccccccccccbcccbccb","jabbababbbcceceeedcedbdcdcdeeeeeedddeddaaaaajjjjjihhhhf","aaaaaaccecccedecececdcccceceedddeedeeedbaaajjjjaijhhighjfh","ccccccccccccccccccccaaaabaebdeeedeeeddcee","feddededddccacaaabcabdbcbcbaaaaaaacaabbceeeeegffffffhji","eedcccdcdccccccccccadccccaaaccccbajjjfggffd","cccccccccccdccccccccccedeeeeeeeeeffffffffgffffffhhh","aaaaaadccdcccdddeeeeccceedadeeeeeeeebaaaajjjjjjihhhf","eeecccccccccccccccccccdcabaaadcbajjigfffe","acccccccccccccccccaaabdcccceeeecccccccdcb","aaaijaaaaaacaacbecdbddedbceeeeeecceeecaaaaajijjjjhhhfh","aaaaabccccdcecdcceceddcadeecddeeedceeecddeeeaaaajjjjjjjijhhhhg","cccbcccccccccccccccccccccaabedbdceeedcbdeff","aaaijaaaaaacaacbecdbddedbceeeceeeeeeecbcaaabjjjjjjjihf","caadddadddeedeeeeeeaccabaaaabadbccajjjjifffef","ccccccccccbaddccccccdccccccceccccccbccb","aaaaaacdeccdeebbcbdedeeeeedceceeeeecdaaaajjijjjjigh","gdedeeeccdecbbbabaacbbbabdcaaaadaaaaaabceeeeefgffffhhhh","cccddbcccccccedcccbcabbacbaaaaaabaaaaajjjijjhjjihhhgh","ccccccccccccdccccccccccccdccabaeeeeccbcedfg","aaaaabeceeeefffgfggffffffghhhhhgjhgfhfhffhffhhhhjjajabcccbcbcb","eeedcccdcceebaadccaaaaccccaajjiigfffe","jaaaaaccaddedbeedeccdcdcdeaeedeeceeeeecbaaaajjjgjjgjhhhg","cccccccccceecccbcbcccccccbccccccbcccccb","feeeeeedbbdaaaabdabdbacbccababbacaaaaaaadcdeeeeefgffghffhi","jaaaaaccddccccedcededbdcdccaddccdeeeeeeeeeeeeedaaaaajjjjjjjhjjjfhg","ccccccccccccdcccccccccccccbabaeeeeedbdcdef","eeecbbacccccccceeeabaaaabbaaajjjjgfgffffffeg","feeedeefffffffgfghhhhhffgfggghfihhighhhhhhhhhigjacccefffffgijijjjhhg","cccccccccccccccedeeccccccbabccaabadccf","jaaaaaaacdedeeeedbecdcbcddcceedeeeeeeeddabaaaajgigjjcjjjhfgi","ccccccccccccccedeeedebaaaccacaabcdeb","eeeeeeeccaccaaabbbbcbebabbabaabbaaaacbeeeeffffhffhhhi","eeeecccceccccbcaaaacbcccaacabbaabaaaaabcceefghghhhihhhhhhhhhhhgfgffefee","cccccccccccccdccccedddcabbaaaabaaaaaaajijhjjjjhjhfgf","ceffeceedeecdcaaaaaabaaaaajfiiffecdcabbbbacjjiaajagaabbbcbbccaaababaeeeeg","eedcccccdaaaaaaabaajjjjjjjjjjjjjigfgffjhijaj","ccajjbbaaabccbddeeeeeefffgeeeeeeeeeeeeeeeeeeeefeeddedeedeecbaabahjijjjjfhhgffhfggffhhfgfhhhhij","bccccccbcccccaaeeeeeeeeeeeefffffgfgiffffhhjfhgfhhhhi","ccedeaaabajcacccdccdccdccdcddeeeccdba","eeffgdeeedbbaccacaaabbccbcbcaccecbcacdaabaaababbbbaaaaaajjaaacccccb","edeeceeefffjjjjjjjjjjijabaabcabbdeeeehfhfiihjjijhijjjijjjaaaajjjjihhgfihjjijjihijjhijjijjihhhhhffgjghijihjhjjjjjajajaijcaihjihhhff","jaaaaaabddbeeeeeececcccccccceeddcdcccdeeeeededeefffefeecccccdcd","eedecdeeeccbabaaabaabaabbabijbaacdccacedeccdeeeffihjjjijjjjhijjbaaacjjijjfhghffffffcffeecegffeaaaijjhfeeffdfdfe","ccccccccccccccccccccccabaabcedbeeeeecccecefgi","edeeceedeaaaaaaajjjihhffffffffgfdffgffeffffffffgfffeeefggffhhhfgffhjjhhhhhhgggfhjjhj","eeccccccccdccccccccccccdcbccccbcaaadcbajjihfgfef","cccabijijjaaaiaaaaaceeeeegfffffffhjjjijjjjjjiabajijjhijijjhjijijijabjjijhhhhhhijjhhhhfgijhijjijajjajaihaijhhhhffeeccbajhih","eeffgdeeedbbabdacaaabbccbaccccccbccedbaaaabaaaaaaaabjjjjjjijjihhg","edeeceeeeeedbaaaaaajijjjjaaaccaaaaaaaaaaaaaaaaajaaaaaaabaacccdeedffffffhiijjhjijjihjjhhhhfghh","dcccccbbaabaaaaajjjijjjjjjjihfgijjjhihjfhgghhhhhhhhhi","acaaedebabaabccccceeeeegfhjhfjhhhjijjjjjijjajjjhjjijjcaacabjijjjhhhhhhhhiiffghhhgjjbjbjaia","aaaaaaadcccdeeeedcbeaedaddcdcdedeeeeddeeeeeeefffeeeccdcccd","cajjbbaabaaadeeeeeeeeffhiihjijjjjihijjjjjjjjjjjijjjcaaajijiijjjjijjhhiijjjhffffhhhhhjfffhh","cccccccccccccdccccccccedeeeeeeeeeffffffffgffffffgig","ccccabijijjjaaaaaadedcdeceeffffhghhjhjijijjjjjjjijjcaaajjijhhjijjjjhhhffjjjjijhajjgfgfhfjjjjjjfheedaajjjhjijcbajijcjihhhhffeeeecbajjjcjabjcccceehfhjjhhh","eeccdcccccccccbbcccccceedccbabaabccccajjjfhhgfdfd","cajjbbaabaaadeeeeeeeeeffhgeeeeeeeefeedeededeeeeeeeeeeeeeeedcaaajjjijjhhhhjhhffggffhfhhhhhhhgfj","aajjibaaabddecceceeeddccdeccccccbeefeedcecceeeeecccccaaajjijajjjhjhhfb","eeeeeeddddcccbaaabababcaaaacccaaaababcacaaaaeeggghgghgihgffihhgfggfefef","dccccceeeacccbdcdddbaabaaaaaaaaaaajjjjijjjjjjhhhihhhg","cccabijijiaabaaaaacbeeeeffggfffhhijijjjjjjijjjjjjjijjbbjjjjjjhhijjhaiihiihiifggijjjhhhhjgajjhffeebabajiiiijjbabjhhhh","aaaabaaccccceeedceecbddeceecddeeeeeecaaabbjjjjjjifhhh","edeeceeecbaaaaaajjjihhffffffffgffcefffgffffffgffffffffgceeefffgfgffjijijjhijhhhhhhhhgffhj","ccccccbccccccdcdccccccdcccaabddeeedcccdddeghi","eedccdeeedeeedbbaacbababaaaabcjjaajaaaaabaaabhjbabdefgffgfjgihgfdeegffefcfefe","eeeccccccdccccccccdccaaaacccaajjijfffdfdg","ccccccajjiijjjgfffffffdeeedeadaaaaacaabbajjhbaabaaaaaajbababaaaaaaaaaaacccddeeefffhihhjhiijjhhhhhhjjhhhjgjhhhhhhh","aajjibaaabddecceceeeddccdeccccccddeeeeeeeeeeccbaaaaaaijjijiihhhg","cccabijijiaabaaaaacbeeeeffefhfffhhjjjjijjjjaajijjijijijjjajjhhiiiijjijhhfjjjijhhhhhhhjjjjijajajbjjjcbjjhhhhgfdfgeb","ccccaacdeeeeeeeeeeeffffffghfhhggfffggffijjhhjhhghhhh","ccedeeegffgjjjijhhjjjjaabcaacbeeeeeeedeeegfeeeeeeeeeeeeeeedeeeeeeeeeeeccbaabjjjihhhijihffhhgfgffhhgfhhhhhhhhh","feeedeefffffffgfjffffffghhhhighfhhhhhhhhffeefffgfeefgffffefffhhhh","eeeccccdbabcabaabaaabbacedecceeeffgfgijjjjjjjijjjjjjijjjjjjaajijjgiijjajaha","ccccccccccccccccccccededcaaaaaaaaaaaacaaajijjjjhhhff","ccajjbbaaabccbddeeeeefffihhjjjjjjijjjjjijjjjjjijjjjjjaajjjjiiaccjhhhhijhhhjhhgfgffgfhfhhji","eeedcedcbcdaaaaaaaaaaaajjjjjjjijjhijajbh","ccccabijijjjaaaaaadeeeeeeefffghhhjjijjjjjjjijjijjjjaajiijjhijhhhjjjjjjhhiiijhihhgihhhhhjijjjajajajjhabjhhhhgiffe","eeffgdeedcebbaadbaaabbccbacccccbcdcccebaaaaaahbbbaaaaaaaajijjjjjghhh"]; // 每關的自動解法(電腦玩家、教練示範用)
 const pkWrap = a => { while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI) a += Math.PI * 2; return a; };
 const PK_UP = -Math.PI / 2, PK_DOWN = Math.PI / 2;
 
@@ -7067,6 +7073,171 @@ function vSeven(V) {
   new ResizeObserver(() => { if (st && T.hand.isConnected) render(); }).observe(T.hand);
 }
 
+
+/* =========================================================
+   專注力方格 🔢(舒爾特方格 Schulte Table):方格裡有 1~N×N 打亂的數字,依序從 1 點到最後一個,越快越好
+   大家拿到同一張方格比速度(2~4 人)。3 局越來越大:4×4、5×5、6×6;點錯一次罰 0.5 秒
+   第 1 名 5 分、第 2 名 3 分、第 3 名 2 分、第 4 名 1 分
+   ========================================================= */
+const SCH = { SIZES: [4, 5, 6], T: [60, 90, 120], PTS: [5, 3, 2, 1], PEN: 500, S: { 4: 14, 5: 24, 6: 38 } };
+const schRank = (ms, size) => { // 等級:S 是專注力很強(5×5 約 24 秒內),依方格大小換算
+  const base = SCH.S[size] * 1000;
+  return ms <= base ? ['S', '太神啦!'] : ms <= base * 1.4 ? ['A', '很棒!'] : ms <= base * 2 ? ['B', '不錯喔'] : ['C', '繼續加油'];
+};
+const schTime = ms => { const s = Math.floor(ms / 1000), c = Math.floor(ms % 1000 / 10); return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}.${String(c).padStart(2, '0')}`; };
+
+function hSchulte(H) {
+  let round = 0, phase = 'idle', size = 4, N = 16, tok = 0, t0 = 0;
+  const tot = {}, ps = {};
+  H.players.forEach(s => { tot[s] = 0; });
+  function startRound() {
+    round++;
+    size = SCH.SIZES[round - 1]; N = size * size;
+    const grid = shuffle(Array.from({ length: N }, (_, i) => i + 1));
+    H.players.forEach(s => { ps[s] = { k: 0, miss: 0, done: 0, ms: 0 }; });
+    phase = 'cd';
+    H.bc({ t: 'g', e: 'prep', rd: round, R: SCH.SIZES.length, n: size });
+    H.countdown(() => {
+      phase = 'play';
+      t0 = Date.now();
+      H.bc({ t: 'g', e: 'round', rd: round, R: SCH.SIZES.length, n: size, grid, T: SCH.T[round - 1], order: H.players });
+      const my = ++tok;
+      H.s.after(SCH.T[round - 1] * 1000, () => { if (my === tok && phase === 'play') endRound(); });
+    });
+  }
+  const finishers = () => H.players.filter(s => ps[s].done).sort((a, b) => ps[a].ms - ps[b].ms);
+  function endRound() {
+    phase = 'rend'; tok++;
+    const fin = finishers(), pts = {};
+    fin.forEach((s, k) => { pts[s] = SCH.PTS[k] || 1; tot[s] += pts[s]; });
+    H.players.forEach(s => { H.scores[s] = tot[s]; });
+    H.bc({ t: 'score', scores: H.scores });
+    H.bc({ t: 'g', e: 'rend', rd: round, n: size, fin, pts, tot, ms: Object.fromEntries(fin.map(s => [s, ps[s].ms])), miss: Object.fromEntries(H.players.map(s => [s, ps[s].miss])), found: Object.fromEntries(H.players.map(s => [s, ps[s].k])), N, last: round >= SCH.SIZES.length });
+    H.s.after(4800, () => (round >= SCH.SIZES.length ? H.finish() : startRound()));
+  }
+  const allDone = () => H.active().every(s => ps[s] && ps[s].done);
+  return {
+    start() { startRound(); },
+    input(slot, m) {
+      const p = ps[slot];
+      if (phase !== 'play' || !p || p.done || m.e !== 'p') return;
+      if (+m.k !== p.k + 1) return; // 一定要依序,一次一個
+      p.k++;
+      p.miss = Math.max(0, Math.min(99, +m.miss || 0));
+      if (p.k >= N) { p.done = Date.now(); p.ms = Math.max(1000, p.done - t0) + p.miss * SCH.PEN; }
+      H.bc({ t: 'g', e: 'p', s: slot, k: p.k, done: p.done ? finishers().indexOf(slot) + 1 : 0, ms: p.ms, miss: p.miss });
+      if (allDone()) H.s.after(900, () => { if (phase === 'play') endRound(); });
+    },
+    presence() { if (phase === 'play' && allDone()) endRound(); },
+  };
+}
+
+function vSchulte(V) {
+  const me = V.me;
+  let size = 4, N = 16, grid = [], next = 1, miss = 0, live = false, t0 = 0, endAt = 0, timerT = null, others = {}, order = [], myMs = 0, tiles = [];
+  V.stage('<div class="schseats"></div>');
+  V.pad.innerHTML = `
+    <div class="schwrap">
+      <div class="schhead"><span class="schtarget">目前目標 <b>1</b></span><span class="schtime">00:00.00</span></div>
+      <div class="schboard"><div class="schgrid"></div><div class="cover"></div></div>
+      <div class="schfoot"><span class="schmiss">點錯 <b>0</b> 次(每次 +0.5 秒)</span></div>
+    </div>`;
+  const wrap = $('.schwrap', V.pad), board = $('.schboard', V.pad), gridEl = $('.schgrid', V.pad), cover = $('.cover', board);
+  const targetEl = $('.schtarget b', V.pad), timeEl = $('.schtime', V.pad), missEl = $('.schmiss b', V.pad), seatsEl = $('.schseats', V.root);
+  const fit = () => {
+    if (!board.isConnected) { ro.disconnect(); return; }
+    const avail = wrap.clientHeight - $('.schhead', wrap).offsetHeight - $('.schfoot', wrap).offsetHeight - 14;
+    board.style.width = board.style.height = Math.max(180, Math.floor(Math.min(wrap.clientWidth, avail))) + 'px';
+  };
+  const ro = new ResizeObserver(fit);
+  ro.observe(V.pad);
+  const who = s => (s === me ? '你' : esc(pinfo(s).name));
+  const total = () => N;
+
+  function renderSeats() {
+    seatsEl.innerHTML = order.map(s => {
+      const p = pinfo(s), o = others[s] || { k: 0 };
+      const tag = o.done ? `<em class="fwin">${['🥇', '🥈', '🥉', '🎀'][o.done - 1]}</em>` : '';
+      return `<div class="fseat${s === me ? ' me' : ''}${p.online ? '' : ' off'}" data-s="${s}" style="--pc:${p.color}">
+        <span class="fnm">${p.emoji}<b>${who(s)}</b></span>${tag}
+        <span class="fpg"><i style="width:${Math.round((o.k || 0) / total() * 100)}%"></i></span><small>${o.done ? schTime(o.ms) : (o.k || 0) + ' / ' + total()}</small></div>`;
+    }).join('');
+  }
+  function build() {
+    gridEl.style.gridTemplateColumns = `repeat(${size}, 1fr)`;
+    gridEl.innerHTML = grid.map(n => `<button class="sch" data-n="${n}" style="font-size:${size === 4 ? 2.1 : size === 5 ? 1.7 : 1.35}rem"><span>${n}</span></button>`).join('');
+    tiles = $$('.sch', gridEl);
+  }
+  function upd() {
+    targetEl.textContent = next > N ? '完成!' : next;
+    missEl.textContent = miss;
+    $('.schmiss', V.pad).classList.toggle('bad', miss > 0);
+  }
+  function tap(btn) {
+    if (!live || btn.classList.contains('found')) return;
+    const n = +btn.dataset.n;
+    if (n === next) {
+      btn.classList.add('found');
+      beep(380 + (next / N) * 520, 0.05, 'triangle', 0.1);
+      next++;
+      V.send({ e: 'p', k: next - 1, miss });
+      others[me] = { ...(others[me] || {}), k: next - 1 };
+      upd(); renderSeats();
+      if (next > N) { live = false; clearInterval(timerT); SFX.good(); buzz([30, 30, 60]); }
+    } else {
+      miss++;
+      btn.classList.remove('wrong'); void btn.offsetWidth; btn.classList.add('wrong');
+      beep(150, 0.12, 'square', 0.1); buzz(35);
+      upd();
+    }
+  }
+  gridEl.addEventListener('pointerdown', e => { const b = e.target.closest('.sch'); if (b) { e.preventDefault(); tap(b); } });
+
+  V.countdown = k => { // 倒數顯示在方格上,先把數字蓋住(不能偷看)
+    cover.innerHTML = k > 0 ? `<div class="big cdn pulse">${k}</div>` : '<div class="big cdn go">GO!</div>';
+    cover.classList.add('on');
+    if (k > 0) SFX.tick(); else SFX.go();
+  };
+  V.on = m => {
+    if (m.e === 'prep') {
+      size = m.n; N = size * size; live = false; next = 1; miss = 0; grid = []; gridEl.innerHTML = ''; clearInterval(timerT);
+      cover.innerHTML = `<div class="big">🔢</div><div>第 ${m.rd} / ${m.R} 局 · ${size}×${size}</div><div class="small">依序點 1 到 ${N},越快越好!點錯 +0.5 秒</div>`;
+      cover.classList.add('on');
+      timeEl.textContent = '00:00.00'; upd();
+    } else if (m.e === 'round') {
+      size = m.n; N = size * size; grid = m.grid; order = m.order; next = 1; miss = 0; others = {};
+      order.forEach(s => { others[s] = { k: 0 }; });
+      live = order.includes(me);
+      build(); fit(); upd(); renderSeats();
+      cover.classList.remove('on');
+      t0 = performance.now(); endAt = t0 + m.T * 1000;
+      clearInterval(timerT);
+      timerT = setInterval(() => { if (!board.isConnected) return clearInterval(timerT); if (live) timeEl.textContent = schTime(performance.now() - t0 + miss * SCH.PEN); }, 50);
+      if (!live) toast('觀戰中');
+    } else if (m.e === 'p') {
+      const o = others[m.s] || (others[m.s] = {});
+      if (m.s !== me) o.k = m.k;
+      o.done = m.done; o.ms = m.ms;
+      if (m.s === me && m.done) {
+        myMs = m.ms; live = false; clearInterval(timerT); timeEl.textContent = schTime(m.ms);
+        const [rk, msg] = schRank(m.ms, size);
+        cover.innerHTML = `<div class="big">${['🥇', '🥈', '🥉', '🎀'][m.done - 1]}</div><div>完成!第 ${m.done} 名</div><div class="schrank" data-r="${rk}">等級 <b>${rk}</b> ${msg}</div><div class="small">${schTime(m.ms)}${m.miss ? `(含點錯罰時 ${(m.miss * SCH.PEN / 1000).toFixed(1)} 秒)` : ''}</div>`;
+        setTimeout(() => cover.classList.add('on'), 700);
+        if (m.done === 1) SFX.win();
+      } else if (m.s !== me && m.done) beep(990, 0.1, 'sine', 0.1);
+      renderSeats();
+    } else if (m.e === 'rend') {
+      live = false; clearInterval(timerT);
+      const rows = Object.keys(m.tot).map(Number).sort((a, b) => m.tot[b] - m.tot[a]).map(s => {
+        const k = m.fin.indexOf(s);
+        return `<span>${k >= 0 ? ['🥇', '🥈', '🥉', '🎀'][k] : '💤'} ${pinfo(s).emoji} ${s === me ? '你' : esc(pinfo(s).name)} <small>${k >= 0 ? schTime(m.ms[s]) : `找到 ${m.found[s]}/${m.N}`}</small> <b>${k >= 0 ? `+${m.pts[s]}` : '+0'}</b><i>共 ${m.tot[s]} 分</i></span>`;
+      }).join('');
+      cover.innerHTML = `<div class="small">第 ${m.rd} 局結果</div><div class="ffinal">${rows}</div><div class="small">${m.last ? '比賽結束!' : '下一局方格更大…'}</div>`;
+      cover.classList.add('on');
+    }
+  };
+}
+
 /* =========================================================
    電腦玩家的行為:聽到房主的廣播,就像真人一樣送出操作
    ========================================================= */
@@ -7480,6 +7651,19 @@ BOTS.seven = (H, s, m, k) => {
   if (m.e !== 'st' || m.done || m.intro || m.turn !== s) return;
   const id = ++st.tok;
   H.s.after(Math.round(rand(800, 1500) * k.spd), () => { if (st.tok === id) botSend(H, s, sevChoose(st.hand, m.board, m.first, 1 - k.sk)); });
+};
+
+/* 專注力方格的電腦:每隔一小段時間「點」下一個數字,越強越快;弱的偶爾會點錯 */
+BOTS.schulte = (H, s, m, k) => {
+  if (m.t !== 'g' || m.e !== 'round' || !m.order.includes(s)) return;
+  const N = m.n * m.n, st = H.bs[s] = { rd: m.rd }, per = rand(850, 1250) * k.spd * (1.3 - k.sk * 0.5) * (1 + m.n * 0.04);
+  let t = rand(500, 1200), miss = 0;
+  for (let i = 1; i <= N; i++) {
+    t += per * (0.8 + Math.random() * 0.45);
+    if (Math.random() < (1 - k.sk) * 0.05) miss++;
+    const mm = miss;
+    H.s.after(Math.round(t), () => { if (H.bs[s] === st) botSend(H, s, { e: 'p', k: i, miss: mm }); });
+  }
 };
 
 /* ---------- 防止雙指縮放 / 長按選單 ---------- */
