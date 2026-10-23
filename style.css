@@ -1944,3 +1944,6 @@ button:disabled { cursor: not-allowed; }
 .ptro .gp.r { color: #c4121c; border-color: #b3202c; }
 .ptro .gp.b { color: #14131a; border-color: #2a2833; }
 .ptro { gap: 4px; min-height: 27px; }
+
+/* 3D 遊戲的畫面不要靠淡入動畫(載入 3D 時手機忙,動畫會卡在半透明,看起來霧霧的) */
+.play-chess, .play-checkers { animation: none; }

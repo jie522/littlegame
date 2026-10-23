@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.15';
+const APP_VERSION = '2026.11.16';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -749,6 +749,7 @@ function playView(m) {
   app.innerHTML = '';
   const me = PLAYERS[NET.mySlot];
   const root = el('div', 'play play-' + g.id);
+  setTimeout(() => { root.style.animation = 'none'; root.style.opacity = 1; }, 450); // 進場淡入只要 0.3 秒;3D 載入讓手機忙的時候動畫會卡在半透明(整個畫面霧霧的),時間到就強制拿掉
   root.style.setProperty('--c', me.color);
   root.style.setProperty('--soft', me.soft);
   root.innerHTML = `
@@ -4966,6 +4967,7 @@ function busGame() {
   const unlocked = () => !!store.get('busKey', false); // 輸入密碼 0522 後可以跳到任何一關
   const maxLv = () => (unlocked() ? 999 : realMax());
   const scr = el('div', 'screen busg');
+  setTimeout(() => { scr.style.animation = 'none'; scr.style.opacity = 1; }, 450); // 同上:淡入卡住就會霧霧的
   scr.innerHTML = `
     <div class="bgtop">
       <button class="iconbtn bgback" aria-label="回首頁">✕</button>
@@ -6275,6 +6277,7 @@ function parkGame() {
   const maxLv = () => (unlocked() ? NL : Math.min(NL, Math.max(1, store.get('parkMax', 1) | 0)));
   let level = Math.min(maxLv(), Math.max(1, store.get('parkLevel', 1) | 0)), sess = null, LD = null;
   const scr = el('div', 'screen pkg');
+  setTimeout(() => { scr.style.animation = 'none'; scr.style.opacity = 1; }, 450); // 同上:淡入卡住就會霧霧的
   scr.innerHTML = `
     <div class="bgtop">
       <button class="iconbtn pkback" aria-label="回首頁">✕</button>
