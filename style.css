@@ -1991,7 +1991,7 @@ button:disabled { cursor: not-allowed; }
 .cdmeinfo i { font-style: normal; color: #ffb3b3; }
 .cdyou { color: #ffe066; margin-right: 6px; animation: pulse .5s ease-in-out infinite alternate; }
 .cdhand { position: relative; width: 100%; touch-action: none; }
-.cdhand .ck { bottom: 2px; transition: transform .15s, filter .15s; }
+.cdhand .ck { transition: transform .15s, filter .15s; }
 .cdhand .ck.sel { transform: translateY(-20px); }
 .cdhand .ck.sel .hf { box-shadow: 0 0 0 3px #ffd23f, 0 6px 14px rgba(0,0,0,.45); }
 .cdhand .ck.dim { filter: brightness(.55) saturate(.5); }
@@ -2000,7 +2000,7 @@ button:disabled { cursor: not-allowed; }
 .cdbtns .btn { padding: 8px 14px; }
 .cdbtns .btn:disabled { opacity: .45; filter: grayscale(.4); }
 .play-big2.myturn .pad, .play-seven.myturn .pad { border-color: var(--c); box-shadow: 0 0 0 2px var(--c), 0 0 18px 4px var(--c); }
-.cdmsg { position: absolute; left: 50%; top: 42%; z-index: 5; transform: translate(-50%, -50%); width: min(92%, 320px); display: none; flex-direction: column; align-items: center; gap: 6px; padding: 14px 16px; border-radius: 20px; background: rgba(10,24,16,.88); border: 3px solid #e9cd7f; color: #fff; text-align: center; pointer-events: none; }
+.cdmsg { position: absolute; left: 0; right: 0; top: 28%; margin: 0 auto; z-index: 5; width: min(92%, 320px); display: none; flex-direction: column; align-items: center; gap: 6px; padding: 14px 16px; border-radius: 20px; background: rgba(10,24,16,.88); border: 3px solid #e9cd7f; color: #fff; text-align: center; pointer-events: none; }
 .cdmsg.on { display: flex; animation: popin .3s ease-out; }
 .cdmsg .big { font-size: 2.8rem; line-height: 1; }
 .cdmsg small { opacity: .85; }
@@ -2019,3 +2019,14 @@ button:disabled { cursor: not-allowed; }
 .cm b { font-size: .72rem; }
 .cm i { font-style: normal; font-size: .62rem; }
 .cm.red { color: #c8102e; }
+
+/* 撲克牌放大:牌角的點數和花色大一點(疊起來時看的就是牌角) */
+.cdgame .ck .hcn { left: 4%; top: 3%; font-size: calc(var(--cw) * .28); font-weight: 900; }
+.cdgame .ck .hcn i { font-size: .82em; }
+.cdgame .ck .hcn.br { display: none; }
+.cdgame .cdplayed .ck .hcn.br { display: flex; }
+.cdgame .cdmid { padding: 4px 2px; }
+.svboard { padding: 4px; gap: 4px; }
+.svrow { gap: 1.5px; }
+.cm b { font-size: .98rem; font-weight: 900; }
+.cm i { font-size: .82rem; }

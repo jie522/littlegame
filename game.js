@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.20';
+const APP_VERSION = '2026.11.21';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -6653,10 +6653,16 @@ function cdTable(V, title) {
   // 自己的手牌:疊在一起排開,點一下抬起來(選取)
   T.drawHand = (cards, sel, can) => {
     const w = T.hand.clientWidth || 340, n = cards.length;
-    const cw = Math.min(66, Math.max(40, w / Math.max(5.2, n * 0.62))), step = n > 1 ? Math.min(cw * 0.92, (w - cw) / (n - 1)) : 0, x0 = (w - (cw + step * (n - 1))) / 2;
+    // 牌放大、疊多一點(看露出來的牌角);超過 8 張就排兩排(後排是小的、前排是大的),每張可以更大
+    const rows = n > 8 ? 2 : 1, per = Math.ceil(n / rows);
+    const cw = rows === 2 ? Math.min(96, Math.max(64, w * 0.26)) : Math.min(88, Math.max(58, w * 0.21)), rowH = cw * 1.4 * 0.52;
     T.hand.style.setProperty('--cw', cw + 'px');
-    T.hand.style.height = cw * 1.4 + 26 + 'px';
-    T.hand.innerHTML = cards.map((c, i) => cdCard(c, (sel && sel.has(c) ? 'sel' : '') + (can && !can(c) ? ' dim' : '') + (can && can(c) ? ' ok' : '')).replace('class="ck', `style="left:${x0 + i * step}px;z-index:${i + 1}" class="ck`)).join('');
+    T.hand.style.height = cw * 1.4 + (rows - 1) * rowH + 24 + 'px';
+    T.hand.innerHTML = cards.map((c, i) => {
+      const row = i < per ? 0 : 1, j = row ? i - per : i, m = row ? n - per : per;
+      const step = m > 1 ? Math.min(cw * 0.7, (w - cw) / (m - 1)) : 0, x0 = (w - (cw + step * (m - 1))) / 2;
+      return cdCard(c, (sel && sel.has(c) ? 'sel' : '') + (can && !can(c) ? ' dim' : '') + (can && can(c) ? ' ok' : '')).replace('class="ck', `style="left:${x0 + j * step}px;top:${20 + row * rowH}px;z-index:${i + 1}" class="ck`);
+    }).join('');
   };
   return T;
 }
@@ -6809,7 +6815,7 @@ function vBig2(V) {
   function renderTable() {
     T.seats(st.order, me, st.counts, st.done ? null : st.turn, s => (st.passed.includes(s) ? '<span class="cdpassed">過</span>' : ''));
     const t = st.table;
-    T.mid.innerHTML = t ? `<div class="cdlast"><div class="cdplayed" style="--cw:${t.cards.length > 2 ? 54 : 62}px">${t.cards.map((c, i) => cdCard(c).replace('class="ck', `style="--i:${i};--n:${t.cards.length}" class="ck`)).join('')}</div>
+    T.mid.innerHTML = t ? `<div class="cdlast"><div class="cdplayed" style="--cw:${t.cards.length > 2 ? 70 : 88}px">${t.cards.map((c, i) => cdCard(c).replace('class="ck', `style="--i:${i};--n:${t.cards.length}" class="ck`)).join('')}</div>
         <div class="cdwho">${pinfo(t.by).emoji} ${t.by === me ? '你' : esc(pinfo(t.by).name)} 出了 <b>${t.ev.name}</b></div></div>`
       : `<div class="cdfree">🃏<b>${st.done ? '' : (st.turn === me ? '你' : esc(pinfo(st.turn).name)) + ' 自由出牌'}</b></div>`;
   }
