@@ -256,18 +256,6 @@ rbox('PillarBody', 0.8, 0.8, 0, 3.2, MAT['concrete'], pillar, bevel=0.04, seg=1)
 for i in range(4):
     rbox('HazardBand', 0.84, 0.84, 0.1 + i * 0.2, 0.2 + i * 0.2, MAT['yellow' if i % 2 == 0 else 'black'], pillar)
 
-MAT['robot'] = make_mat('RobotBody', '#eef1f5', rough=0.3)
-MAT['robotglow'] = make_mat('RobotGlow', '#4fc3ff', emit='#29b6f6', strength=2.5)
-robot = empty('Robot', (8, 10, 0))  # 掃地機器人(臉朝 +X)
-cyl('RobotDisc', 0.42, 0.16, (0, 0, 0.1), MAT['robot'], robot, seg=28)
-cyl('RobotRing', 0.43, 0.04, (0, 0, 0.07), MAT['robotglow'], robot, seg=28)
-cyl('RobotTop', 0.3, 0.05, (0, 0, 0.2), MAT['dark'], robot, seg=24)
-ball('RobotDome', 0.11, (-0.05, 0, 0.22), MAT['robotglow'], robot, scale=(1, 1, 0.6))
-for s in (-1, 1):
-    ball('RobotEye', 0.06, (0.36, s * 0.12, 0.16), MAT['white'], robot, sub=2)
-    ball('RobotPupil', 0.03, (0.41, s * 0.12, 0.17), MAT['eye'], robot, sub=1)
-    cyl('Brush', 0.07, 0.02, (0.3, s * 0.3, 0.02), MAT['dark'], robot, seg=8)
-
 tree = empty('Tree', (10, 0, 0))
 cyl('Trunk', 0.16, 1.2, (0, 0, 0.6), MAT['bark'], tree, seg=8, r2=0.12)
 ball('Crown', 0.9, (0, 0, 1.75), MAT['leaf'], tree, scale=(1, 1, 0.9))

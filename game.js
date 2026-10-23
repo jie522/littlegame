@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.18';
+const APP_VERSION = '2026.11.20';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -317,6 +317,11 @@ function hostBroadcast(m) {
   NET.conns.forEach(c => { if (c.open) { try { c.send(m); } catch (e) { /* ignore */ } } });
   queueMicrotask(() => onMsg(m)); // 房主自己的畫面
 }
+function hostSendTo(slot, m) { // 只傳給一位玩家(例如手牌,別人看不到)
+  if (slot === NET.mySlot) { queueMicrotask(() => onMsg(m)); return; }
+  const c = NET.conns.get(slot);
+  if (c && c.open) { try { c.send(m); } catch (e) { /* ignore */ } }
+}
 function sendInput(m) {
   if (NET.role === 'host') queueMicrotask(() => hostInput(0, m));
   else if (NET.conn && NET.conn.open) { try { NET.conn.send(m); } catch (e) { /* ignore */ } }
@@ -478,6 +483,16 @@ const GAMES = [
     id: 'parking', emoji: '🅿️', name: '停車大對決', tag: '競速+3D', color: '#ff7a1a', desc: '3 局停車比賽,誰停得又快又準!',
     rules: ['大家拿到同一個停車場,倒數完一起出發', '左邊搖桿指向要去的方向(上下左右是畫面上的方向),右邊按「前進」或「倒車」', '把車停進發光的格子,停穩就完成;撞車 +2 秒、撞鴨子 +3 秒、撞飛三角錐 +1 秒', '香蕉皮會讓車子轉圈圈,按「叭」可以催鴨子快走', '有些關卡會停電、方向盤裝反、或有阿姨來搶車位!', '3 局越來越難,時間最短的拿最多分'],
     host: hParking, view: vParking, noCountdown: true,
+  },
+  {
+    id: 'big2', emoji: '🃏', name: '大老二', tag: '撲克+對戰', color: '#1e7a4a', desc: '先把手上的牌出完的人贏!',
+    rules: ['2~4 人,每人 13 張(3 人時每人 17 張),手牌只有自己看得到', '大小:3 最小,接著 4、5…K、A,2 最大;同點數比花色 ♣ < ♦ < ♥ < ♠', '可以出單張、對子、五張牌(順子 < 葫蘆 < 鐵支 < 同花順),要出一樣張數而且比桌上大,不然就按「過」', '大家都過了,最後出牌的人可以重新自由出牌;拿到 ♣3 的人先出,第一手要包含 ♣3', '最先把牌出完的人贏!不會出可以按「💡 提示」'],
+    host: hBig2, view: vBig2, noCountdown: true,
+  },
+  {
+    id: 'seven', emoji: '7️⃣', name: '排七', tag: '撲克+策略', color: '#c8102e', desc: '從 7 開始接龍,蓋牌點數最少的贏',
+    rules: ['2~4 人,52 張牌全部發完,手牌只有自己看得到', '拿到 ♠7 的人先出 ♠7;之後每種花色都從 7 開始,往兩邊一張一張接(6、8、5、9…)', '能接就一定要出!一張都接不上,才要選一張「蓋牌」', '全部出完後,把自己蓋的牌點數加起來(A=1…J=11、Q=12、K=13)', '點數最少的人贏,所以大牌最好早點出掉'],
+    host: hSeven, view: vSeven, noCountdown: true,
   },
 ];
 const GAME = Object.fromEntries(GAMES.map(g => [g.id, g]));
@@ -940,6 +955,10 @@ function hostStartGame(g) {
   players.forEach(s => { H.scores[s] = 0; });
   H.bs = {};
   H.bc = m => { hostBroadcast(m); botsHear(H, m); };
+  H.to = (slot, m) => { // 私密訊息:真人傳給他自己,電腦直接交給電腦的大腦
+    const p = NET.players.find(x => x.slot === slot);
+    if (p && p.bot) { const fn = BOTS[H.g.id]; if (fn) fn(H, slot, m, botSkill()); } else hostSendTo(slot, m);
+  };
   H.online = s => { const p = NET.players.find(x => x.slot === s); return !!(p && p.online); };
   H.active = () => H.players.filter(H.online);
   H.add = (slot, v) => {
@@ -5465,7 +5484,7 @@ const PK_THEMES = { // 地面、線、外圍
   street: { ground: '#868f9d', line: '#ffffff', out: '#cfd6df', name: '街道' },
 };
 // 100 關:版型、格子寬度(路邊停車是空位長度)、倒車入庫、障礙物和 KUSO 機關
-// thief:阿姨會來搶車位(倒數)、dark:停電只看得到車燈、inv:方向盤裝反、robots:掃地機器人、movers:走道上開來開去的車、bumps:減速丘
+// thief:阿姨會來搶車位(倒數)、dark:停電只看得到車燈、inv:方向盤裝反、movers:走道上開來開去的車、bumps:減速丘
 const PK_PLAN = [
   { k: 'open', sw: 4.0, t: 'school', name: '第一次停車', tip: '搖桿指向要去的方向(上下左右是畫面的方向),再按住「前進」' },
   { k: 'open', sw: 3.6, side: 1, cones: 2, t: 'school', name: '右轉進格', tip: '先往前開,再把搖桿指向右邊' },
@@ -5476,7 +5495,7 @@ const PK_PLAN = [
   { k: 'double', sw: 3.1, cones: 3, t: 'day', name: '繞一圈', tip: '格子在花台那排的另一邊,要繞過去' },
   { k: 'row', sw: 3.0, ducks: 2, gate: 1, st: 1, t: 'day', name: '鴨子過馬路', tip: '小心鴨子!按「叭」可以催牠們快走' },
   { k: 'parallel', gap: 7.2, cones: 2, bumps: 2, t: 'street', name: '路邊停車', tip: '黃黑條紋是減速丘,開太快會彈起來' },
-  { k: 'angled', sw: 3.0, robots: 1, t: 'day', name: '掃地機器人', tip: '停車場怎麼會有掃地機器人?!' },
+  { k: 'angled', sw: 3.0, carts: 1, t: 'day', name: '推車突擊', tip: '停車場裡有購物車自己在跑?!' },
   { k: 'garage', sw: 2.95, cones: 2, t: 'garage', name: '地下停車場', tip: '柱子很硬,不要撞到' },
   { k: 'row', sw: 3.0, thief: 1, cones: 2, t: 'day', name: '搶車位!', tip: '阿姨正要來搶這個車位,倒數完前停好!' },
   { k: 'double', sw: 2.9, ducks: 1, bananas: 2, st: 1, t: 'day', name: '菜市場', tip: '阿嬤的推車跟鴨子都在路上' },
@@ -5491,7 +5510,7 @@ const PK_PLAN = [
   { k: 'row', sw: 2.75, ducks: 2, carts: 1, gate: 1, st: 1, t: 'day', name: '動物園停車場', tip: '鴨子家族出遊中' },
   { k: 'double', sw: 2.8, movers: 1, cones: 2, t: 'day', name: '阿伯倒車中', tip: '有台車在走道上開來開去,小心!' },
   { k: 'garage', sw: 2.75, carts: 1, ducks: 1, gate: 1, t: 'garage', name: 'B3 迷宮', tip: '地下三樓為什麼會有鴨子' },
-  { k: 'angled', sw: 2.8, robots: 2, bumps: 2, t: 'day', name: '機器人大軍', tip: '掃地機器人開始巡邏了' },
+  { k: 'angled', sw: 2.8, carts: 2, bumps: 2, t: 'day', name: '推車大軍', tip: '購物車開始巡邏了' },
   { k: 'double', sw: 2.72, rev: 1, bananas: 2, cones: 2, t: 'day', name: '倒車大師', tip: '倒車入庫,而且要繞一圈' },
   { k: 'parallel', gap: 6.3, thief: 1, cones: 2, t: 'night', name: '夜市搶車位', tip: '夜市車位超搶手,阿姨已經在路上了!' },
   { k: 'angled', sw: 2.8, rev: 1, ducks: 2, cones: 2, t: 'school', name: '斜倒車', tip: '斜格子也要倒車入庫!' },
@@ -5503,20 +5522,20 @@ const PK_PLAN = [
   { k: 'angled', sw: 2.75, thief: 1, carts: 1, t: 'day', name: '週年慶搶位', tip: '百貨週年慶,阿姨們火力全開' },
   { k: 'double', sw: 2.65, crooked: 1, ducks: 2, carts: 1, st: 1, t: 'day', name: '百貨週年慶', tip: '週年慶停車場,大家都瘋了' },
   { k: 'parallel', gap: 5.95, ducks: 2, bananas: 2, cones: 2, t: 'night', name: '夜市大塞車', tip: '鴨子也來逛夜市' },
-  { k: 'row', sw: 2.65, robots: 3, gate: 1, t: 'day', name: '機器人罷工', tip: '三台掃地機器人在格子前面亂跑' },
+  { k: 'row', sw: 2.65, carts: 3, gate: 1, t: 'day', name: '推車罷工', tip: '三台購物車在格子前面亂跑' },
   { k: 'garage', sw: 2.65, dark: 1, rev: 1, t: 'garage', name: '停電倒車', tip: '黑漆漆的還要倒車入庫…' },
   { k: 'double', sw: 2.65, thief: 1, movers: 1, cones: 2, t: 'day', name: '搶位大作戰', tip: '阿伯在倒車、阿姨在搶位,你在哭' },
   { k: 'row', sw: 2.62, rev: 1, crooked: 1, cones: 6, gate: 1, t: 'school', name: '駕照魔王考', tip: '過了這關直接發駕照' },
   { k: 'angled', sw: 2.68, inv: 1, ducks: 2, t: 'day', name: '反向斜格', tip: '方向盤相反+斜格子+鴨子' },
   { k: 'garage', sw: 2.6, carts: 2, bananas: 2, gate: 1, st: 1, t: 'garage', name: '地下城', tip: '推車、香蕉皮、柱子…這是什麼地城' },
   { k: 'parallel', gap: 5.9, bumps: 3, movers: 1, t: 'street', name: '減速丘大街', tip: '減速丘一條接一條' },
-  { k: 'double', sw: 2.6, robots: 2, ducks: 2, cones: 2, t: 'day', name: '動物機器人樂園', tip: '鴨子騎在掃地機器人上?!' },
+  { k: 'double', sw: 2.6, carts: 2, ducks: 2, cones: 2, t: 'day', name: '動物推車樂園', tip: '鴨子騎在購物車上?!' },
   { k: 'row', sw: 2.6, dark: 1, thief: 1, gate: 1, t: 'night', name: '停電搶車位', tip: '停電了阿姨還是照搶' },
   { k: 'garage', sw: 2.58, inv: 1, rev: 1, cones: 3, t: 'garage', name: '反向地下城', tip: '方向盤相反還要倒車入庫,加油' },
   { k: 'double', sw: 2.58, rev: 1, ducks: 3, carts: 1, crooked: 1, cones: 2, t: 'day', name: '鴨子大軍', tip: '鴨子們占領了停車場' },
-  { k: 'angled', sw: 2.62, movers: 2, robots: 1, bananas: 2, t: 'day', name: '混亂停車場', tip: '什麼東西都在動' },
+  { k: 'angled', sw: 2.62, movers: 2, carts: 1, bananas: 2, t: 'day', name: '混亂停車場', tip: '什麼東西都在動' },
   { k: 'parallel', gap: 5.85, thief: 1, ducks: 2, bananas: 2, t: 'night', name: '夜市終極搶位', tip: '最後一個夜市車位!' },
-  { k: 'double', sw: 2.55, rev: 1, ducks: 2, carts: 1, bananas: 2, cones: 3, robots: 1, thief: 1, t: 'day', name: '終極停車王', tip: '全部機關一次來,停進去你就是停車之神' },
+  { k: 'double', sw: 2.55, rev: 1, ducks: 2, carts: 2, bananas: 2, cones: 3, thief: 1, t: 'day', name: '終極停車王', tip: '全部機關一次來,停進去你就是停車之神' },
   // ---- 第 51~100 關:單數關開卡車連結車(車頭拖著貨櫃,倒車會折刀),雙數關是更難的轎車 ----
   { k: 'dock', sw: 5.0, truck: 1, t: 'day', name: '第一次開卡車', tip: '卡車後面拖著貨櫃,車身超長!轉彎要轉大一點,停進最長的格子' },
   { k: 'double', sw: 2.54, ducks: 2, bumps: 2, cones: 2, t: 'day', name: '百貨公司開幕', tip: '卡車開完換回轎車,小心鴨子' },
@@ -5529,11 +5548,11 @@ const PK_PLAN = [
   { k: 'dock', sw: 4.4, truck: 1, rev: 1, t: 'school', name: '倒車入庫:卡車版', tip: '貨櫃尾巴朝格子倒進去!倒車時要讓「車廂」對準,車頭會先偏一邊' },
   { k: 'row', sw: 2.54, inv: 1, rev: 1, gate: 1, cones: 4, t: 'school', name: '反向倒車考', tip: '方向盤裝反,還要倒車入庫' },
   { k: 'dock', sw: 4.4, truck: 1, bananas: 2, gate: 1, t: 'day', name: '香蕉滑倒大貨車', tip: '大卡車壓到香蕉皮也會轉圈圈' },
-  { k: 'double', sw: 2.52, movers: 2, robots: 1, t: 'day', name: '尖峰時段', tip: '走道上的車跟機器人都在動' },
+  { k: 'double', sw: 2.52, movers: 2, carts: 1, t: 'day', name: '尖峰時段', tip: '走道上的車跟推車都在動' },
   { k: 'alley', sw: 4.4, truck: 1, rev: 1, t: 'night', name: '小巷倒貨櫃', tip: '往左邊的貨櫃位倒車,車廂先進去' },
   { k: 'garage', sw: 2.54, inv: 1, bananas: 2, gate: 1, t: 'garage', name: '反向地下道', tip: '左右反了,地上還有香蕉皮' },
   { k: 'tpar', gap: 13.4, truck: 1, ducks: 1, t: 'street', name: '鴨子擋路', tip: '路邊停卡車,還有鴨子在走道上' },
-  { k: 'angled', sw: 2.54, dark: 1, robots: 2, t: 'garage', name: '停電機器人', tip: '黑暗中有掃地機器人' },
+  { k: 'angled', sw: 2.54, dark: 1, carts: 2, t: 'garage', name: '停電推車', tip: '黑暗中有購物車亂跑' },
   { k: 'dock', sw: 4.2, truck: 1, rev: 1, cones: 3, t: 'school', name: '三角錐碼頭', tip: '倒車入庫,旁邊還有三角錐' },
   { k: 'parallel', gap: 5.7, thief: 1, bumps: 3, t: 'street', name: '減速丘搶位', tip: '減速丘慢慢過,阿姨在倒數' },
   { k: 'alley', sw: 4.4, truck: 1, ducks: 2, cones: 2, t: 'day', name: '鴨子大巷', tip: '小巷裡有一家鴨子在散步' },
@@ -5541,23 +5560,23 @@ const PK_PLAN = [
   { k: 'dock', sw: 4.2, truck: 1, rev: 1, dark: 1, t: 'night', name: '停電卡車', tip: '黑漆漆的還要倒貨櫃' },
   { k: 'row', sw: 2.52, dark: 1, rev: 1, gate: 1, cones: 5, t: 'night', name: '黑暗倒車考', tip: '停電+倒車+三角錐門' },
   { k: 'tpar', gap: 13, truck: 1, bananas: 2, cones: 2, t: 'street', name: '香蕉路邊', tip: '路邊停卡車,路上一堆香蕉皮' },
-  { k: 'garage', sw: 2.52, movers: 1, robots: 2, thief: 1, t: 'garage', name: '地下室大亂鬥', tip: '車在倒、機器人在跑、阿姨在搶' },
+  { k: 'garage', sw: 2.52, movers: 1, carts: 2, thief: 1, t: 'garage', name: '地下室大亂鬥', tip: '車在倒、推車在跑、阿姨在搶' },
   { k: 'dock', sw: 4.0, truck: 1, rev: 1, thief: 1, t: 'day', name: '搶貨櫃位', tip: '阿姨也想要這個貨櫃位,倒數中!' },
   { k: 'angled', sw: 2.52, inv: 1, rev: 1, ducks: 2, t: 'day', name: '反向斜倒', tip: '左右相反,斜格子倒車' },
   { k: 'alley', sw: 4.0, truck: 1, rev: 1, carts: 1, t: 'day', name: '推車擋巷', tip: '倒貨櫃的時候有購物車經過' },
   { k: 'parallel', gap: 5.65, dark: 1, ducks: 2, bananas: 2, t: 'night', name: '黑夜路邊', tip: '停電的夜市路邊' },
   { k: 'dock', sw: 4.0, truck: 1, rev: 1, inv: 1, t: 'school', name: '方向盤裝反的卡車', tip: 'KUSO!卡車的左右是相反的,還要倒車' },
   { k: 'double', sw: 2.5, rev: 1, movers: 2, bananas: 2, cones: 3, t: 'day', name: '雙重倒車', tip: '倒車入庫,走道上的車也在倒' },
-  { k: 'tpar', gap: 12.8, truck: 1, robots: 2, t: 'street', name: '機器人擋路', tip: '路邊停卡車,機器人在亂跑' },
-  { k: 'row', sw: 2.5, thief: 1, robots: 3, gate: 1, rev: 1, t: 'day', name: '搶位機器人', tip: '機器人擋在格子前,阿姨在倒數' },
+  { k: 'tpar', gap: 12.8, truck: 1, carts: 2, t: 'street', name: '推車擋路', tip: '路邊停卡車,購物車在亂跑' },
+  { k: 'row', sw: 2.5, thief: 1, carts: 3, gate: 1, rev: 1, t: 'day', name: '搶位推車', tip: '推車擋在格子前,阿姨在倒數' },
   { k: 'alley', sw: 4.1, truck: 1, rev: 1, cones: 3, t: 'night', name: '三角錐小巷', tip: '倒貨櫃,巷子裡散落著三角錐' },
   { k: 'garage', sw: 2.5, dark: 1, inv: 1, rev: 1, t: 'garage', name: '黑暗反向地城', tip: '停電+方向盤裝反+倒車' },
   { k: 'dock', sw: 3.9, truck: 1, rev: 1, ducks: 2, bananas: 2, t: 'day', name: '動物園貨運站', tip: '鴨子和香蕉皮一起來' },
   { k: 'angled', sw: 2.5, movers: 2, thief: 1, ducks: 2, t: 'day', name: '週年慶終結者', tip: '週年慶最後一天,什麼都在動' },
   { k: 'tpar', gap: 12.6, truck: 1, thief: 1, dark: 1, t: 'night', name: '黑夜搶位', tip: '停電的路邊,阿姨還是來搶' },
   { k: 'parallel', gap: 5.6, inv: 1, thief: 1, bumps: 3, t: 'street', name: '反向路邊搶位', tip: '左右相反,還要搶時間' },
-  { k: 'dock', sw: 3.8, truck: 1, rev: 1, robots: 2, gate: 1, t: 'day', name: '機器人貨運站', tip: '倒貨櫃,機器人在入口亂跑' },
-  { k: 'double', sw: 2.5, dark: 1, rev: 1, robots: 2, ducks: 2, t: 'night', name: '停電大亂鬥', tip: '黑暗中倒車,鴨子和機器人都在' },
+  { k: 'dock', sw: 3.8, truck: 1, rev: 1, carts: 2, gate: 1, t: 'day', name: '推車貨運站', tip: '倒貨櫃,推車在入口亂跑' },
+  { k: 'double', sw: 2.5, dark: 1, rev: 1, carts: 2, ducks: 2, t: 'night', name: '停電大亂鬥', tip: '黑暗中倒車,鴨子和推車都在' },
   { k: 'alley', sw: 3.8, truck: 1, rev: 1, inv: 1, t: 'day', name: '反向小巷', tip: '卡車倒車入巷,左右還是反的' },
   { k: 'row', sw: 2.5, inv: 1, rev: 1, dark: 1, gate: 1, cones: 6, t: 'night', name: '地獄駕訓班', tip: '教練已經逃走了' },
   { k: 'dock', sw: 3.7, truck: 1, rev: 1, gate: 1, cones: 4, t: 'school', name: '貨櫃魔王考', tip: '倒貨櫃,入口兩邊都是三角錐' },
@@ -5567,7 +5586,7 @@ const PK_PLAN = [
   { k: 'dock', sw: 3.7, truck: 1, rev: 1, dark: 1, thief: 1, t: 'night', name: '停電搶貨櫃', tip: '黑暗中倒貨櫃,阿姨在倒數' },
   { k: 'parallel', gap: 5.6, rev: 1, dark: 1, thief: 1, ducks: 2, t: 'night', name: '路邊倒車大魔王', tip: '停電的路邊倒車入庫,時間有限' },
   { k: 'alley', sw: 3.6, truck: 1, rev: 1, dark: 1, inv: 1, t: 'night', name: '終極拖板車', tip: '停電、方向盤裝反、卡車倒車入巷,祝你好運' },
-  { k: 'double', sw: 2.5, rev: 1, dark: 1, inv: 1, thief: 1, robots: 2, ducks: 3, carts: 1, bananas: 3, cones: 4, t: 'night', name: '百關終極停車王', tip: '所有機關全部一起來!停進去你就是停車之神' },
+  { k: 'double', sw: 2.5, rev: 1, dark: 1, inv: 1, thief: 1, ducks: 3, carts: 3, bananas: 3, cones: 4, t: 'night', name: '百關終極停車王', tip: '所有機關全部一起來!停進去你就是停車之神' },
 ];
 const PK_SALT = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,32,0,0,0,1,0,0,0,5,0,0,0,0,0,28,0,1,0,0,0,0,0,5,0,0,0,0,0,0,0,4,5]; // 每關的亂數種子(tools/park_levels.js 找不到留路的解法時會自動換)
 const PK_PAR = [10,10,11,11,17,11,19,12,12,11,16,11,15,17,15,11,11,18,16,11,16,12,17,18,11,18,14,16,17,15,11,15,19,11,19,16,11,17,19,17,11,14,14,18,11,22,18,13,14,18,10,18,11,14,26,17,21,15,34,17,13,18,59,20,32,13,37,17,64,21,34,19,38,16,39,16,51,16,39,21,36,17,50,16,38,11,41,17,37,18,61,18,37,19,39,16,36,15,67,26]; // 三顆星的秒數(照自動解法算的)
@@ -5578,7 +5597,7 @@ const PK_UP = -Math.PI / 2, PK_DOWN = Math.PI / 2;
 function parkLevel(n) {
   const P = PK_PLAN[n - 1], r = busRng(n * 7919 + PK_SALT[n - 1] * 104729 + 17), W = P.truck ? 20 : PK.W, H = P.truck ? 34 : PK.H;
   const ri = k => Math.floor(r() * k), rr = (a, b) => a + r() * (b - a);
-  const L = { n, name: P.name, tip: P.tip, theme: P.t, W, H, start: P.truck ? { x: W / 2, y: H - 9.8, a: PK_UP, ta: PK_UP } : { x: W / 2, y: H - 3.4, a: PK_UP }, truck: !!P.truck, spot: null, obs: [], ducks: [], bananas: [], carts: [], movers: [], robots: [], bumps: [], slots: [], par: PK_PAR[n - 1], dark: !!P.dark, inv: !!P.inv };
+  const L = { n, name: P.name, tip: P.tip, theme: P.t, W, H, start: P.truck ? { x: W / 2, y: H - 9.8, a: PK_UP, ta: PK_UP } : { x: W / 2, y: H - 3.4, a: PK_UP }, truck: !!P.truck, spot: null, obs: [], ducks: [], bananas: [], carts: [], movers: [], bumps: [], slots: [], par: PK_PAR[n - 1], dark: !!P.dark, inv: !!P.inv };
   const kinds = ['Sedan', 'Sedan', 'Hatch', 'Van'];
   const jit = P.crooked ? 0.16 : 0.035, off = P.crooked ? 0.3 : 0.1;
   const car = (x, y, axis, kind) => { // axis:車子沿著的方向(會隨機前後顛倒)
@@ -5696,7 +5715,6 @@ function parkLevel(n) {
   // 走道上開來開去的車(要比較寬的走道)
   const wide = lanes.filter(y => { for (let x = 3; x < W - 3; x += 0.5) if (L.obs.some(o => busObbHit(x, y, 0, 2.3, 1.1, o.x, o.y, o.a, o.hl, o.hw))) return false; return true; });
   for (let i = 0; i < (P.movers || 0); i++) L.movers.push({ y: wide.length ? wide[ri(wide.length)] : laneY(), x0: 2.6, x1: W - 2.6, sp: rr(1.3, 2.1), t: rr(0, 20), kind: kinds[ri(3)], c: ri(8) });
-  for (let i = 0; i < (P.robots || 0); i++) { const ang = rr(0, Math.PI * 2); L.robots.push({ x: rr(3, W - 3), y: rr(8, H - 6), vx: Math.cos(ang) * 1.5, vy: Math.sin(ang) * 1.5 }); }
   for (let i = 0; i < (P.bumps || 0); i++) { const y = laneY(); if (Math.abs(y - L.start.y) > 2.5 && !L.bumps.some(b => Math.abs(b.y - y) < 2)) L.bumps.push({ y, x0: 1, x1: W - 1 }); }
   if (P.thief) L.thief = Math.ceil(PK_PAR[n - 1] * 2 + 6); // 幾秒後阿姨來搶車位
   return L;
@@ -5967,7 +5985,6 @@ function pkView3D(LD, L, host) {
     }
   }
   L.bumps.forEach(b => { const m = new THREE.Mesh(new THREE.BoxGeometry(b.x1 - b.x0, 0.1, 0.6), new THREE.MeshStandardMaterial({ color: '#ffffff', transparent: true, opacity: 0.0, depthWrite: false })); m.position.copy(P((b.x0 + b.x1) / 2, b.y, 0.05)); scene.add(m); });
-  const robotObj = L.robots.map(() => { const o = model('Robot', -50, -50, 0); o.scale.setScalar(1.8); return o; }); // 放大一點才看得清楚
   const moverObj = L.movers.map(mv => model(mv.kind, -50, -50, 0, { paint: paints[mv.c % paints.length] }));
   let thiefObj = null;
   if (L.thief) { // 阿姨的粉紅廂型車(頭上有名牌)
@@ -6118,7 +6135,6 @@ function pkView3D(LD, L, host) {
         o.rotation.x = Math.sin(now / 110 + k) * 0.18;
       }));
       S.carts.forEach((c, i) => { const o = cartObj[i]; o.position.copy(P(c.x, c.y)); o.rotation.y = c.dir > 0 ? 0 : Math.PI; });
-      S.robots.forEach((r, i) => { const o = robotObj[i]; o.position.copy(P(r.x, r.y)); o.rotation.y = -Math.atan2(r.vy, r.vx); });
       S.movers.forEach((mv, i) => { const o = moverObj[i]; o.position.copy(P(mv.x, mv.y)); o.rotation.y = mv.dir > 0 ? 0 : Math.PI; });
       if (thiefObj) { thiefObj.visible = !!S.thief; if (S.thief) { thiefObj.position.copy(P(S.thief.x, S.thief.y)); thiefObj.rotation.y = -S.thief.a; } }
       glowMat.color.set(S.inSpot ? '#4ade80' : '#ffd23f');
@@ -6140,7 +6156,6 @@ const PK_MSG = {
   banana: ['滑~~~', '香蕉皮!!', '瑪利歐上身', '轉圈圈~'],
   cone: ['三角錐飛走了~', '全壘打!', '錐錐掰掰'],
   jack: ['折刀了!車頭和車廂打架', '車廂:不要再轉了啦', '拖板車折成 V 字形'],
-  robot: ['掃地機器人:我只是在打掃', '嗶嗶嗶!機器人哭哭', '機器人翻肚了'],
   mover: ['阿伯:你沒看到我在倒車嗎!', '叭!阿伯生氣了', '讓一下啦少年仔'],
   bump: ['咚咚!', '減速丘!慢一點', '屁股好痛!'],
   inv: ['方向盤裝反了!', '咦?怎麼往右轉', 'KUSO 左右相反車'],
@@ -6155,7 +6170,7 @@ function pkSession(LD, L, o) {
   const view = pkView3D(LD, L, stage);
   const S = {
     car: o.spectate ? null : { x: L.start.x, y: L.start.y, a: L.start.a, ta: L.start.ta != null ? L.start.ta : L.start.a, v: 0, steer: 0, bump: 0 },
-    color: o.color || '#ffd23f', ghosts: new Map(), ducks: [], carts: [], movers: [], robots: L.robots.map(r => ({ ...r })), thief: null, inSpot: false, hold: 0, braking: false,
+    color: o.color || '#ffd23f', ghosts: new Map(), ducks: [], carts: [], movers: [], thief: null, inSpot: false, hold: 0, braking: false,
   };
   let steerIn = 0, thr = 0, jdir = null, started = false, t0 = 0, crashes = 0, pen = 0, done = false, cool = 0, spin = null, boost = 0, hornCd = 0, beepT = 0, raf = 0, last = 0, live = !o.spectate && !o.wait;
   L.obs.forEach(x => { delete x.gone; delete x.fly; });
@@ -6252,14 +6267,6 @@ function pkSession(LD, L, o) {
     S.ducks = L.ducks.map((d, i) => { dph[i] += dt * d.sp * (boost > 0 ? 3 : 1); return Array.from({ length: d.n }, (_, k) => { const [x, dir] = pingpong(dph[i] - k * 0.62, d.x0, d.x1); return { x, y: d.y, dir }; }); });
     S.carts = L.carts.map((cc, i) => { cph[i] += dt * cc.sp; const [x, dir] = pingpong(cph[i], cc.x0, cc.x1); return { x, y: cc.y, dir }; });
     S.movers = L.movers.map((mv, i) => { mph[i] += dt * mv.sp; const [x, dir] = pingpong(mph[i], mv.x0, mv.x1); return { x, y: mv.y, dir }; });
-    S.robots.forEach(rb => { // 掃地機器人:直直走,碰到東西就轉彎
-      const nx = rb.x + rb.vx * dt, ny = rb.y + rb.vy * dt;
-      const blocked = (x, y) => x < 1 || y < 1 || x > L.W - 1 || y > L.H - 1 || L.obs.some(ob => !ob.gone && Math.abs(ob.x - x) < 4 && Math.abs(ob.y - y) < 4 && busObbHit(x, y, 0, 0.8, 0.8, ob.x, ob.y, ob.a, ob.hl, ob.hw));
-      if (!blocked(nx, ny)) { rb.x = nx; rb.y = ny; }
-      else if (!blocked(rb.x - rb.vx * dt, ny)) rb.vx = -rb.vx;
-      else if (!blocked(nx, rb.y - rb.vy * dt)) rb.vy = -rb.vy;
-      else { rb.vx = -rb.vx; rb.vy = -rb.vy; }
-    });
     // 阿姨搶車位:倒數完就開進格子
     if (L.thief && started && !done) {
       const left = L.thief - (performance.now() - t0) / 1000;
@@ -6303,7 +6310,6 @@ function pkSession(LD, L, o) {
       S.ducks.forEach(line => line.forEach(d => dyn.push({ k: 'duck', x: d.x, y: d.y, a: 0, hl: 0.42, hw: 0.32 })));
       S.carts.forEach(cc => dyn.push({ k: 'cart', x: cc.x, y: cc.y, a: 0, hl: 0.55, hw: 0.35 }));
       S.movers.forEach((mv, i) => dyn.push({ k: 'mover', x: mv.x, y: mv.y, a: 0, hl: PK_LEN[L.movers[i].kind] / 2, hw: PK.CW / 2 }));
-      S.robots.forEach(rb => dyn.push({ k: 'robot', x: rb.x, y: rb.y, a: 0, hl: 0.75, hw: 0.75 }));
       const hit = pkJack(L, na, nta) ? { k: 'jack' } : pkHit(L, nx, ny, na, undefined, undefined, nta) || dyn.find(d => boxes.some(b => Math.hypot(d.x - b.x, d.y - b.y) < d.hl + b.hl + 2.2 && busObbHit(b.x, b.y, b.a, b.hl, b.hw, d.x, d.y, 0, d.hl, d.hw)));
       if (hit && hit.k === 'cone') { // 三角錐被撞飛(扣 1 秒,車子繼續走)
         hit.gone = true; hit.fly = { t0: performance.now(), vx: Math.cos(c.a) * c.v * 1.4 + (Math.random() - 0.5) * 2, vy: Math.sin(c.a) * c.v * 1.4 + (Math.random() - 0.5) * 2 };
@@ -6616,6 +6622,370 @@ function vParking(V) {
     }
   };
   const H_order = m => m.order || order;
+}
+
+/* =========================================================
+   撲克牌桌共用(大老二 🃏、排七 7️⃣):Blender 算出來的牌桌背景(assets/cardtable.jpg)、牌的畫法、手牌、座位
+   牌的編號沿用心臟病:0~51,點數 = id % 13 + 1(A=1…K=13),花色 = Math.floor(id / 13)(♠ ♥ ♦ ♣)
+   手牌是私密的:房主用 H.to 只傳給那位玩家
+   ========================================================= */
+const cdRank = c => c % 13 + 1, cdSuit = c => Math.floor(c / 13);
+const cdLabel = c => HEART_RANK[cdRank(c)] + HEART_SUIT[cdSuit(c)];
+const cdCard = (c, cls) => `<span class="ck${cls ? ' ' + cls : ''}" data-c="${c}">${heartCard(c)}</span>`;
+const cdMini = c => `<span class="cm${cdSuit(c) === 1 || cdSuit(c) === 2 ? ' red' : ''}"><b>${HEART_RANK[cdRank(c)]}</b><i>${HEART_SUIT[cdSuit(c)]}</i></span>`;
+// 牌桌畫面:上面是對手的座位,中間是桌面,下面是自己的手牌和按鈕
+function cdTable(V, title) {
+  V.root.classList.add('cdgame');
+  V.stage(`<div class="cdtab"><div class="cdops"></div><div class="cdmid"></div><div class="cdmsg"></div></div>`);
+  V.pad.innerHTML = `<div class="cdme"><div class="cdmeinfo"></div><div class="cdhand"></div><div class="cdbtns"></div></div>`;
+  const T = { ops: $('.cdops', V.root), mid: $('.cdmid', V.root), msg: $('.cdmsg', V.root), hand: $('.cdhand', V.pad), btns: $('.cdbtns', V.pad), info: $('.cdmeinfo', V.pad) };
+  T.say = (html, ms) => { T.msg.innerHTML = html; T.msg.classList.remove('on'); void T.msg.offsetWidth; T.msg.classList.add('on'); clearTimeout(T.mt); if (ms) T.mt = setTimeout(() => T.msg.classList.remove('on'), ms); };
+  // 對手的座位:頭像、名字、剩幾張(小小的牌背)、狀態
+  T.seats = (order, me, counts, turn, tag) => {
+    T.ops.innerHTML = order.filter(s => s !== me).map(s => {
+      const p = pinfo(s), n = counts[s] || 0;
+      return `<div class="cdop${turn === s ? ' now' : ''}${p.online ? '' : ' off'}" style="--c:${p.color}">
+        <span class="cdav">${p.emoji}</span><b>${esc(p.name)}</b>
+        <span class="cdbacks">${Array.from({ length: Math.min(n, 13) }, (_, i) => `<i style="--k:${i}"></i>`).join('')}</span>
+        <em class="cdcnt">${n} 張</em>${tag ? tag(s) : ''}${turn === s ? '<span class="cdthink">思考中…</span>' : ''}</div>`;
+    }).join('');
+  };
+  // 自己的手牌:疊在一起排開,點一下抬起來(選取)
+  T.drawHand = (cards, sel, can) => {
+    const w = T.hand.clientWidth || 340, n = cards.length;
+    const cw = Math.min(66, Math.max(40, w / Math.max(5.2, n * 0.62))), step = n > 1 ? Math.min(cw * 0.92, (w - cw) / (n - 1)) : 0, x0 = (w - (cw + step * (n - 1))) / 2;
+    T.hand.style.setProperty('--cw', cw + 'px');
+    T.hand.style.height = cw * 1.4 + 26 + 'px';
+    T.hand.innerHTML = cards.map((c, i) => cdCard(c, (sel && sel.has(c) ? 'sel' : '') + (can && !can(c) ? ' dim' : '') + (can && can(c) ? ' ok' : '')).replace('class="ck', `style="left:${x0 + i * step}px;z-index:${i + 1}" class="ck`)).join('');
+  };
+  return T;
+}
+
+/* =========================================================
+   大老二 🃏(2~4 人):把手上的牌最先出完的人贏
+   大小:3 < 4 < … < K < A < 2;同點數比花色 ♣ < ♦ < ♥ < ♠(梅花 3 最小、黑桃 2 最大)
+   可以出:單張、對子、五張牌(順子 < 葫蘆 < 鐵支 < 同花順);要出一樣張數、而且比桌上大,不然就「過」
+   大家都過,最後出牌的人就可以重新自由出牌。拿到梅花 3 的人先出,第一手要包含梅花 3
+   ========================================================= */
+const B2_TYPE = ['', '順子', '葫蘆', '鐵支', '同花順'];
+const b2Rank = c => (c % 13 + 11) % 13; // 3 → 0 … K → 10、A → 11、2 → 12
+const b2Pow = c => b2Rank(c) * 4 + [3, 2, 1, 0][cdSuit(c)];
+function b2Eval(cards) { // 這組牌是什麼牌型、有多大;不是合法牌型回傳 null
+  const n = cards.length;
+  if (n === 1) return { n, key: b2Pow(cards[0]), name: '單張' };
+  if (n === 2) return cdRank(cards[0]) === cdRank(cards[1]) ? { n, key: Math.max(...cards.map(b2Pow)), name: '對子' } : null;
+  if (n !== 5) return null;
+  const rs = cards.map(cdRank), cnt = {};
+  rs.forEach(r => { cnt[r] = (cnt[r] || 0) + 1; });
+  const groups = Object.entries(cnt).map(([r, k]) => [+r, k]).sort((a, b) => b[1] - a[1]);
+  if (groups[0][1] === 4) return { n, key: 3000 + b2Rank(groups[0][0] - 1), name: '鐵支' };
+  if (groups[0][1] === 3 && groups[1][1] === 2) return { n, key: 2000 + b2Rank(groups[0][0] - 1), name: '葫蘆' };
+  if (groups.length !== 5) return null;
+  const u = rs.slice().sort((a, b) => a - b);
+  let top = 0;
+  if (u[4] - u[0] === 4) top = u[4];
+  else if (u.join() === '1,10,11,12,13') top = 14; // 10 J Q K A
+  if (!top) return null;
+  const topCard = cards.find(c => cdRank(c) === (top === 14 ? 1 : top)), flush = cards.every(c => cdSuit(c) === cdSuit(cards[0]));
+  return { n, key: (flush ? 4000 : 1000) + top * 4 + [3, 2, 1, 0][cdSuit(topCard)], name: flush ? '同花順' : '順子' };
+}
+const b2Beats = (a, b) => !b || (a.n === b.n && a.key > b.key);
+function b2Combos(hand) { // 手上所有可以出的組合(順子每種只挑幾個代表)
+  const out = [], byR = {};
+  const sorted = hand.slice().sort((a, b) => b2Pow(a) - b2Pow(b));
+  sorted.forEach(c => { (byR[cdRank(c)] = byR[cdRank(c)] || []).push(c); });
+  const add = cs => { const ev = b2Eval(cs); if (ev) out.push({ cards: cs, ev }); };
+  sorted.forEach(c => add([c]));
+  Object.values(byR).forEach(g => { for (let i = 0; i < g.length; i++) for (let j = i + 1; j < g.length; j++) add([g[i], g[j]]); });
+  for (let st = 1; st <= 10; st++) { // 順子(A2345 … 10JQKA)
+    const seq = [0, 1, 2, 3, 4].map(k => ((st - 1 + k) % 13) + 1);
+    if (!seq.every(r => byR[r])) continue;
+    add(seq.map(r => byR[r][0]));
+    add(seq.map((r, k) => (k === 4 ? byR[r][byR[r].length - 1] : byR[r][0])));
+    for (let su = 0; su < 4; su++) { const cs = seq.map(r => byR[r].find(c => cdSuit(c) === su)); if (cs.every(c => c != null)) add(cs); }
+  }
+  const trips = Object.values(byR).filter(g => g.length >= 3), pairs = Object.values(byR).filter(g => g.length >= 2);
+  trips.forEach(t => pairs.forEach(p => { if (cdRank(p[0]) !== cdRank(t[0])) add([...t.slice(0, 3), ...p.slice(0, 2)]); }));
+  Object.values(byR).filter(g => g.length === 4).forEach(q => { const single = sorted.find(c => cdRank(c) !== cdRank(q[0])); if (single != null) add([...q, single]); });
+  return out;
+}
+function b2Choose(hand, table, must, noise) { // 電腦(也用在時間到幫人出):能出就出最小的那組
+  let opts = b2Combos(hand);
+  if (must != null) opts = opts.filter(o => o.cards.includes(must));
+  if (table) opts = opts.filter(o => b2Beats(o.ev, table.ev));
+  if (!opts.length) return null;
+  if (!table) { // 自己起頭:有五張的先出(一次丟比較多),再來對子,最後單張
+    const pref = n => opts.filter(o => o.ev.n === n).sort((a, b) => a.ev.key - b.ev.key)[0];
+    const pick5 = pref(5), pick2 = pref(2), pick1 = pref(1);
+    if (pick5 && (pick5.ev.key < 2000 || hand.length <= 7) && Math.random() > noise) return pick5;
+    if (pick2 && b2Rank(pick2.cards[0]) < 11 && Math.random() > noise * 0.5) return pick2;
+    return pick1 || pick2 || pick5;
+  }
+  opts.sort((a, b) => a.ev.key - b.ev.key);
+  const best = opts[0];
+  if (hand.length > 6 && best.ev.n === 1 && b2Rank(best.cards[0]) === 12 && Math.random() < 0.6) return null; // 留著 2
+  if (Math.random() < noise * 0.3) return null;
+  return best;
+}
+
+function hBig2(H) {
+  const P = shuffle(H.players.slice()), n = P.length, TURN_MS = 35000;
+  const deck = shuffle([...Array(52).keys()]), hands = {};
+  const per = n === 3 ? 17 : 13;
+  P.forEach((s, i) => { hands[s] = deck.slice(i * per, (i + 1) * per); });
+  if (n === 3) hands[P[0]].push(deck[51]); // 3 人時剩下的一張給第一位
+  const low = Math.min(...P.flatMap(s => hands[s]).map(b2Pow)), lowCard = P.flatMap(s => hands[s]).find(c => b2Pow(c) === low);
+  let turnI = P.findIndex(s => hands[s].includes(lowCard)), table = null, passed = [], first = true, over = false, tok = 0, last = null;
+  const priv = s => H.to(s, { t: 'g', e: 'hand', hand: hands[s] });
+  const pub = extra => H.bc({ t: 'g', e: 'st', order: P, counts: Object.fromEntries(P.map(s => [s, hands[s].length])), turn: P[turnI], table, passed, must: first ? lowCard : null, last, left: TURN_MS, ...(extra || {}) });
+  function arm() {
+    const my = ++tok, s = P[turnI];
+    H.s.after(TURN_MS, () => { if (my !== tok || over) return; const b = b2Choose(hands[s], table, first ? lowCard : null, 0); if (b) play(s, b.cards, true); else if (table) pass(s, true); });
+  }
+  function next() {
+    turnI = (turnI + 1) % n;
+    if (table && P[turnI] === table.by) { table = null; passed = []; } // 大家都過了:最後出牌的人重新開始
+    pub(); arm();
+  }
+  function play(s, cards, auto) {
+    hands[s] = hands[s].filter(c => !cards.includes(c));
+    const ev = b2Eval(cards);
+    table = { cards: cards.slice().sort((a, b) => b2Pow(a) - b2Pow(b)), ev, by: s };
+    passed = []; first = false;
+    last = { s, type: 'play', name: ev.name, auto: !!auto };
+    priv(s);
+    if (!hands[s].length) return end(s);
+    next();
+  }
+  function pass(s, auto) { passed.push(s); last = { s, type: 'pass', auto: !!auto }; next(); }
+  function end(w) {
+    over = true; tok++;
+    P.forEach(s => { H.scores[s] = s === w ? 20 : Math.max(1, 14 - hands[s].length); });
+    pub({ done: 1, winner: w, hands });
+    H.bc({ t: 'score', scores: H.scores });
+    H.s.after(4200, H.finish);
+  }
+  return {
+    start() { P.forEach(priv); pub({ intro: 1 }); H.s.after(1800, () => { pub(); arm(); }); },
+    input(slot, m) {
+      if (over || slot !== P[turnI]) return;
+      if (m.e === 'pass') { if (table) { tok++; pass(slot); } return; }
+      if (m.e !== 'play' || !Array.isArray(m.cards)) return;
+      const cards = [...new Set(m.cards.map(Number))];
+      if (!cards.length || !cards.every(c => hands[slot].includes(c))) return;
+      const ev = b2Eval(cards);
+      if (!ev || (first && !cards.includes(lowCard)) || (table && !b2Beats(ev, table.ev))) return;
+      tok++; play(slot, cards);
+    },
+    presence() {
+      if (over) return;
+      if (P.filter(H.online).length < 2) return end(P.find(H.online));
+      if (!H.online(P[turnI])) { tok++; const s = P[turnI], b = b2Choose(hands[s], table, first ? lowCard : null, 0); if (b) play(s, b.cards, true); else pass(s, true); }
+    },
+  };
+}
+function vBig2(V) {
+  const me = V.me, T = cdTable(V);
+  let st = null, hand = [], sel = new Set(), bySuit = false, timerT = null;
+  T.btns.innerHTML = `<button class="btn white sm cdsort">↕ 排序</button><button class="btn white sm cdhint">💡 提示</button><button class="btn orange sm cdpass">過</button><button class="btn green sm cdplay">出牌</button>`;
+  const playB = $('.cdplay', T.btns), passB = $('.cdpass', T.btns);
+  const sorted = () => hand.slice().sort((a, b) => (bySuit ? (cdSuit(b) - cdSuit(a)) * 100 + b2Pow(a) - b2Pow(b) : b2Pow(a) - b2Pow(b)));
+  const myTurn = () => st && !st.done && st.turn === me;
+  function canPlay() {
+    if (!myTurn()) return false;
+    const cs = [...sel], ev = b2Eval(cs);
+    return !!ev && (!st.must || cs.includes(st.must)) && (!st.table || b2Beats(ev, st.table.ev));
+  }
+  function render() {
+    T.drawHand(sorted(), sel);
+    playB.disabled = !canPlay();
+    passB.disabled = !myTurn() || !st.table;
+    const ev = b2Eval([...sel]);
+    T.info.innerHTML = !st ? '' : st.done ? '' : myTurn()
+      ? `<b class="cdyou">輪到你!</b>${sel.size ? (ev ? `${ev.name}${st.table && !b2Beats(ev, st.table.ev) ? '<i>(比桌上小)</i>' : ''}` : '<i>這不是合法的牌型</i>') : st.must ? '第一手要包含 ♣3' : st.table ? '壓過桌上的牌,或按「過」' : '自由出牌!'}`
+      : `等 ${esc(pinfo(st.turn).name)} 出牌…`;
+    V.root.classList.toggle('myturn', myTurn());
+  }
+  function renderTable() {
+    T.seats(st.order, me, st.counts, st.done ? null : st.turn, s => (st.passed.includes(s) ? '<span class="cdpassed">過</span>' : ''));
+    const t = st.table;
+    T.mid.innerHTML = t ? `<div class="cdlast"><div class="cdplayed" style="--cw:${t.cards.length > 2 ? 54 : 62}px">${t.cards.map((c, i) => cdCard(c).replace('class="ck', `style="--i:${i};--n:${t.cards.length}" class="ck`)).join('')}</div>
+        <div class="cdwho">${pinfo(t.by).emoji} ${t.by === me ? '你' : esc(pinfo(t.by).name)} 出了 <b>${t.ev.name}</b></div></div>`
+      : `<div class="cdfree">🃏<b>${st.done ? '' : (st.turn === me ? '你' : esc(pinfo(st.turn).name)) + ' 自由出牌'}</b></div>`;
+  }
+  T.hand.addEventListener('pointerdown', e => {
+    const k = e.target.closest('.ck');
+    if (!k) return;
+    const c = +k.dataset.c;
+    if (sel.has(c)) sel.delete(c); else sel.add(c);
+    SFX.tap(); render();
+  });
+  $('.cdsort', T.btns).addEventListener('pointerdown', () => { bySuit = !bySuit; render(); });
+  let hintI = 0;
+  $('.cdhint', T.btns).addEventListener('pointerdown', () => { // 依序列出能出的組合
+    if (!myTurn()) return;
+    let opts = b2Combos(hand);
+    if (st.must) opts = opts.filter(o => o.cards.includes(st.must));
+    if (st.table) opts = opts.filter(o => b2Beats(o.ev, st.table.ev));
+    opts.sort((a, b) => a.ev.n - b.ev.n || a.ev.key - b.ev.key);
+    if (!opts.length) { toast('沒有牌可以壓,只能「過」'); return; }
+    sel = new Set(opts[hintI++ % opts.length].cards); render();
+  });
+  passB.addEventListener('pointerdown', () => { if (myTurn() && st.table) { V.send({ e: 'pass' }); sel.clear(); } });
+  playB.addEventListener('pointerdown', () => { if (canPlay()) { V.send({ e: 'play', cards: [...sel] }); sel.clear(); SFX.tap(); } });
+  V.on = m => {
+    if (m.e === 'hand') { hand = m.hand; sel = new Set([...sel].filter(c => hand.includes(c))); if (st) render(); return; }
+    if (m.e !== 'st') return;
+    const prev = st;
+    st = m;
+    if (m.intro) T.say(`<div class="big">🃏</div><b>大老二</b><small>${pinfo(m.turn).emoji} ${m.turn === me ? '你' : esc(pinfo(m.turn).name)} 拿到 ♣3,先出!</small>`, 2200);
+    if (m.last && (!prev || JSON.stringify(prev.last) !== JSON.stringify(m.last))) {
+      if (m.last.type === 'pass') beep(330, 0.08, 'triangle', 0.06);
+      else { beep(520, 0.07, 'triangle', 0.08); if (m.last.name === '鐵支' || m.last.name === '同花順') { T.say(`<b class="boom">${m.last.name}!!</b>`, 1400); buzz([60, 40, 60]); } }
+    }
+    if (myTurn() && (!prev || prev.turn !== me)) { buzz(50); SFX.tick(); }
+    renderTable(); render();
+    clearInterval(timerT);
+    if (m.done) {
+      const rows = m.order.slice().sort((a, b) => m.counts[a] - m.counts[b]).map((s, k) => `<span>${['🥇', '🥈', '🥉', '🎀'][k]} ${pinfo(s).emoji} ${s === me ? '你' : esc(pinfo(s).name)} <i>剩 ${m.counts[s]} 張</i></span>`).join('');
+      T.say(`<div class="big">${m.winner === me ? '🏆' : '🃏'}</div><b>${m.winner === me ? '你' : esc(pinfo(m.winner).name)} 出完了!</b><div class="ffinal">${rows}</div>`);
+      if (m.winner === me) SFX.win(); else SFX.bad();
+    }
+  };
+  new ResizeObserver(() => { if (st && T.hand.isConnected) render(); }).observe(T.hand);
+}
+
+/* =========================================================
+   排七 7️⃣(2~4 人):52 張全部發完,從黑桃 7 開始,每種花色從 7 往兩邊接
+   能接就一定要出;一張都接不上就要選一張「蓋牌」(蓋著不能出)。全部出完後,蓋牌的點數加起來(A=1…K=13),點數最少的人贏
+   ========================================================= */
+const SEV_START = 6; // 黑桃 7
+const sevOk = (board, c) => { const b = board[cdSuit(c)], r = cdRank(c); return r === 7 ? !b : !!b && (r === b.lo - 1 || r === b.hi + 1); };
+function sevChoose(hand, board, first, noise) { // 電腦:能出就挑「後面還有自己的牌可以接」的;不能出就蓋點數最小的
+  if (first) return { e: 'play', c: SEV_START };
+  const ok = hand.filter(c => sevOk(board, c));
+  if (!ok.length) return { e: 'cover', c: hand.slice().sort((a, b) => cdRank(a) - cdRank(b))[0] };
+  const score = c => { // 出了這張之後,同一個方向自己還有幾張可以接(越多越好)、會不會幫到別人
+    const su = cdSuit(c), r = cdRank(c);
+    const mine = hand.filter(x => cdSuit(x) === su).map(cdRank);
+    const dir = r === 7 ? 0 : r < 7 ? -1 : 1;
+    const follow = dir === 0 ? mine.filter(x => x !== 7).length : mine.filter(x => (dir < 0 ? x < r : x > r)).length;
+    return follow * 3 + (r === 7 ? -2 : 0) + Math.abs(r - 7) * 0.3 + (Math.random() - 0.5) * noise * 10;
+  };
+  return { e: 'play', c: ok.sort((a, b) => score(b) - score(a))[0] };
+}
+function hSeven(H) {
+  const P = shuffle(H.players.slice()), n = P.length, TURN_MS = 30000;
+  const deck = shuffle([...Array(52).keys()]), hands = {}, covered = {};
+  P.forEach(s => { hands[s] = []; covered[s] = []; });
+  deck.forEach((c, i) => hands[P[i % n]].push(c));
+  const board = [null, null, null, null];
+  let turnI = P.findIndex(s => hands[s].includes(SEV_START)), first = true, over = false, tok = 0, last = null;
+  const pts = s => covered[s].reduce((t, c) => t + cdRank(c), 0);
+  const priv = s => H.to(s, { t: 'g', e: 'hand', hand: hands[s], covered: covered[s] });
+  const pub = extra => H.bc({ t: 'g', e: 'st', order: P, counts: Object.fromEntries(P.map(s => [s, hands[s].length])), cov: Object.fromEntries(P.map(s => [s, covered[s].length])), board, turn: P[turnI], first, last, left: TURN_MS, ...(extra || {}) });
+  function arm() {
+    const my = ++tok, s = P[turnI];
+    H.s.after(TURN_MS, () => { if (my === tok && !over) act(s, sevChoose(hands[s], board, first, 0), true); });
+  }
+  function act(s, m, auto) {
+    const c = m.c;
+    hands[s] = hands[s].filter(x => x !== c);
+    if (m.e === 'play') {
+      const su = cdSuit(c), r = cdRank(c);
+      board[su] = board[su] ? { lo: Math.min(board[su].lo, r), hi: Math.max(board[su].hi, r) } : { lo: 7, hi: 7 };
+      last = { s, type: 'play', c, auto: !!auto };
+    } else { covered[s].push(c); last = { s, type: 'cover', auto: !!auto }; }
+    first = false;
+    priv(s);
+    if (P.every(p => !hands[p].length)) return end();
+    for (let k = 0; k < n; k++) { turnI = (turnI + 1) % n; if (hands[P[turnI]].length) break; }
+    pub(); arm();
+  }
+  function end() {
+    over = true; tok++;
+    P.forEach(s => { H.scores[s] = Math.max(1, 100 - pts(s)); });
+    pub({ done: 1, pts: Object.fromEntries(P.map(s => [s, pts(s)])), covered });
+    H.bc({ t: 'score', scores: H.scores });
+    H.s.after(4500, H.finish);
+  }
+  return {
+    start() { P.forEach(priv); pub({ intro: 1 }); H.s.after(1800, () => { pub(); arm(); }); },
+    input(slot, m) {
+      if (over || slot !== P[turnI]) return;
+      const c = +m.c;
+      if (!hands[slot].includes(c)) return;
+      if (m.e === 'play') { if ((first && c !== SEV_START) || !sevOk(board, c)) return; }
+      else if (m.e === 'cover') { if (first || hands[slot].some(x => sevOk(board, x))) return; } // 能接就不能蓋
+      else return;
+      tok++; act(slot, { e: m.e, c });
+    },
+    presence() {
+      if (over) return;
+      if (P.filter(H.online).length < 2) { tok++; return end(); }
+      if (!H.online(P[turnI])) { tok++; act(P[turnI], sevChoose(hands[P[turnI]], board, first, 0), true); }
+    },
+  };
+}
+function vSeven(V) {
+  const me = V.me, T = cdTable(V);
+  let st = null, hand = [], covered = [], sel = null;
+  T.btns.innerHTML = `<span class="cdcov">蓋牌 <b>0</b> 張 · <b>0</b> 點</span><button class="btn orange sm cdcover">蓋這張</button><button class="btn green sm cdplay">出這張</button>`;
+  const playB = $('.cdplay', T.btns), coverB = $('.cdcover', T.btns), covEl = $('.cdcov', T.btns);
+  const myTurn = () => st && !st.done && st.turn === me;
+  const can = c => (st.first ? c === SEV_START : sevOk(st.board, c));
+  const sorted = () => hand.slice().sort((a, b) => cdSuit(a) * 20 + cdRank(a) - cdSuit(b) * 20 - cdRank(b));
+  function render() {
+    if (!st) return;
+    const mustCover = myTurn() && !hand.some(can);
+    T.drawHand(sorted(), new Set(sel != null ? [sel] : []), myTurn() ? c => (mustCover ? true : can(c)) : null);
+    playB.disabled = !myTurn() || sel == null || !can(sel);
+    coverB.disabled = !mustCover || sel == null;
+    coverB.style.display = mustCover ? '' : 'none';
+    playB.style.display = mustCover ? 'none' : '';
+    $$('b', covEl)[0].textContent = covered.length;
+    $$('b', covEl)[1].textContent = covered.reduce((t, c) => t + cdRank(c), 0);
+    T.info.innerHTML = st.done ? '' : myTurn() ? `<b class="cdyou">輪到你!</b>${st.first ? '先出 ♠7' : mustCover ? '<i>一張都接不上,選一張蓋起來(點數越小越好)</i>' : '選一張亮起來的牌出'}` : `等 ${esc(pinfo(st.turn).name)} 出牌…`;
+    V.root.classList.toggle('myturn', myTurn());
+  }
+  function renderBoard() {
+    T.seats(st.order, me, st.counts, st.done ? null : st.turn, s => (st.cov[s] ? `<span class="cdpassed">蓋 ${st.cov[s]}</span>` : ''));
+    T.mid.innerHTML = `<div class="svboard">${[0, 1, 2, 3].map(su => {
+      const b = st.board[su];
+      return `<div class="svrow">${Array.from({ length: 13 }, (_, i) => { const r = i + 1, c = su * 13 + i, on = b && r >= b.lo && r <= b.hi, isNew = st.last && st.last.type === 'play' && st.last.c === c;
+        return `<span class="svslot${r === 7 ? ' seven' : ''}${isNew ? ' new' : ''}">${on ? cdMini(c) : `<i class="${su === 1 || su === 2 ? 'red' : ''}">${r === 7 ? HEART_SUIT[su] : ''}</i>`}</span>`; }).join('')}</div>`;
+    }).join('')}</div>${st.last ? `<div class="cdwho">${pinfo(st.last.s).emoji} ${st.last.s === me ? '你' : esc(pinfo(st.last.s).name)} ${st.last.type === 'play' ? `出了 <b>${cdLabel(st.last.c)}</b>` : '<b>蓋了一張牌</b> 🙈'}</div>` : ''}`;
+  }
+  T.hand.addEventListener('pointerdown', e => {
+    const k = e.target.closest('.ck');
+    if (!k) return;
+    const c = +k.dataset.c;
+    sel = sel === c ? null : c;
+    SFX.tap(); render();
+  });
+  playB.addEventListener('pointerdown', () => { if (myTurn() && sel != null && can(sel)) { V.send({ e: 'play', c: sel }); sel = null; } });
+  coverB.addEventListener('pointerdown', () => { if (myTurn() && sel != null) { V.send({ e: 'cover', c: sel }); sel = null; } });
+  V.on = m => {
+    if (m.e === 'hand') { hand = m.hand; covered = m.covered; if (sel != null && !hand.includes(sel)) sel = null; render(); return; }
+    if (m.e !== 'st') return;
+    const prev = st;
+    st = m;
+    if (m.intro) T.say(`<div class="big">7️⃣</div><b>排七</b><small>${pinfo(m.turn).emoji} ${m.turn === me ? '你' : esc(pinfo(m.turn).name)} 拿到 ♠7,先出!</small>`, 2200);
+    if (m.last && (!prev || JSON.stringify(prev.last) !== JSON.stringify(m.last))) { if (m.last.type === 'cover') beep(220, 0.1, 'sine', 0.06); else beep(520, 0.07, 'triangle', 0.08); }
+    if (myTurn() && (!prev || prev.turn !== me)) { buzz(50); SFX.tick(); }
+    if (myTurn()) { // 只有一張可以出的時候,幫忙先選好
+      const ok = hand.filter(c => (m.first ? c === SEV_START : sevOk(m.board, c)));
+      if (ok.length === 1) sel = ok[0];
+    }
+    renderBoard(); render();
+    if (m.done) {
+      const rows = m.order.slice().sort((a, b) => m.pts[a] - m.pts[b]).map((s, k) => `<span>${['🥇', '🥈', '🥉', '🎀'][k]} ${pinfo(s).emoji} ${s === me ? '你' : esc(pinfo(s).name)} <i>蓋 ${m.covered[s].length} 張 · ${m.pts[s]} 點</i></span>`).join('');
+      const w = m.order.slice().sort((a, b) => m.pts[a] - m.pts[b])[0];
+      T.say(`<div class="big">${w === me ? '🏆' : '7️⃣'}</div><b>點數最少的人贏!</b><div class="ffinal">${rows}</div>`);
+      if (w === me) SFX.win(); else SFX.bad();
+    }
+  };
+  new ResizeObserver(() => { if (st && T.hand.isConnected) render(); }).observe(T.hand);
 }
 
 /* =========================================================
@@ -7007,6 +7377,30 @@ BOTS.parking = (H, s, m, k) => {
     else H.s.after(200, tick);
   };
   H.s.after(200, tick);
+};
+
+/* 大老二的電腦:能壓就出最小的那組,自己起頭時先丟五張牌或對子;越弱越常亂過 */
+BOTS.big2 = (H, s, m, k) => {
+  const st = H.bs[s] || (H.bs[s] = { tok: 0, hand: [] });
+  if (m.t !== 'g') return;
+  if (m.e === 'hand') { st.hand = m.hand; return; }
+  if (m.e !== 'st' || m.done || m.intro || m.turn !== s) return;
+  const id = ++st.tok;
+  H.s.after(Math.round(rand(900, 1800) * k.spd), () => {
+    if (st.tok !== id) return;
+    const b = b2Choose(st.hand, m.table, m.must, (1 - k.sk) * 0.6);
+    if (b) botSend(H, s, { e: 'play', cards: b.cards });
+    else if (m.table) botSend(H, s, { e: 'pass' });
+  });
+};
+/* 排七的電腦:能接就挑「後面自己還有牌可以接」的那張,接不上就蓋點數最小的 */
+BOTS.seven = (H, s, m, k) => {
+  const st = H.bs[s] || (H.bs[s] = { tok: 0, hand: [] });
+  if (m.t !== 'g') return;
+  if (m.e === 'hand') { st.hand = m.hand; return; }
+  if (m.e !== 'st' || m.done || m.intro || m.turn !== s) return;
+  const id = ++st.tok;
+  H.s.after(Math.round(rand(800, 1500) * k.spd), () => { if (st.tok === id) botSend(H, s, sevChoose(st.hand, m.board, m.first, 1 - k.sk)); });
 };
 
 /* ---------- 防止雙指縮放 / 長按選單 ---------- */
