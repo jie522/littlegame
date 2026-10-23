@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.21';
+const APP_VERSION = '2026.11.23';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -104,7 +104,29 @@ const SFX = {
   join: () => { beep(660, 0.08, 'sine', 0.12); beep(990, 0.12, 'sine', 0.12, 0.07); },
   win: () => [523, 659, 784, 1046, 1318].forEach((f, i) => beep(f, 0.22, 'triangle', 0.16, i * 0.11)),
 };
-function buzz(ms) { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) { /* ignore */ } }
+/* 震動:Android 用 navigator.vibrate;iPhone 的 Safari 不支援它,改用 iOS 17.4 以後「開關(switch)」被切換時會有的觸覺回饋 */
+let hapticLab = null;
+function iosHaptic() {
+  try {
+    if (!hapticLab) {
+      hapticLab = document.createElement('label');
+      hapticLab.setAttribute('aria-hidden', 'true');
+      hapticLab.style.cssText = 'position:fixed;left:-120px;top:-120px;width:40px;height:20px;opacity:.01;pointer-events:none';
+      const inp = document.createElement('input');
+      inp.type = 'checkbox'; inp.setAttribute('switch', ''); inp.tabIndex = -1;
+      hapticLab.appendChild(inp);
+      document.body.appendChild(hapticLab);
+    }
+    hapticLab.click();
+  } catch (e) { /* ignore */ }
+}
+function buzz(ms) {
+  try {
+    if (navigator.vibrate) navigator.vibrate(ms);
+    else if (ms) iosHaptic();
+  } catch (e) { /* ignore */ }
+}
+const buzzTurn = () => buzz(22); // 輪到你了:微震一下
 
 function toast(msg) {
   const t = el('div', 'toast', esc(msg));
@@ -485,8 +507,8 @@ const GAMES = [
     host: hParking, view: vParking, noCountdown: true,
   },
   {
-    id: 'big2', emoji: '🃏', name: '大老二', tag: '撲克+對戰', color: '#1e7a4a', desc: '先把手上的牌出完的人贏!',
-    rules: ['2~4 人,每人 13 張(3 人時每人 17 張),手牌只有自己看得到', '大小:3 最小,接著 4、5…K、A,2 最大;同點數比花色 ♣ < ♦ < ♥ < ♠', '可以出單張、對子、五張牌(順子 < 葫蘆 < 鐵支 < 同花順),要出一樣張數而且比桌上大,不然就按「過」', '大家都過了,最後出牌的人可以重新自由出牌;拿到 ♣3 的人先出,第一手要包含 ♣3', '最先把牌出完的人贏!不會出可以按「💡 提示」'],
+    id: 'big2', emoji: '🃏', name: '大老二', tag: '撲克+對戰', color: '#1e7a4a', desc: '打 5 局比誰賺最多,剩幾張就賠多少錢!',
+    rules: ['2~4 人,每人起始資金 $1000,打 5 局(有人破產就提前結束),最後錢最多的人贏', '大小:3 最小,接著 4、5…K、A,2 最大;同點數比花色 ♣ < ♦ < ♥ < ♠', '可以出單張、對子、五張牌(順子 < 葫蘆 < 鐵支 < 同花順),要出一樣張數而且比桌上大,不然就按「過」', '大家都過了,最後出牌的人可以重新自由出牌;拿到 ♣3 的人先出,第一手要包含 ♣3', '每局最先把牌出完的人贏錢:輸家付「底 $50 + 剩下的張數 × $10」,剩 10 張以上 ×2、一張都沒出(全關)×3', '手牌只有自己看得到,不會出可以按「💡 提示」'],
     host: hBig2, view: vBig2, noCountdown: true,
   },
   {
@@ -1442,7 +1464,7 @@ function vMemory(V) {
       const p = pinfo(m.turn);
       V.stage(`<div class="turn">輪到 ${p.emoji} ${esc(p.name)}…</div>`);
     }
-    if (myTurn && lastTurn !== V.me) { SFX.tick(); buzz(80); }
+    if (myTurn && lastTurn !== V.me) { SFX.tick(); buzzTurn(); }
     lastTurn = m.turn;
   };
 }
@@ -1891,7 +1913,7 @@ function vChess(V) {
           if (m.last.slot === V.me) SFX.good(); else if (fighting()) { SFX.bad(); buzz(80); } else SFX.tap();
         } else SFX.tap();
       }
-      if (myTurn() && lastTurn !== V.me) { buzz(60); if (m.turn !== lastTurn) SFX.tick(); }
+      if (myTurn() && lastTurn !== V.me) { buzzTurn(); if (m.turn !== lastTurn) SFX.tick(); }
       if (m.idle >= 40 && m.idle % 3 === 1 && m.last && m.last.type === 'move') toast(`再 ${50 - m.idle} 步沒有翻棋或吃子就平手`);
       lastTurn = m.turn;
     } else if (m.e === 'over') {
@@ -2607,7 +2629,7 @@ function vMorris(V) {
         else if (L.rm != null) { beep(220, 0.18, 'triangle', 0.12); if (fighting() && L.slot !== me) buzz(90); }
         else beep(rand(380, 460), 0.07, 'sine', 0.14);
       }
-      if (myTurn() && lastTurn !== me) buzz(60);
+      if (myTurn() && lastTurn !== me) buzzTurn();
       lastTurn = m.turn;
     } else if (m.e === 'over') {
       over = true;
@@ -2928,7 +2950,7 @@ function vHeart(V) {
       if (ws.includes(me)) SFX.win(); else SFX.bad();
     }
     nextEl.innerHTML = st.phase === 'play' || st.phase === 'match' ? `下一張喊 <b>${HEART_RANK[st.call]}</b>` : '';
-    if (m.ev === 'turn' && myTurn() && (!prev || prev.turn !== me || prev.phase !== 'play')) buzz(50);
+    if (m.ev === 'turn' && myTurn() && (!prev || prev.turn !== me || prev.phase !== 'play')) buzzTurn();
     renderSeats();
     renderCtl();
   };
@@ -4068,7 +4090,7 @@ function vCheckers(V) {
       if (balls.size !== st.occ.filter(o => o >= 0).length || [...balls].some(([i, b]) => st.occ[i] !== +b.dataset.s)) rebuild();
       drawTrail(st.last && st.last.path);
       renderSeats(); showDests(); renderStatus();
-      if (st.turn === me && !over && (!prev || prev.turn !== me)) { buzz(50); SFX.join(); }
+      if (st.turn === me && !over && (!prev || prev.turn !== me)) { buzzTurn(); SFX.join(); }
     };
     if (m.last && m.last.id !== lastId) {
       lastId = m.last.id;
@@ -6734,16 +6756,32 @@ function b2Choose(hand, table, must, noise) { // 電腦(也用在時間到幫人
   return best;
 }
 
+// 錢:起始 1000、底 50、每張 10;剩 10 張以上 ×2、一張都沒出(全關)×3。輸家付給贏家(最多付到身上的錢全部給完)
+const B2_MONEY = { START: 1000, BASE: 50, PER: 10, ROUNDS: 5 };
+const b2Mult = (left, init) => (left === init ? 3 : left >= 10 ? 2 : 1);
+const b2Pay = (left, init) => (B2_MONEY.BASE + left * B2_MONEY.PER) * b2Mult(left, init);
 function hBig2(H) {
-  const P = shuffle(H.players.slice()), n = P.length, TURN_MS = 35000;
-  const deck = shuffle([...Array(52).keys()]), hands = {};
-  const per = n === 3 ? 17 : 13;
-  P.forEach((s, i) => { hands[s] = deck.slice(i * per, (i + 1) * per); });
-  if (n === 3) hands[P[0]].push(deck[51]); // 3 人時剩下的一張給第一位
-  const low = Math.min(...P.flatMap(s => hands[s]).map(b2Pow)), lowCard = P.flatMap(s => hands[s]).find(c => b2Pow(c) === low);
-  let turnI = P.findIndex(s => hands[s].includes(lowCard)), table = null, passed = [], first = true, over = false, tok = 0, last = null;
+  const P = shuffle(H.players.slice()), n = P.length, TURN_MS = 35000, M = B2_MONEY;
+  const money = {};
+  P.forEach(s => { money[s] = M.START; });
+  let round = 0, hands, init, lowCard, turnI, table, passed, first, over = false, tok = 0, last = null;
   const priv = s => H.to(s, { t: 'g', e: 'hand', hand: hands[s] });
-  const pub = extra => H.bc({ t: 'g', e: 'st', order: P, counts: Object.fromEntries(P.map(s => [s, hands[s].length])), turn: P[turnI], table, passed, must: first ? lowCard : null, last, left: TURN_MS, ...(extra || {}) });
+  const pub = extra => H.bc({ t: 'g', e: 'st', order: P, round, rounds: M.ROUNDS, money, init, counts: Object.fromEntries(P.map(s => [s, hands[s].length])), turn: P[turnI], table, passed, must: first ? lowCard : null, last, left: TURN_MS, ...(extra || {}) });
+  const scoreAll = () => { P.forEach(s => { H.scores[s] = Math.max(0, money[s]); }); H.bc({ t: 'score', scores: H.scores }); };
+  function deal() {
+    round++;
+    const deck = shuffle([...Array(52).keys()]), per = n === 3 ? 17 : 13;
+    hands = {};
+    P.forEach((s, i) => { hands[s] = deck.slice(i * per, (i + 1) * per); });
+    if (n === 3) hands[P[0]].push(deck[51]); // 3 人時剩下的一張給第一位
+    init = Object.fromEntries(P.map(s => [s, hands[s].length]));
+    const all = P.flatMap(s => hands[s]);
+    lowCard = all.find(c => b2Pow(c) === Math.min(...all.map(b2Pow)));
+    turnI = P.findIndex(s => hands[s].includes(lowCard));
+    table = null; passed = []; first = true; last = null;
+    P.forEach(priv); pub({ intro: 1 });
+    H.s.after(1800, () => { pub(); arm(); });
+  }
   function arm() {
     const my = ++tok, s = P[turnI];
     H.s.after(TURN_MS, () => { if (my !== tok || over) return; const b = b2Choose(hands[s], table, first ? lowCard : null, 0); if (b) play(s, b.cards, true); else if (table) pass(s, true); });
@@ -6760,21 +6798,34 @@ function hBig2(H) {
     passed = []; first = false;
     last = { s, type: 'play', name: ev.name, auto: !!auto };
     priv(s);
-    if (!hands[s].length) return end(s);
+    if (!hands[s].length) return roundEnd(s);
     next();
   }
   function pass(s, auto) { passed.push(s); last = { s, type: 'pass', auto: !!auto }; next(); }
-  function end(w) {
-    over = true; tok++;
-    P.forEach(s => { H.scores[s] = s === w ? 20 : Math.max(1, 14 - hands[s].length); });
-    pub({ done: 1, winner: w, hands });
-    H.bc({ t: 'score', scores: H.scores });
-    H.s.after(4200, H.finish);
+  function roundEnd(w) { // 一局結束:輸家照剩下的張數付錢給贏家
+    tok++;
+    const pay = {}, left = {};
+    let got = 0;
+    P.forEach(s => {
+      if (s === w) return;
+      left[s] = hands[s].length;
+      const due = b2Pay(left[s], init[s]), p = Math.min(due, money[s]);
+      pay[s] = { due, paid: p, mult: b2Mult(left[s], init[s]) };
+      money[s] -= p; got += p;
+    });
+    money[w] += got;
+    scoreAll();
+    const broke = P.filter(s => money[s] <= 0), lastRound = round >= M.ROUNDS || broke.length > 0;
+    pub({ rend: 1, winner: w, pay, got, lastRound });
+    if (lastRound) {
+      const top = P.slice().sort((a, b) => money[b] - money[a])[0];
+      H.s.after(5200, () => { over = true; pub({ done: 1, winner: top, broke }); H.s.after(4200, H.finish); });
+    } else H.s.after(5200, deal);
   }
   return {
-    start() { P.forEach(priv); pub({ intro: 1 }); H.s.after(1800, () => { pub(); arm(); }); },
+    start() { scoreAll(); deal(); },
     input(slot, m) {
-      if (over || slot !== P[turnI]) return;
+      if (over || !hands || slot !== P[turnI] || hands[slot].length === 0) return;
       if (m.e === 'pass') { if (table) { tok++; pass(slot); } return; }
       if (m.e !== 'play' || !Array.isArray(m.cards)) return;
       const cards = [...new Set(m.cards.map(Number))];
@@ -6785,8 +6836,8 @@ function hBig2(H) {
     },
     presence() {
       if (over) return;
-      if (P.filter(H.online).length < 2) return end(P.find(H.online));
-      if (!H.online(P[turnI])) { tok++; const s = P[turnI], b = b2Choose(hands[s], table, first ? lowCard : null, 0); if (b) play(s, b.cards, true); else pass(s, true); }
+      if (P.filter(H.online).length < 2) { tok++; over = true; const top = P.filter(H.online)[0] != null ? P.filter(H.online)[0] : P[0]; pub({ done: 1, winner: top, broke: [] }); H.s.after(3000, H.finish); return; }
+      if (hands && !H.online(P[turnI])) { tok++; const s = P[turnI], b = b2Choose(hands[s], table, first ? lowCard : null, 0); if (b) play(s, b.cards, true); else pass(s, true); }
     },
   };
 }
@@ -6796,7 +6847,8 @@ function vBig2(V) {
   T.btns.innerHTML = `<button class="btn white sm cdsort">↕ 排序</button><button class="btn white sm cdhint">💡 提示</button><button class="btn orange sm cdpass">過</button><button class="btn green sm cdplay">出牌</button>`;
   const playB = $('.cdplay', T.btns), passB = $('.cdpass', T.btns);
   const sorted = () => hand.slice().sort((a, b) => (bySuit ? (cdSuit(b) - cdSuit(a)) * 100 + b2Pow(a) - b2Pow(b) : b2Pow(a) - b2Pow(b)));
-  const myTurn = () => st && !st.done && st.turn === me;
+  const myTurn = () => st && !st.done && !st.rend && st.turn === me;
+  const $$ = (n) => '$' + n;
   function canPlay() {
     if (!myTurn()) return false;
     const cs = [...sel], ev = b2Eval(cs);
@@ -6807,13 +6859,14 @@ function vBig2(V) {
     playB.disabled = !canPlay();
     passB.disabled = !myTurn() || !st.table;
     const ev = b2Eval([...sel]);
-    T.info.innerHTML = !st ? '' : st.done ? '' : myTurn()
+    T.info.innerHTML = !st ? '' : st.done || st.rend ? `💰 你有 <b>$${st.money[me]}</b>` : myTurn()
       ? `<b class="cdyou">輪到你!</b>${sel.size ? (ev ? `${ev.name}${st.table && !b2Beats(ev, st.table.ev) ? '<i>(比桌上小)</i>' : ''}` : '<i>這不是合法的牌型</i>') : st.must ? '第一手要包含 ♣3' : st.table ? '壓過桌上的牌,或按「過」' : '自由出牌!'}`
       : `等 ${esc(pinfo(st.turn).name)} 出牌…`;
+    if (st && !st.done && !st.rend) T.info.insertAdjacentHTML('beforeend', `<small class="cdwallet">💰 $${st.money[me]} · 剩 ${hand.length} 張 = −$${b2Pay(hand.length, st.init[me])}</small>`);
     V.root.classList.toggle('myturn', myTurn());
   }
   function renderTable() {
-    T.seats(st.order, me, st.counts, st.done ? null : st.turn, s => (st.passed.includes(s) ? '<span class="cdpassed">過</span>' : ''));
+    T.seats(st.order, me, st.counts, st.done || st.rend ? null : st.turn, s => `<span class="cdmoney">💰 ${st.money[s]}</span><span class="cdstake">${b2Mult(st.counts[s], st.init[s]) > 1 ? '×' + b2Mult(st.counts[s], st.init[s]) + ' ' : ''}輸了 −$${b2Pay(st.counts[s], st.init[s])}</span>${st.passed.includes(s) ? '<span class="cdpassed">過</span>' : ''}`);
     const t = st.table;
     T.mid.innerHTML = t ? `<div class="cdlast"><div class="cdplayed" style="--cw:${t.cards.length > 2 ? 70 : 88}px">${t.cards.map((c, i) => cdCard(c).replace('class="ck', `style="--i:${i};--n:${t.cards.length}" class="ck`)).join('')}</div>
         <div class="cdwho">${pinfo(t.by).emoji} ${t.by === me ? '你' : esc(pinfo(t.by).name)} 出了 <b>${t.ev.name}</b></div></div>`
@@ -6844,17 +6897,23 @@ function vBig2(V) {
     if (m.e !== 'st') return;
     const prev = st;
     st = m;
-    if (m.intro) T.say(`<div class="big">🃏</div><b>大老二</b><small>${pinfo(m.turn).emoji} ${m.turn === me ? '你' : esc(pinfo(m.turn).name)} 拿到 ♣3,先出!</small>`, 2200);
+    if (m.intro) T.say(`<div class="big">🃏</div><b>第 ${m.round} / ${m.rounds} 局</b><small>底 $${B2_MONEY.BASE} + 每張 $${B2_MONEY.PER}(剩 10 張以上 ×2、全關 ×3)</small><small>${pinfo(m.turn).emoji} ${m.turn === me ? '你' : esc(pinfo(m.turn).name)} 拿到 ♣3,先出!</small>`, 2400);
     if (m.last && (!prev || JSON.stringify(prev.last) !== JSON.stringify(m.last))) {
       if (m.last.type === 'pass') beep(330, 0.08, 'triangle', 0.06);
       else { beep(520, 0.07, 'triangle', 0.08); if (m.last.name === '鐵支' || m.last.name === '同花順') { T.say(`<b class="boom">${m.last.name}!!</b>`, 1400); buzz([60, 40, 60]); } }
     }
-    if (myTurn() && (!prev || prev.turn !== me)) { buzz(50); SFX.tick(); }
+    if (myTurn() && (!prev || prev.turn !== me)) { buzzTurn(); SFX.tick(); }
     renderTable(); render();
     clearInterval(timerT);
+    if (m.rend) { // 一局結束:誰付了多少錢
+      const w = m.winner, rows = m.order.filter(x => x !== w).map(x => { const p = m.pay[x]; return `<span>${pinfo(x).emoji} ${x === me ? '你' : esc(pinfo(x).name)} <i>剩 ${m.counts[x]} 張${p.mult > 1 ? ' ×' + p.mult + (m.counts[x] === m.init[x] ? '(全關!)' : '') : ''}</i> <b class="neg">−$${p.paid}</b>${p.paid < p.due ? '<i>(破產)</i>' : ''}</span>`; }).join('');
+      T.say(`<div class="big">${w === me ? '🏆' : '🃏'}</div><b>${w === me ? '你' : esc(pinfo(w).name)} 贏了這局 <span class="pos">+$${m.got}</span></b><div class="ffinal">${rows}</div><small>${m.lastRound ? '比賽結束!' : '下一局馬上開始…'}</small>`);
+      if (w === me) SFX.win(); else SFX.bad();
+      return;
+    }
     if (m.done) {
-      const rows = m.order.slice().sort((a, b) => m.counts[a] - m.counts[b]).map((s, k) => `<span>${['🥇', '🥈', '🥉', '🎀'][k]} ${pinfo(s).emoji} ${s === me ? '你' : esc(pinfo(s).name)} <i>剩 ${m.counts[s]} 張</i></span>`).join('');
-      T.say(`<div class="big">${m.winner === me ? '🏆' : '🃏'}</div><b>${m.winner === me ? '你' : esc(pinfo(m.winner).name)} 出完了!</b><div class="ffinal">${rows}</div>`);
+      const rows = m.order.slice().sort((a, b) => m.money[b] - m.money[a]).map((s, k) => `<span>${['🥇', '🥈', '🥉', '🎀'][k]} ${pinfo(s).emoji} ${s === me ? '你' : esc(pinfo(s).name)} <i>${m.money[s] >= B2_MONEY.START ? '+' : '−'}$${Math.abs(m.money[s] - B2_MONEY.START)}</i> <b>$${m.money[s]}</b></span>`).join('');
+      T.say(`<div class="big">${m.winner === me ? '🏆' : '🃏'}</div><b>${m.winner === me ? '你' : esc(pinfo(m.winner).name)} 赢了全場!</b><div class="ffinal">${rows}</div>${m.broke.length ? '<small>有人破產了,提前結束</small>' : ''}`);
       if (m.winner === me) SFX.win(); else SFX.bad();
     }
   };
@@ -6978,7 +7037,7 @@ function vSeven(V) {
     st = m;
     if (m.intro) T.say(`<div class="big">7️⃣</div><b>排七</b><small>${pinfo(m.turn).emoji} ${m.turn === me ? '你' : esc(pinfo(m.turn).name)} 拿到 ♠7,先出!</small>`, 2200);
     if (m.last && (!prev || JSON.stringify(prev.last) !== JSON.stringify(m.last))) { if (m.last.type === 'cover') beep(220, 0.1, 'sine', 0.06); else beep(520, 0.07, 'triangle', 0.08); }
-    if (myTurn() && (!prev || prev.turn !== me)) { buzz(50); SFX.tick(); }
+    if (myTurn() && (!prev || prev.turn !== me)) { buzzTurn(); SFX.tick(); }
     if (myTurn()) { // 只有一張可以出的時候,幫忙先選好
       const ok = hand.filter(c => (m.first ? c === SEV_START : sevOk(m.board, c)));
       if (ok.length === 1) sel = ok[0];
@@ -7390,7 +7449,7 @@ BOTS.big2 = (H, s, m, k) => {
   const st = H.bs[s] || (H.bs[s] = { tok: 0, hand: [] });
   if (m.t !== 'g') return;
   if (m.e === 'hand') { st.hand = m.hand; return; }
-  if (m.e !== 'st' || m.done || m.intro || m.turn !== s) return;
+  if (m.e !== 'st' || m.done || m.rend || m.intro || m.turn !== s) return;
   const id = ++st.tok;
   H.s.after(Math.round(rand(900, 1800) * k.spd), () => {
     if (st.tok !== id) return;

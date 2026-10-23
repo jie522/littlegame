@@ -2030,3 +2030,11 @@ button:disabled { cursor: not-allowed; }
 .svrow { gap: 1.5px; }
 .cm b { font-size: .98rem; font-weight: 900; }
 .cm i { font-size: .82rem; }
+
+/* 大老二的錢 */
+.cdmoney { font-weight: 900; font-family: "Fredoka", var(--font); color: #ffe066; font-size: .8rem; }
+.cdstake { font-size: .64rem; color: #ffb3b3; font-weight: 800; }
+.cdwallet { display: block; margin-top: 2px; color: #ffe9a8; font-size: .72rem; font-weight: 700; }
+.cdmsg .pos { color: #7dffb0; }
+.cdmsg .neg { color: #ff8a8a; }
+.cdmsg .ffinal b { font-family: "Fredoka", var(--font); }
