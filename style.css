@@ -1938,3 +1938,9 @@ button:disabled { cursor: not-allowed; }
 .play-checkers .k3d { position: absolute; top: 0; left: 0; width: 100%; height: 100%; max-width: none; max-height: none; display: block; z-index: 1; touch-action: none; }
 .play-checkers.chk3 .chsvg { visibility: hidden; }
 .play-checkers.chk3 .cover { z-index: 3; }
+
+/* 暗棋:玩家卡裡「已吃掉的棋子」(要用 .ptro 限定,不然會被戰績頁的 .gp 蓋掉) */
+.ptro .gp { width: 27px; height: 27px; min-width: 0; padding: 0; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fffdf6, #ecd6a6); border: 2px solid #7a4a22; box-shadow: 0 2px 0 rgba(60,30,10,.45); font-family: "Kaiti TC", "BiauKai", "DFKai-SB", "PingFang TC", "Microsoft JhengHei", serif; font-size: 1rem; font-weight: 900; line-height: 1; }
+.ptro .gp.r { color: #c4121c; border-color: #b3202c; }
+.ptro .gp.b { color: #14131a; border-color: #2a2833; }
+.ptro { gap: 4px; min-height: 27px; }

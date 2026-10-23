@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.14';
+const APP_VERSION = '2026.11.15';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -1544,15 +1544,15 @@ function chess3D(LD, host) {
   cvs.className = 'c3d';
   host.appendChild(cvs);
   const scene = new THREE.Scene();
-  scene.add(new THREE.HemisphereLight('#fff3e0', '#3a2414', 0.42));
-  const sun = new THREE.DirectionalLight('#fff0d4', 2.15);
+  scene.add(new THREE.HemisphereLight('#fff3e0', '#3a2414', 0.3));
+  const sun = new THREE.DirectionalLight('#fff0d4', 1.2);
   sun.position.set(-3, 9, 4);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.bias = -0.0004;
   Object.assign(sun.shadow.camera, { left: -6, right: 6, top: 7, bottom: -7, near: 1, far: 25 });
   scene.add(sun);
-  const fill = new THREE.DirectionalLight('#dfe8ff', 0.55); // 右前方的補光,棋子邊緣比較立體
+  const fill = new THREE.DirectionalLight('#dfe8ff', 0.28); // 右前方的補光,棋子邊緣比較立體
   fill.position.set(5, 4, 8);
   scene.add(fill);
   // 木紋(棋盤用):一條條深淺不一的紋路
@@ -1570,7 +1570,7 @@ function chess3D(LD, host) {
     t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8;
     return t;
   };
-  const GRAIN = { BoardFrame: grain('#5c3518', '#2e1608', '#8a5530'), BoardWood: grain('#efcf95', '#b98a4a', '#fff0c8'), BoardWoodDk: grain('#dcae69', '#a8763a', '#f0cc8a') };
+  const GRAIN = { BoardFrame: grain('#5c3518', '#2e1608', '#8a5530'), BoardWood: grain('#e8c883', '#a87a3c', '#f6dca0'), BoardWoodDk: grain('#c08d4a', '#8a5a26', '#d9a866') };
   // 木頭桌面
   const tcv = document.createElement('canvas');
   tcv.width = 512; tcv.height = 1024;
@@ -1607,18 +1607,18 @@ function chess3D(LD, host) {
     const cv = document.createElement('canvas'), g = cv.getContext('2d'), S = 256;
     cv.width = cv.height = S;
     const bg = g.createRadialGradient(S * 0.42, S * 0.38, 10, S / 2, S / 2, S / 2);
-    bg.addColorStop(0, c ? '#fffaf0' : '#f3dfb6'); bg.addColorStop(1, c ? '#f1dfb8' : '#dcb983');
+    bg.addColorStop(0, c ? '#f8eed8' : '#8a5430'); bg.addColorStop(1, c ? '#e6d2a4' : '#5a331a');
     g.fillStyle = bg; g.fillRect(0, 0, S, S);
-    const ink = !c ? '#9c7240' : c === 'r' ? '#c4121c' : '#141218';
-    g.strokeStyle = ink; g.lineWidth = 7; g.beginPath(); g.arc(S / 2, S / 2, S * 0.43, 0, Math.PI * 2); g.stroke();
-    g.lineWidth = 2.5; g.beginPath(); g.arc(S / 2, S / 2, S * 0.38, 0, Math.PI * 2); g.stroke();
+    const ink = !c ? '#e8c36e' : c === 'r' ? '#b80d18' : '#0f0e14';
+    g.strokeStyle = ink; g.lineWidth = 9; g.beginPath(); g.arc(S / 2, S / 2, S * 0.43, 0, Math.PI * 2); g.stroke();
+    g.lineWidth = 3.5; g.beginPath(); g.arc(S / 2, S / 2, S * 0.38, 0, Math.PI * 2); g.stroke();
     if (c) {
       g.font = `900 ${S * 0.5}px "Noto Serif TC", "Songti TC", "PMingLiU", "MingLiU", serif`;
       g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.fillStyle = 'rgba(255,255,255,.75)'; g.fillText(CHESS_NAME[c][k], S / 2 + 2, S / 2 + 6);
+      g.fillStyle = 'rgba(255,255,255,.55)'; g.fillText(CHESS_NAME[c][k], S / 2 + 2, S / 2 + 6);
       g.fillStyle = ink; g.fillText(CHESS_NAME[c][k], S / 2, S / 2 + 4);
     } else { // 背面:刻花
-      g.lineWidth = 3;
+      g.lineWidth = 5;
       for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; g.beginPath(); g.ellipse(S / 2 + Math.cos(a) * 30, S / 2 + Math.sin(a) * 30, 26, 11, a, 0, Math.PI * 2); g.stroke(); }
       g.beginPath(); g.arc(S / 2, S / 2, 12, 0, Math.PI * 2); g.fillStyle = ink; g.fill();
     }
