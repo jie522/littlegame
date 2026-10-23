@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.16';
+const APP_VERSION = '2026.11.18';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -1545,15 +1545,15 @@ function chess3D(LD, host) {
   cvs.className = 'c3d';
   host.appendChild(cvs);
   const scene = new THREE.Scene();
-  scene.add(new THREE.HemisphereLight('#fff3e0', '#3a2414', 0.3));
-  const sun = new THREE.DirectionalLight('#fff0d4', 1.2);
+  scene.add(new THREE.HemisphereLight('#fff6e8', '#5a3a22', 0.62));
+  const sun = new THREE.DirectionalLight('#fff3dc', 1.75);
   sun.position.set(-3, 9, 4);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.bias = -0.0004;
   Object.assign(sun.shadow.camera, { left: -6, right: 6, top: 7, bottom: -7, near: 1, far: 25 });
   scene.add(sun);
-  const fill = new THREE.DirectionalLight('#dfe8ff', 0.28); // 右前方的補光,棋子邊緣比較立體
+  const fill = new THREE.DirectionalLight('#eef2ff', 0.5); // 右前方的補光,棋子邊緣比較立體
   fill.position.set(5, 4, 8);
   scene.add(fill);
   // 木紋(棋盤用):一條條深淺不一的紋路
@@ -1594,6 +1594,7 @@ function chess3D(LD, host) {
       for (let i = 0; i < p.count; i++) { uv[i * 2] = p.getX(i) * 0.35; uv[i * 2 + 1] = p.getZ(i) * 0.12 + p.getY(i) * 0.35; }
       geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
       mat = mat.clone(); mat.map = tex; mat.color.set('#ffffff'); mat.roughness = 0.5;
+      mat.emissive = new THREE.Color('#ffffff'); mat.emissiveMap = tex; mat.emissiveIntensity = mat.name === 'BoardFrame' ? 0.12 : 0.3; // 棋盤木紋自己也發一點光
     }
     const m = new THREE.Mesh(geo, mat); m.receiveShadow = true; m.castShadow = mat.name === 'BoardFrame'; board.add(m);
   });
@@ -1608,9 +1609,9 @@ function chess3D(LD, host) {
     const cv = document.createElement('canvas'), g = cv.getContext('2d'), S = 256;
     cv.width = cv.height = S;
     const bg = g.createRadialGradient(S * 0.42, S * 0.38, 10, S / 2, S / 2, S / 2);
-    bg.addColorStop(0, c ? '#f8eed8' : '#8a5430'); bg.addColorStop(1, c ? '#e6d2a4' : '#5a331a');
+    bg.addColorStop(0, c ? '#fffaf0' : '#9a6038'); bg.addColorStop(1, c ? '#f0dcb0' : '#683a1e');
     g.fillStyle = bg; g.fillRect(0, 0, S, S);
-    const ink = !c ? '#e8c36e' : c === 'r' ? '#b80d18' : '#0f0e14';
+    const ink = !c ? '#f2cf80' : c === 'r' ? '#d4101c' : '#0a0a10';
     g.strokeStyle = ink; g.lineWidth = 9; g.beginPath(); g.arc(S / 2, S / 2, S * 0.43, 0, Math.PI * 2); g.stroke();
     g.lineWidth = 3.5; g.beginPath(); g.arc(S / 2, S / 2, S * 0.38, 0, Math.PI * 2); g.stroke();
     if (c) {
@@ -1630,10 +1631,10 @@ function chess3D(LD, host) {
     return t;
   }
   const discGeo = new THREE.CircleGeometry(0.355, 48);
-  const backMat = new THREE.MeshStandardMaterial({ map: faceTex(null), roughness: 0.45 });
-  const blankMat = new THREE.MeshStandardMaterial({ map: faceTex(null), roughness: 0.45 });
+  const backMat = new THREE.MeshStandardMaterial({ map: faceTex(null), roughness: 0.45, emissive: '#ffffff', emissiveMap: faceTex(null), emissiveIntensity: 0.3 });
+  const blankMat = new THREE.MeshStandardMaterial({ map: faceTex(null), roughness: 0.45, emissive: '#ffffff', emissiveMap: faceTex(null), emissiveIntensity: 0.3 });
   const faceMats = new Map();
-  const faceMat = (c, k) => { const key = c + k; if (!faceMats.has(key)) faceMats.set(key, new THREE.MeshStandardMaterial({ map: faceTex(c, k), roughness: 0.4 })); return faceMats.get(key); };
+  const faceMat = (c, k) => { const key = c + k; if (!faceMats.has(key)) faceMats.set(key, new THREE.MeshStandardMaterial({ map: faceTex(c, k), roughness: 0.4, emissive: '#ffffff', emissiveMap: faceTex(c, k), emissiveIntensity: 0.38 })); return faceMats.get(key); };
   function makePiece() {
     const g = new THREE.Group(), inner = new THREE.Group();
     bodyParts.forEach(({ mat, geo }) => { const m = new THREE.Mesh(geo, mat); m.castShadow = true; m.receiveShadow = true; inner.add(m); });
@@ -1804,7 +1805,8 @@ function vChess(V) {
     const card = s => {
       const p = pinfo(s), c = st.color[s], oc = c ? (c === 'r' ? 'b' : 'r') : null;
       const ks = oc ? [...st.dead[oc]].sort((x, y) => CHESS_RANK[y] - CHESS_RANK[x]) : []; // 這位玩家吃掉的對方棋子
-      return `<div class="pcard${st.turn === s && !over ? ' now' : ''}" style="--c:${p.color}">
+      const now = st.turn === s && !over;
+      return `<div class="pcard${now ? ' now' : ' idle'}" style="--c:${p.color}">${now ? `<em class="pturn">${s === V.me ? '輪到你!' : '思考中…'}</em>` : ''}
         <div class="pav">${p.emoji}${c ? `<i class="pdot ${c}"></i>` : ''}</div>
         <div class="pinfo"><b>${who(s)}</b><span class="pcnt">${c ? (c === 'r' ? '紅方' : '黑方') + ' · 剩 ' + st.left[c] : '尚未定色'}</span></div>
         <div class="ptro">${ks.length ? ks.map(k => `<i class="gp ${oc}">${CHESS_NAME[oc][k]}</i>`).join('') : '<span class="gnone">吃子紀錄</span>'}</div>
@@ -5453,6 +5455,8 @@ function busGame() {
    ========================================================= */
 const PK = { W: 18, H: 30, L: 4.4, CW: 1.9, WB: 2.7, STEER: 0.6, VF: 6, VR: 3.4 };
 const PK_LEN = { Sedan: 4.4, Hatch: 3.8, Van: 4.6 };
+// 卡車連結車:車頭(原點在車頭中心)+ 車廂(拖在後面)。車廂的轉軸(第五輪)在車頭後軸上,倒車的時候車廂會折刀
+const PK_TRUCK = { CL: 4.2, CW: 2.4, WB: 3.2, STEER: 0.5, HITCH: 1.6, TC: 4.2, TL: 7.2, TW: 2.5, TAXLE: 5.0, MAXJ: 1.25 };
 const PK_THEMES = { // 地面、線、外圍
   day: { ground: '#9aa3b1', line: '#ffffff', out: '#a6d78b', name: '白天' },
   school: { ground: '#8f9aa8', line: '#ffffff', out: '#b6e08f', name: '駕訓班' },
@@ -5460,7 +5464,7 @@ const PK_THEMES = { // 地面、線、外圍
   night: { ground: '#4c5466', line: '#e8ecff', out: '#33405a', name: '夜市' },
   street: { ground: '#868f9d', line: '#ffffff', out: '#cfd6df', name: '街道' },
 };
-// 50 關:版型、格子寬度(路邊停車是空位長度)、倒車入庫、障礙物和 KUSO 機關
+// 100 關:版型、格子寬度(路邊停車是空位長度)、倒車入庫、障礙物和 KUSO 機關
 // thief:阿姨會來搶車位(倒數)、dark:停電只看得到車燈、inv:方向盤裝反、robots:掃地機器人、movers:走道上開來開去的車、bumps:減速丘
 const PK_PLAN = [
   { k: 'open', sw: 4.0, t: 'school', name: '第一次停車', tip: '搖桿指向要去的方向(上下左右是畫面的方向),再按住「前進」' },
@@ -5513,17 +5517,68 @@ const PK_PLAN = [
   { k: 'angled', sw: 2.62, movers: 2, robots: 1, bananas: 2, t: 'day', name: '混亂停車場', tip: '什麼東西都在動' },
   { k: 'parallel', gap: 5.85, thief: 1, ducks: 2, bananas: 2, t: 'night', name: '夜市終極搶位', tip: '最後一個夜市車位!' },
   { k: 'double', sw: 2.55, rev: 1, ducks: 2, carts: 1, bananas: 2, cones: 3, robots: 1, thief: 1, t: 'day', name: '終極停車王', tip: '全部機關一次來,停進去你就是停車之神' },
+  // ---- 第 51~100 關:單數關開卡車連結車(車頭拖著貨櫃,倒車會折刀),雙數關是更難的轎車 ----
+  { k: 'dock', sw: 5.0, truck: 1, t: 'day', name: '第一次開卡車', tip: '卡車後面拖著貨櫃,車身超長!轉彎要轉大一點,停進最長的格子' },
+  { k: 'double', sw: 2.54, ducks: 2, bumps: 2, cones: 2, t: 'day', name: '百貨公司開幕', tip: '卡車開完換回轎車,小心鴨子' },
+  { k: 'dock', sw: 4.6, truck: 1, cones: 2, t: 'day', name: '貨櫃碼頭', tip: '整台車(車頭加車廂)都要停進格子裡才算' },
+  { k: 'garage', sw: 2.54, dark: 1, carts: 1, t: 'garage', name: '黑暗地下室', tip: '停電的地下室,靠車燈找路' },
+  { k: 'tpar', gap: 14, truck: 1, cones: 2, t: 'street', name: '路邊停卡車', tip: '卡車也要路邊停車,空位有 14 公尺長' },
+  { k: 'angled', sw: 2.56, rev: 1, thief: 1, t: 'day', name: '斜倒搶位', tip: '斜格子倒車入庫,阿姨在倒數' },
+  { k: 'alley', sw: 4.8, truck: 1, t: 'day', name: '轉進小巷', tip: '貨櫃位在左邊,車身長,要先往右拉開再轉進去' },
+  { k: 'parallel', gap: 5.75, ducks: 2, bananas: 2, cones: 2, t: 'night', name: '夜市大遊行', tip: '鴨子、香蕉皮全都上街了' },
+  { k: 'dock', sw: 4.4, truck: 1, rev: 1, t: 'school', name: '倒車入庫:卡車版', tip: '貨櫃尾巴朝格子倒進去!倒車時要讓「車廂」對準,車頭會先偏一邊' },
+  { k: 'row', sw: 2.54, inv: 1, rev: 1, gate: 1, cones: 4, t: 'school', name: '反向倒車考', tip: '方向盤裝反,還要倒車入庫' },
+  { k: 'dock', sw: 4.4, truck: 1, bananas: 2, gate: 1, t: 'day', name: '香蕉滑倒大貨車', tip: '大卡車壓到香蕉皮也會轉圈圈' },
+  { k: 'double', sw: 2.52, movers: 2, robots: 1, t: 'day', name: '尖峰時段', tip: '走道上的車跟機器人都在動' },
+  { k: 'alley', sw: 4.4, truck: 1, rev: 1, t: 'night', name: '小巷倒貨櫃', tip: '往左邊的貨櫃位倒車,車廂先進去' },
+  { k: 'garage', sw: 2.54, inv: 1, bananas: 2, gate: 1, t: 'garage', name: '反向地下道', tip: '左右反了,地上還有香蕉皮' },
+  { k: 'tpar', gap: 13.4, truck: 1, ducks: 1, t: 'street', name: '鴨子擋路', tip: '路邊停卡車,還有鴨子在走道上' },
+  { k: 'angled', sw: 2.54, dark: 1, robots: 2, t: 'garage', name: '停電機器人', tip: '黑暗中有掃地機器人' },
+  { k: 'dock', sw: 4.2, truck: 1, rev: 1, cones: 3, t: 'school', name: '三角錐碼頭', tip: '倒車入庫,旁邊還有三角錐' },
+  { k: 'parallel', gap: 5.7, thief: 1, bumps: 3, t: 'street', name: '減速丘搶位', tip: '減速丘慢慢過,阿姨在倒數' },
+  { k: 'alley', sw: 4.4, truck: 1, ducks: 2, cones: 2, t: 'day', name: '鴨子大巷', tip: '小巷裡有一家鴨子在散步' },
+  { k: 'double', sw: 2.52, rev: 1, ducks: 3, carts: 2, t: 'day', name: '動物園倒車', tip: '倒車入庫,到處都是鴨子和推車' },
+  { k: 'dock', sw: 4.2, truck: 1, rev: 1, dark: 1, t: 'night', name: '停電卡車', tip: '黑漆漆的還要倒貨櫃' },
+  { k: 'row', sw: 2.52, dark: 1, rev: 1, gate: 1, cones: 5, t: 'night', name: '黑暗倒車考', tip: '停電+倒車+三角錐門' },
+  { k: 'tpar', gap: 13, truck: 1, bananas: 2, cones: 2, t: 'street', name: '香蕉路邊', tip: '路邊停卡車,路上一堆香蕉皮' },
+  { k: 'garage', sw: 2.52, movers: 1, robots: 2, thief: 1, t: 'garage', name: '地下室大亂鬥', tip: '車在倒、機器人在跑、阿姨在搶' },
+  { k: 'dock', sw: 4.0, truck: 1, rev: 1, thief: 1, t: 'day', name: '搶貨櫃位', tip: '阿姨也想要這個貨櫃位,倒數中!' },
+  { k: 'angled', sw: 2.52, inv: 1, rev: 1, ducks: 2, t: 'day', name: '反向斜倒', tip: '左右相反,斜格子倒車' },
+  { k: 'alley', sw: 4.0, truck: 1, rev: 1, carts: 1, t: 'day', name: '推車擋巷', tip: '倒貨櫃的時候有購物車經過' },
+  { k: 'parallel', gap: 5.65, dark: 1, ducks: 2, bananas: 2, t: 'night', name: '黑夜路邊', tip: '停電的夜市路邊' },
+  { k: 'dock', sw: 4.0, truck: 1, rev: 1, inv: 1, t: 'school', name: '方向盤裝反的卡車', tip: 'KUSO!卡車的左右是相反的,還要倒車' },
+  { k: 'double', sw: 2.5, rev: 1, movers: 2, bananas: 2, cones: 3, t: 'day', name: '雙重倒車', tip: '倒車入庫,走道上的車也在倒' },
+  { k: 'tpar', gap: 12.8, truck: 1, robots: 2, t: 'street', name: '機器人擋路', tip: '路邊停卡車,機器人在亂跑' },
+  { k: 'row', sw: 2.5, thief: 1, robots: 3, gate: 1, rev: 1, t: 'day', name: '搶位機器人', tip: '機器人擋在格子前,阿姨在倒數' },
+  { k: 'alley', sw: 4.1, truck: 1, rev: 1, cones: 3, t: 'night', name: '三角錐小巷', tip: '倒貨櫃,巷子裡散落著三角錐' },
+  { k: 'garage', sw: 2.5, dark: 1, inv: 1, rev: 1, t: 'garage', name: '黑暗反向地城', tip: '停電+方向盤裝反+倒車' },
+  { k: 'dock', sw: 3.9, truck: 1, rev: 1, ducks: 2, bananas: 2, t: 'day', name: '動物園貨運站', tip: '鴨子和香蕉皮一起來' },
+  { k: 'angled', sw: 2.5, movers: 2, thief: 1, ducks: 2, t: 'day', name: '週年慶終結者', tip: '週年慶最後一天,什麼都在動' },
+  { k: 'tpar', gap: 12.6, truck: 1, thief: 1, dark: 1, t: 'night', name: '黑夜搶位', tip: '停電的路邊,阿姨還是來搶' },
+  { k: 'parallel', gap: 5.6, inv: 1, thief: 1, bumps: 3, t: 'street', name: '反向路邊搶位', tip: '左右相反,還要搶時間' },
+  { k: 'dock', sw: 3.8, truck: 1, rev: 1, robots: 2, gate: 1, t: 'day', name: '機器人貨運站', tip: '倒貨櫃,機器人在入口亂跑' },
+  { k: 'double', sw: 2.5, dark: 1, rev: 1, robots: 2, ducks: 2, t: 'night', name: '停電大亂鬥', tip: '黑暗中倒車,鴨子和機器人都在' },
+  { k: 'alley', sw: 3.8, truck: 1, rev: 1, inv: 1, t: 'day', name: '反向小巷', tip: '卡車倒車入巷,左右還是反的' },
+  { k: 'row', sw: 2.5, inv: 1, rev: 1, dark: 1, gate: 1, cones: 6, t: 'night', name: '地獄駕訓班', tip: '教練已經逃走了' },
+  { k: 'dock', sw: 3.7, truck: 1, rev: 1, gate: 1, cones: 4, t: 'school', name: '貨櫃魔王考', tip: '倒貨櫃,入口兩邊都是三角錐' },
+  { k: 'garage', sw: 2.5, rev: 1, thief: 1, carts: 2, bananas: 3, t: 'garage', name: '地下城魔王', tip: '推車、香蕉皮、阿姨…' },
+  { k: 'tpar', gap: 12.4, truck: 1, rev: 1, t: 'street', name: '倒車進路邊', tip: '卡車倒車進路邊的空位,最難的路邊停車' },
+  { k: 'angled', sw: 2.5, inv: 1, dark: 1, rev: 1, t: 'garage', name: '黑暗反向斜倒', tip: '停電、左右反、斜格子、倒車' },
+  { k: 'dock', sw: 3.7, truck: 1, rev: 1, dark: 1, thief: 1, t: 'night', name: '停電搶貨櫃', tip: '黑暗中倒貨櫃,阿姨在倒數' },
+  { k: 'parallel', gap: 5.6, rev: 1, dark: 1, thief: 1, ducks: 2, t: 'night', name: '路邊倒車大魔王', tip: '停電的路邊倒車入庫,時間有限' },
+  { k: 'alley', sw: 3.6, truck: 1, rev: 1, dark: 1, inv: 1, t: 'night', name: '終極拖板車', tip: '停電、方向盤裝反、卡車倒車入巷,祝你好運' },
+  { k: 'double', sw: 2.5, rev: 1, dark: 1, inv: 1, thief: 1, robots: 2, ducks: 3, carts: 1, bananas: 3, cones: 4, t: 'night', name: '百關終極停車王', tip: '所有機關全部一起來!停進去你就是停車之神' },
 ];
-const PK_SALT = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1]; // 每關的亂數種子(tools/park_levels.js 找不到留路的解法時會自動換)
-const PK_PAR = [10,10,11,11,17,11,19,12,12,11,16,11,15,17,15,11,11,18,16,11,16,12,17,18,11,18,14,16,17,15,11,15,19,11,19,16,11,17,19,17,11,14,14,18,11,22,18,13,14,18]; // 三顆星的秒數(照自動解法算的)
-const PK_PATH = ["cccccccccccccccccccccccccccccccccccc","edcccaaaddccdcddedaabddadeeeeeeeeee","cdcccccccccccbbdccccccceccdcccccccdecaaa","cccdecccccccccccccbcccccccccccbccccbcccb","cbcccccccccccccccccceedddaaaaaaaaaaaaaaaajijjjjjjijhf","ccccdcccccccccccccccccdccccdebcccbcccba","eeeffffedcddbabaaeaaaabcbaccbccccccbcbaaaacccccbaaaabeeeeedeeee","aaaaaaaaabcccccccccbcccccccccccbcccccbcccd","eeedcccccccccdcceebaaaabaacajjfhfff","cccccccccccccccccccccccccccababceeeeeeee","eeeeeeccccccaabcaadabcbccaababbaabaaaaajjaaabaaa","ccccccccccccccccccccccccccccccccccccccc","cdcbadccbccbbdbacebabbaaaaccbbcacccbcccbaccccbcccacbaedeee","cccccbcccccdccecccdecdaaaaaaaaaaaajjjjjijjhjjjjhihhg","eecddeeeecaaaabbccbcbcbccdcccedaaaaajjhfffec","ccccccccccccccccccccabaabcedbeeeedddeeccd","cccccccccccccccccdebbcccbcccccccbccccbd","jaaaaaccececcccecebbeeaddeededeedeeeeecaaaaajjijjjihihf","aaajjjaacbaaabdccccddcccdcccceedcccccceebebdaaaaa","ccccccdccccccccccccccccdcccccccdcceebaaa","eedccabbcccccdacccaecccaaaaaajijjjjjihhijjjjjjj","aaaaaaaaaccccccccccccbcccccccccccbccccbccb","jaaaaaccdcdcbeedccdedcddceedccdebeeeeeeeeeffeeeeeed","aaaaaacccdbeeeeeddccccecccaeeeeddddeeeedcbaajjjjjjiijihhgg","cccccccccccccccccccccccccababcceeeeedece","jaaaaaaacdedeeeedcdccecccbeeceeeeedeeeeabaaaajijjjjhhig","eeeccccccccccccccccccdcccaaaaadajjjfffee","cccccccccccccccccccededcaaaaaaaaaaaaaajjijjjjhhigff","aaaaaaacccdeeeecdbedebadedeeeeeeeeeeeabaaaajjjjjjihhf","eeecccccccccccccccccdcccaabaadcbajjigfffe","bcccccccccccbcccccccccccccbbaccccdcedccd","cdcbcccccccccaabbbbbcadaaaacccbbbccccbccbaaccccaaaaceeeeedcce","habaaaaacdccceeeeeddcccdcccccceeeeeeedeeeeffgfhffffgfghjgh","ccccccccccccccccccccccccccababceeeeeecee","aaaijaaaaaacaacccdedcccdbceeeedeeeeeecdbaaaajjjjjjjhhf","feeccccccccccccccccdccccabaaadcbajjifgffe","ccccccccccccccccccccccccdccceccccbcccbc","aaaababdcccddecceeeeacdcceeeeedeeeeeeaaaaajjjijjjiihf","fedddeedcccdeaaaaabcbbbccbcaaaaaaccaaaabbeeeedfffffhfgfhj","ccccccccccccccabaabceeeeeeeedeeeeeefffffffffgfhhhhhi","ccccccccccccccccccccccccccababceeeeeecee","aacccccccddcacbbccbccbaaaaaaacccccccccccccaadcdccdccde","eeeecceecdaaacaeccabbaaccaajijffffe","gdedeeedcccddcaaaaacabccebbaaaabaaaaabbceeeeegfffffifhhj","ccccccccccccccccccccccccdccceccccbccbcc","feeedeeacccbcaaaaaacdcccdcbccccabccaaaabababaaajjjijjjjajhggh","feeeeeccbcbcdaabccbabcbbcaaacbbaabbaaabeeeeefgfffffhjhj","cccccccccccccccccccccccccccababeeeeebeeeg","eeedccccdeebacabcdabbcbbaccaajjjfffffd","jabbababbbcceceeedcedbdcdcdeeeeebeeeeecaaacbajjjjjjhhihf"]; // 每關的自動解法(電腦玩家、教練示範用)
+const PK_SALT = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,32,0,0,0,1,0,0,0,5,0,0,0,0,0,28,0,1,0,0,0,0,0,5,0,0,0,0,0,0,0,4,5]; // 每關的亂數種子(tools/park_levels.js 找不到留路的解法時會自動換)
+const PK_PAR = [10,10,11,11,17,11,19,12,12,11,16,11,15,17,15,11,11,18,16,11,16,12,17,18,11,18,14,16,17,15,11,15,19,11,19,16,11,17,19,17,11,14,14,18,11,22,18,13,14,18,10,18,11,14,26,17,21,15,34,17,13,18,59,20,32,13,37,17,64,21,34,19,38,16,39,16,51,16,39,21,36,17,50,16,38,11,41,17,37,18,61,18,37,19,39,16,36,15,67,26]; // 三顆星的秒數(照自動解法算的)
+const PK_PATH = ["cccccccccccccccccccccccccccccccccccc","edcccaaaddccdcddedaabddadeeeeeeeeee","cdcccccccccccbbdccccccceccdcccccccdecaaa","cccdecccccccccccccbcccccccccccbccccbcccb","cbcccccccccccccccccceedddaaaaaaaaaaaaaaaajijjjjjjijhf","ccccdcccccccccccccccccdccccdebcccbcccba","eeeffffedcddbabaaeaaaabcbaccbccccccbcbaaaacccccbaaaabeeeeedeeee","aaaaaaaaabcccccccccbcccccccccccbcccccbcccd","eeedcccccccccdcceebaaaabaacajjfhfff","cccccccccccccccccccccccccccababceeeeeeee","eeeeeeccccccaabcaadabcbccaababbaabaaaaajjaaabaaa","ccccccccccccccccccccccccccccccccccccccc","cdcbadccbccbbdbacebabbaaaaccbbcacccbcccbaccccbcccacbaedeee","cccccbcccccdccecccdecdaaaaaaaaaaaajjjjjijjhjjjjhihhg","eecddeeeecaaaabbccbcbcbccdcccedaaaaajjhfffec","ccccccccccccccccccccabaabcedbeeeedddeeccd","cccccccccccccccccdebbcccbcccccccbccccbd","jaaaaaccececcccecebbeeaddeededeedeeeeecaaaaajjijjjihihf","aaajjjaacbaaabdccccddcccdcccceedcccccceebebdaaaaa","ccccccdccccccccccccccccdcccccccdcceebaaa","eedccabbcccccdacccaecccaaaaaajijjjjjihhijjjjjjj","aaaaaaaaaccccccccccccbcccccccccccbccccbccb","jaaaaaccdcdcbeedccdedcddceedccdebeeeeeeeeeffeeeeeed","aaaaaacccdbeeeeeddccccecccaeeeeddddeeeedcbaajjjjjjiijihhgg","cccccccccccccccccccccccccababcceeeeedece","jaaaaaaacdedeeeedcdccecccbeeceeeeedeeeeabaaaajijjjjhhig","eeeccccccccccccccccccdcccaaaaadajjjfffee","cccccccccccccccccccededcaaaaaaaaaaaaaajjijjjjhhigff","aaaaaaacccdeeeecdbedebadedeeeeeeeeeeeabaaaajjjjjjihhf","eeecccccccccccccccccdcccaabaadcbajjigfffe","bcccccccccccbcccccccccccccbbaccccdcedccd","cdcbcccccccccaabbbbbcadaaaacccbbbccccbccbaaccccaaaaceeeeedcce","habaaaaacdccceeeeeddcccdcccccceeeeeeedeeeeffgfhffffgfghjgh","ccccccccccccccccccccccccccababceeeeeecee","aaaijaaaaaacaacccdedcccdbceeeedeeeeeecdbaaaajjjjjjjhhf","feeccccccccccccccccdccccabaaadcbajjifgffe","ccccccccccccccccccccccccdccceccccbcccbc","aaaababdcccddecceeeeacdcceeeeedeeeeeeaaaaajjjijjjiihf","fedddeedcccdeaaaaabcbbbccbcaaaaaaccaaaabbeeeedfffffhfgfhj","ccccccccccccccabaabceeeeeeeedeeeeeefffffffffgfhhhhhi","ccccccccccccccccccccccccccababceeeeeecee","aacccccccddcacbbccbccbaaaaaaacccccccccccccaadcdccdccde","eeeecceecdaaacaeccabbaaccaajijffffe","gdedeeedcccddcaaaaacabccebbaaaabaaaaabbceeeeegfffffifhhj","ccccccccccccccccccccccccdccceccccbccbcc","feeedeeacccbcaaaaaacdcccdcbccccabccaaaabababaaajjjijjjjajhggh","feeeeeccbcbcdaabccbabcbbcaaacbbaabbaaabeeeeefgfffffhjhj","cccccccccccccccccccccccccccababeeeeebeeeg","eeedccccdeebacabcdabbcbbaccaajjjfffffd","jabbababbbcceceeedcedbdcdcdeeeeebeeeeecaaacbajjjjjjhhihf","cccccccccccccccccccccccccccccccccc","jabbababbbcceceeedcedbdcdcdeeeeebeeeeeeaaabaajjjjjjhhhfh","cccccccccccccedeeceedeaaaaabaabcccce","feddeeeccccbcaaaaabccccbccccccccccbbaaeedccec","eeedcdeeecccbaabaabbbaaaabaabaaabaacddeegghffhjijijjjhigihhfffeeffeeeff","ccccccccccdcccccbbaaeeedeeddeeeeeeeefffffffgffffffg","ccedeeceedecdaaedaaaabdabbaaaaahjjaajaaadbaaaaacdaabacdeeeg","eedcccdccccccddcccbadccccaaabcccaajjigfgffe","edeeceedeaaaaabaabajiijjaaaaabaaiaaaaaaaaaaaaaaaaaaabbceeefgffhhhfgfffhhjhjihhhhjhjjajgihhh","bcccccccccccaaacbaddeeedeeeeedeeeeefffffffffgffhhijfh","ccedeaaabajcacccdcccdcccdcdcddcedeacc","jabbababbbcceceeedcedbdcdeeddeeddeeeddccaaaajjjjijiihf","aahjbbahjiaaabaacaeeeegffffeeffhhhjjjjjjjjijjcaajjijjhjijijijjiaajijihiihjijihffffghhjjjhhhggjjhiijjjjjjajajjaacijjhhhhhgff","jaaacaacccddceeeeeccababedeeeeedeeedccajajcbabcbccbcc","eecbaabbacdcaeccccaddcacbccbdeedcefgfjfgijjjijjjjjjijjbjjjjjhjijjijijajijijjjbbj","ccccccccccdccccccccccccccdcccaaddeedbddef","edeeceedeaaaaaaajjjihhffffffffgfdffgffeffffffffgfffeeefggffhhhfgffhjjhhhhhhhhfghfhhjjj","eecccccccdcccccccedeaaaacaaaaaaaaajjjjjijjjjijja","edeeeggdeeefgjjihjjjjjjjjjjababaabeceeeeffhijjjjjijjjijjjjjijabjjjjhiijhjijijijibaijjihhhfffghhhhhighhhhjjihgighfefefefeefeeedeeeeeeedabbaj","aajjibaaabddedbeceeeddccdeccccccdcecccccdeeeeeeeeeedffffffgffhhh","edeeegfffeeeebaaabaaaaabaaaajjijaababaaaabaaaaaaaaabaaaaaaaaccbccdeefffhfhjfihhhjjhihjijjijijigffgf","dcccccceebbaaaaaaaaaajjjjjijjhhiijhjjjgjjjjgffffhhhhi","acaaedebabaabcccedeeddfhfhjhfjhhhhjjjjjjjaiijjjjjjjjjjcaaacajhijjiihjjhhfffhfhhiiffgjjaajja","eeeeeecbcccaaacdcabacbcabcbaaabaaaabceeeeffffgffhhhj","edeeceeeeeedbaaaajhjjjjhhhfffffffffffffgffcefffffgfffffdedfffghgfffgffgjhhgjhjhihhhijjijjbjhhf","ccccccccccdccccccccedeadabaaaaaaaaaaajjjiijjjiihgff","cccabijijiaabaaaaacbeeeegfffffghhijjijjjjijjjjjjjjijjjjjijcbaajijhhhijhhjhhhhfgijijhhfhjhhjjjjajiajbijcajjjjhhfff","eedccccccccccbbccccccceedccbabaabccaajiijffffe","edeeceeeeeedbaaaajhjjjjhhhfffffffffffffgffcefffffgffffffeeedffhhhfhghihggefhhfhihiihjjjjjihihh","feeeeeeecbabaaaabcbccccbcdbbcccbaaaabbaaaaaaadeeeeeffgfffffghhhjh","eeecccdcbabcabcccaaababeecbaabcccedeehfgfgfjjihjjjjjjijjjjjjijjjjihhijabajjajbjaja","dcccccccccccccccdceeababaaaaaabaajjjjjijjjjjijjhhhhg","ccccabijijjjibbaaaaaaceeeeeegffffffhjjjijjjjjijjcaajjjhjjjjjijjajjhhhhfiijihhgijjijibajjhhhhhhijjjjjjajajjhhff","aaaaaaccdcceeeddccdddcccdedeeeeeeedaaaaajjjjijhhhfg","cabijbbaabbbbcdeeeeeeffffeeeeeeeeeeeeeeeeeeefeeeeeeeeeeccbcaajjjhjhihhjjhjhhhgghfffhhfgffgeehhhij","ccccccccccdcccccccccccccaaaaeeeeeeecdaee","eeeccababaaccbadeddcaccaccddeeeffhhhhijjijjjijjijjjjjjijjjjajijijajihhhjbjbjciajc","eeeccccccceddaabaaaaaaaaaajjjijjjjjjhijaj","ccedeeegffgjjjijhhjjjjaabaabdeeeeeeddeeffeeeeeeeeeeeeeeeeeedeeeeeeeedcbaaaijijhjhhjjhfffghgffhfghhhhfhhhhhhhh","feeeeeccbcbcdaabccbabcbbcaaacbbaaabaabbeeeeefffhffhfhhj","cccabijijiaabaabccbaceeedfffffhhhhjjjijjjjjjjijjjjjiaajjiijhijjhhijjhhijaihjhhhfhfjhhiihiheedajjjjjfedahhgeecbajjijijaajjjjihgffedbaj","ccccccccccccebbcccccbceeeeeedeeeeffhggfffffgfhffihhih","ccedeeegffgjjjijhhjjjjaabaabdeeeeeeddeeffeeedeeeeeeeeeeeeeeeeeeeeeeccabaaaiijjghhhhhfhhfghhfgffhghfhfhhhijhhh","jaaabaccccbddeeeeecccccddccccccdddcceeeeeeeeeeefffffhfgffi","eeeccccdccbabcacbcaaacaacdbcccacceceeeffgfjjihjhjjjjijjijjjijjihijjjijcaajjajbjajcjb","cccccccccccccccccccccedeaaabbaaaaaaaaabajijjjjhihffg","cajjbbaabbccccccbdceceffgffhfjhjjjjjjjjiacjjjjjjijijjjaajijjjjjjijjhhhghhhhhfgfhhhhhhhh","eeedccccdccaabaaaaaaaajjjjijjjjjjijja","edeeeggdecbeeedgffgjjjjjjjjcijjjjjcajjjijjjjjjijjjjjjjijjjjjjbajjicabjhiihhhhfgfggjijhijjijhhhhfedaajjihihjajajbjcjijcbjhhhhhff","feeeeefffgffffgffffhhhhhiffghhfghighhhggghffifffgffgjjjjjjjjjjhf"]; // 每關的自動解法(電腦玩家、教練示範用)
 const pkWrap = a => { while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI) a += Math.PI * 2; return a; };
 const PK_UP = -Math.PI / 2, PK_DOWN = Math.PI / 2;
 
 function parkLevel(n) {
-  const P = PK_PLAN[n - 1], r = busRng(n * 7919 + PK_SALT[n - 1] * 104729 + 17), W = PK.W, H = PK.H;
+  const P = PK_PLAN[n - 1], r = busRng(n * 7919 + PK_SALT[n - 1] * 104729 + 17), W = P.truck ? 20 : PK.W, H = P.truck ? 34 : PK.H;
   const ri = k => Math.floor(r() * k), rr = (a, b) => a + r() * (b - a);
-  const L = { n, name: P.name, tip: P.tip, theme: P.t, W, H, start: { x: W / 2, y: H - 3.4, a: PK_UP }, spot: null, obs: [], ducks: [], bananas: [], carts: [], movers: [], robots: [], bumps: [], slots: [], par: PK_PAR[n - 1], dark: !!P.dark, inv: !!P.inv };
+  const L = { n, name: P.name, tip: P.tip, theme: P.t, W, H, start: P.truck ? { x: W / 2, y: H - 9.8, a: PK_UP, ta: PK_UP } : { x: W / 2, y: H - 3.4, a: PK_UP }, truck: !!P.truck, spot: null, obs: [], ducks: [], bananas: [], carts: [], movers: [], robots: [], bumps: [], slots: [], par: PK_PAR[n - 1], dark: !!P.dark, inv: !!P.inv };
   const kinds = ['Sedan', 'Sedan', 'Hatch', 'Van'];
   const jit = P.crooked ? 0.16 : 0.035, off = P.crooked ? 0.3 : 0.1;
   const car = (x, y, axis, kind) => { // axis:車子沿著的方向(會隨機前後顛倒)
@@ -5587,8 +5642,34 @@ function parkLevel(n) {
     for (let yy = 1.5; yy < H - 4; yy += rr(5.2, 6.4)) { const kind = kinds[ri(3)]; L.obs.push({ k: 'car', kind, x: 1.7, y: yy + PK_LEN[kind] / 2, a: PK_UP + (r() < 0.5 ? Math.PI : 0), hl: PK_LEN[kind] / 2, hw: PK.CW / 2, c: ri(8) }); }
     L.curb = { x0: W - 0.5, x1: 0.5 };
     L.start = { x: W / 2 - 1, y: H - 3.4, a: PK_UP };
+  } else if (P.k === 'dock') { // 貨櫃碼頭:上面一排長長的貨櫃位(深 13 公尺),別的位子停滿貨櫃
+    const n = Math.floor((W - 1) / P.sw), len = 13.2, y0 = 0.4, xs = 0.5 + ((W - 1) - n * P.sw) / 2, sp = midIdx(n);
+    for (let i = 0; i < n; i++) {
+      const cx = xs + (i + 0.5) * P.sw;
+      L.slots.push({ x: cx, y: y0 + len / 2, a: PK_UP, w: P.sw, l: len });
+      if (i === sp) setSpot(cx, y0 + len / 2, PK_UP, P.sw, len);
+      else L.obs.push({ k: 'container', x: cx + rr(-0.1, 0.1), y: y0 + len / 2 + rr(-0.4, 0.4), a: PK_UP, hl: 5.6, hw: 1.3, c: ri(6) });
+    }
+    block('planter', 1.0, 22, 0.7, 3.5); block('planter', W - 1.0, 22, 0.7, 3.5);
+  } else if (P.k === 'tpar') { // 卡車路邊停車:右邊路邊有一個很長的空位
+    const x = W - 2.3, gap = P.gap, gy = rr(5, H - gap - 12);
+    L.slots.push({ x, y: gy + gap / 2, a: PK_UP, w: 3.4, l: gap });
+    setSpot(x, gy + gap / 2, PK_UP, 3.4, gap, { par: 1 });
+    for (let y = gy - 0.3; y > 0.8; y -= 6.4) L.obs.push({ k: 'container', x, y: y - 3, a: PK_UP, hl: 3 - 0.1, hw: 1.3, c: ri(6) });
+    for (let y = gy + gap + 0.3; y < H - 0.8; y += 6.4) { if (y + 6 > H - 0.3) break; L.obs.push({ k: 'container', x, y: y + 3, a: PK_UP, hl: 3 - 0.1, hw: 1.3, c: ri(6) }); }
+    for (let y = 5; y < H - 12; y += 7.5) L.obs.push({ k: 'container', x: 1.8, y, a: PK_UP, hl: 3, hw: 1.3, c: ri(6) });
+    L.curb = { x0: W - 0.5, x1: 0.5 };
+  } else if (P.k === 'alley') { // 小巷:貨櫃位在左邊牆,要轉 90 度開進去(倒車版是車廂先進去)
+    const len = 13.2, n = Math.max(3, Math.floor((H - 16) / P.sw)), y0 = 1.5 + rr(0, H - 16 - n * P.sw > 0 ? Math.min(3, H - 16 - n * P.sw) : 0), sp = 1 + ri(Math.max(1, n - 2));
+    for (let i = 0; i < n; i++) {
+      const cy = y0 + (i + 0.5) * P.sw, cx = 0.4 + len / 2;
+      L.slots.push({ x: cx, y: cy, a: Math.PI, w: P.sw, l: len });
+      if (i === sp) setSpot(cx, cy, Math.PI, P.sw, len);
+      else L.obs.push({ k: 'container', x: cx + rr(-0.4, 0.4), y: cy + rr(-0.1, 0.1), a: Math.PI, hl: 5.6, hw: 1.3, c: ri(6) });
+    }
+    block('planter', W - 1.0, 12, 0.7, 4);
   }
-  if (P.st) L.start = { x: 2.6, y: H - 2.6, a: 0 }; // 從左下角、車頭朝右出發
+  if (P.st && !P.truck) L.start = { x: 2.6, y: H - 2.6, a: 0 }; // 從左下角、車頭朝右出發
   // 格子門口兩邊各一個三角錐,要開得很準
   if (P.gate && !L.spot.par) {
     const S = L.spot, bx = S.x - Math.cos(S.a) * (S.l / 2 + 1.2), by = S.y - Math.sin(S.a) * (S.l / 2 + 1.2), nx = -Math.sin(S.a), ny = Math.cos(S.a), d = S.w / 2 + 0.5;
@@ -5597,7 +5678,7 @@ function parkLevel(n) {
   // 自由的空地(放三角錐、香蕉皮、鴨子、推車用)
   const free = (x, y, rad, keepStart) => {
     if (x < rad || y < rad || x > W - rad || y > H - rad) return false;
-    if (Math.hypot(x - L.start.x, y - L.start.y) < (keepStart || 4.5)) return false;
+    if (Math.hypot(x - L.start.x, y - L.start.y) < (keepStart || (P.truck ? 12 : 4.5))) return false;
     if (Math.hypot(x - L.spot.x, y - L.spot.y) < 5) return false;
     const sx = L.spot.x + Math.cos(L.spot.a + Math.PI) * 4, sy = L.spot.y + Math.sin(L.spot.a + Math.PI) * 4; // 格子門口
     if (Math.hypot(x - sx, y - sy) < 3.2) return false;
@@ -5622,38 +5703,56 @@ function parkLevel(n) {
 }
 
 /* ---------- 碰撞與判定 ---------- */
-function pkHit(L, x, y, a, list, wm) { // 車子在 (x, y, a) 會不會撞到東西或開出場外(離牆 wm 公尺內也算);回傳撞到的東西
-  const m = wm == null ? 0.1 : wm;
-  const c = Math.cos(a), s = Math.sin(a), hl = PK.L / 2, hw = PK.CW / 2;
-  for (const [u, v] of [[hl, hw], [hl, -hw], [-hl, hw], [-hl, -hw]]) {
-    const px = x + c * u - s * v, py = y + s * u + c * v;
-    if (px < m || py < m || px > L.W - m || py > L.H - m) return { k: 'wall' };
+function pkBoxes(L, x, y, a, ta) { // 車子佔的方塊(轎車一個;卡車連結車是車頭 + 車廂兩個)
+  if (!L.truck) return [{ x, y, a, hl: PK.L / 2, hw: PK.CW / 2 }];
+  const T = PK_TRUCK, hx = x - Math.cos(a) * T.HITCH, hy = y - Math.sin(a) * T.HITCH;
+  return [{ x, y, a, hl: T.CL / 2, hw: T.CW / 2 }, { x: hx - Math.cos(ta) * T.TC, y: hy - Math.sin(ta) * T.TC, a: ta, hl: T.TL / 2, hw: T.TW / 2 }];
+}
+function pkHit(L, x, y, a, list, wm, ta) { // 車子在 (x, y, a) 會不會撞到東西或開出場外(離牆 wm 公尺內也算);回傳撞到的東西
+  const m = wm == null ? 0.1 : wm, boxes = pkBoxes(L, x, y, a, ta);
+  for (const b of boxes) {
+    const c = Math.cos(b.a), s = Math.sin(b.a);
+    for (const [u, v] of [[b.hl, b.hw], [b.hl, -b.hw], [-b.hl, b.hw], [-b.hl, -b.hw]]) {
+      const px = b.x + c * u - s * v, py = b.y + s * u + c * v;
+      if (px < m || py < m || px > L.W - m || py > L.H - m) return { k: 'wall' };
+    }
   }
   for (const o of list || L.obs) {
     if (o.gone) continue;
-    if (Math.abs(o.x - x) > o.hl + o.hw + 2.6 || Math.abs(o.y - y) > o.hl + o.hw + 2.6) continue;
-    if (busObbHit(x, y, a, hl, hw, o.x, o.y, o.a, o.hl, o.hw)) return o;
+    for (const b of boxes) {
+      if (Math.abs(o.x - b.x) > o.hl + o.hw + b.hl + b.hw || Math.abs(o.y - b.y) > o.hl + o.hw + b.hl + b.hw) continue;
+      if (busObbHit(b.x, b.y, b.a, b.hl, b.hw, o.x, o.y, o.a, o.hl, o.hw)) return o;
+    }
   }
   return null;
 }
-function pkIn(L, x, y, a, slack) { // 停進格子了嗎(位置 + 方向)
-  const S = L.spot, c = Math.cos(S.a), s = Math.sin(S.a), hl = PK.L / 2, hw = PK.CW / 2, ca = Math.cos(a), sa = Math.sin(a);
-  const tl = S.l / 2 + 0.05 + (slack || 0), tw = S.w / 2 + (slack || 0);
-  for (const [u, v] of [[hl, hw], [hl, -hw], [-hl, hw], [-hl, -hw]]) {
-    const px = x + ca * u - sa * v - S.x, py = y + sa * u + ca * v - S.y;
-    if (Math.abs(px * c + py * s) > tl || Math.abs(-px * s + py * c) > tw) return false;
+function pkIn(L, x, y, a, slack, ta) { // 停進格子了嗎(整台車的位置 + 方向,卡車連結車的車頭和車廂都要擺正)
+  const S = L.spot, c = Math.cos(S.a), s = Math.sin(S.a);
+  const tl = S.l / 2 + 0.05 + (slack || 0), tw = S.w / 2 + (slack || 0), tol = 0.15 + (slack || 0);
+  for (const b of pkBoxes(L, x, y, a, ta)) {
+    const ca = Math.cos(b.a), sa = Math.sin(b.a);
+    for (const [u, v] of [[b.hl, b.hw], [b.hl, -b.hw], [-b.hl, b.hw], [-b.hl, -b.hw]]) {
+      const px = b.x + ca * u - sa * v - S.x, py = b.y + sa * u + ca * v - S.y;
+      if (Math.abs(px * c + py * s) > tl || Math.abs(-px * s + py * c) > tw) return false;
+    }
+    const da = pkWrap(b.a - S.a);
+    if (S.rev ? !(Math.abs(pkWrap(da - Math.PI)) < tol) : !(Math.abs(da) < tol || Math.abs(pkWrap(da - Math.PI)) < tol)) return false;
   }
-  const da = pkWrap(a - S.a), tol = 0.15 + (slack || 0);
-  if (S.rev) return Math.abs(pkWrap(da - Math.PI)) < tol;
-  return Math.abs(da) < tol || Math.abs(pkWrap(da - Math.PI)) < tol;
+  return true;
 }
-function pkMove(x, y, a, d, steer) { // 後輪為準的單車模型:往前(或後)開 d 公尺
-  const k = Math.tan(steer) / PK.WB;
-  let rx = x - Math.cos(a) * PK.WB / 2, ry = y - Math.sin(a) * PK.WB / 2;
+function pkMove(x, y, a, d, steer, wb) { // 後輪為準的單車模型:往前(或後)開 d 公尺
+  const WB = wb || PK.WB, k = Math.tan(steer) / WB;
+  let rx = x - Math.cos(a) * WB / 2, ry = y - Math.sin(a) * WB / 2;
   if (Math.abs(k) < 1e-6) { rx += Math.cos(a) * d; ry += Math.sin(a) * d; }
   else { const na = a + d * k; rx += (Math.sin(na) - Math.sin(a)) / k; ry -= (Math.cos(na) - Math.cos(a)) / k; a = na; }
-  return [rx + Math.cos(a) * PK.WB / 2, ry + Math.sin(a) * PK.WB / 2, a];
+  return [rx + Math.cos(a) * WB / 2, ry + Math.sin(a) * WB / 2, a];
 }
+function pkStep(L, st, d, steer) { // 往前(或後)開 d 公尺:[x, y, a, ta];卡車的車廂會跟著車頭轉(倒車時反過來,會折刀)
+  if (!L.truck) { const [x, y, a] = pkMove(st[0], st[1], st[2], d, steer); return [x, y, a, a]; }
+  const T = PK_TRUCK, [x, y, a] = pkMove(st[0], st[1], st[2], d, steer, T.WB);
+  return [x, y, a, st[3] + d / T.TAXLE * Math.sin((st[2] + a) / 2 - st[3])];
+}
+const pkJack = (L, a, ta) => L.truck && Math.abs(pkWrap(a - ta)) > PK_TRUCK.MAXJ;
 
 /* ---------- 自動停車的解法(A*):驗證每關都停得進去、電腦玩家照著開 ---------- */
 // 只有 tools/park_levels.js 會用到(產生上面的 PK_PATH、PK_PAR);遊戲裡直接用存好的解法
@@ -5661,29 +5760,32 @@ function* pkSolveGen(L, maxExp) {
   // 離格子 6.5 公尺以外:障礙物每邊多留 0.4 公尺、牆多留 0.3 公尺,玩家才看得出路;靠近格子才需要開得很準
   const far = (x, y) => Math.hypot(x - L.spot.x, y - L.spot.y) > 6.5;
   const stat = L.obs.map(o => (far(o.x, o.y) ? { ...o, hl: o.hl + 0.4, hw: o.hw + 0.4 } : o)).concat(L.bananas.map(b => ({ x: b.x, y: b.y, a: 0, hl: 0.9, hw: 0.9 })));
-  const STEP = 0.6, NA = 64, RES = 0.3;
-  const key = (x, y, a) => (Math.round(x / RES) * 200 + Math.round(y / RES)) * NA + ((Math.round(pkWrap(a) / (Math.PI * 2 / NA)) % NA) + NA) % NA;
-  const S = L.spot, hx = (x, y) => Math.hypot(x - S.x, y - S.y);
+  const STEP = 0.6, NA = L.truck ? 48 : 64, RES = L.truck ? 0.45 : 0.3, VST = L.truck ? PK_TRUCK.STEER : PK.STEER;
+  const key = (x, y, a, ta) => ((Math.round(x / RES) * 200 + Math.round(y / RES)) * NA + ((Math.round(pkWrap(a) / (Math.PI * 2 / NA)) % NA) + NA) % NA) * 16 + (L.truck ? Math.round(pkWrap(a - ta) / 0.21) + 6 : 0);
+  const S = L.spot;
+  const hx = (x, y, a, ta) => { if (!L.truck) return Math.hypot(x - S.x, y - S.y); const b = pkBoxes(L, x, y, a, ta); return Math.hypot((b[0].x + b[1].x) / 2 - S.x, (b[0].y + b[1].y) / 2 - S.y); }; // 卡車:用整台車的中點到格子中心
   const heap = [], push = n => { heap.push(n); let i = heap.length - 1; while (i) { const p = (i - 1) >> 1; if (heap[p].f <= n.f) break; heap[i] = heap[p]; i = p; } heap[i] = n; };
   const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { let i = 0; for (;;) { let c = 2 * i + 1; if (c >= heap.length) break; if (c + 1 < heap.length && heap[c + 1].f < heap[c].f) c++; if (heap[c].f >= last.f) break; heap[i] = heap[c]; i = c; } heap[i] = last; } return top; };
   const seen = new Map(), st = L.start;
-  push({ x: st.x, y: st.y, a: st.a, g: 0, f: hx(st.x, st.y) * 1.6, dir: 1, p: null });
+  const ta0 = st.ta != null ? st.ta : st.a;
+  push({ x: st.x, y: st.y, a: st.a, ta: ta0, g: 0, f: hx(st.x, st.y, st.a, ta0) * 1.6, dir: 1, p: null });
   const STEERS = [-1, -0.5, 0, 0.5, 1];
   let exp = 0;
   while (heap.length) {
-    const n = pop(), k = key(n.x, n.y, n.a);
+    const n = pop(), k = key(n.x, n.y, n.a, n.ta);
     if (seen.has(k)) continue;
     seen.set(k, 1);
-    if (pkIn(L, n.x, n.y, n.a, -0.05)) { const path = []; for (let q = n; q; q = q.p) path.push([q.x, q.y, q.a, q.dir, q.m]); return path.reverse(); }
+    if (pkIn(L, n.x, n.y, n.a, -0.05, n.ta)) { const path = []; for (let q = n; q; q = q.p) path.push([q.x, q.y, q.a, q.dir, q.m, q.ta]); return path.reverse(); }
     if (++exp > (maxExp || 260000)) return null;
     if (exp % 4000 === 0) yield exp;
     for (const dir of [1, -1]) for (let si = 0; si < 5; si++) {
       const s = STEERS[si];
-      let x = n.x, y = n.y, a = n.a, ok = true;
-      for (let k2 = 0; k2 < 3 && ok; k2++) { [x, y, a] = pkMove(x, y, a, dir * STEP / 3, s * PK.STEER); if (pkHit(L, x, y, a, stat, far(x, y) ? 0.3 : 0.1)) ok = false; }
-      if (!ok || seen.has(key(x, y, a))) continue;
+      let st2 = [n.x, n.y, n.a, n.ta], ok = true;
+      for (let k2 = 0; k2 < 3 && ok; k2++) { st2 = pkStep(L, st2, dir * STEP / 3, s * VST); if (pkJack(L, st2[2], st2[3]) || pkHit(L, st2[0], st2[1], st2[2], stat, far(st2[0], st2[1]) ? 0.3 : 0.1, st2[3])) ok = false; }
+      const [x, y, a, ta] = st2;
+      if (!ok || seen.has(key(x, y, a, ta))) continue;
       const g = n.g + STEP * (dir < 0 ? 1.3 : 1) + (dir !== n.dir && n.p ? 2.2 : 0) + Math.abs(s) * 0.04;
-      push({ x, y, a, g, f: g + hx(x, y) * 1.6, dir, p: n, m: (dir > 0 ? 0 : 5) + si });
+      push({ x, y, a, ta, g, f: g + hx(x, y, a, ta) * 1.6, dir, p: n, m: (dir > 0 ? 0 : 5) + si });
     }
   }
   return null;
@@ -5696,12 +5798,13 @@ function pkPathTime(path, vf, vr, sw) { // 照著路徑開要幾秒(前進 vf、
 }
 function pkReplay(L, code) { // 把存好的解法(每個字 = 一步的檔位和方向盤)還原成路徑
   const STEP = 0.6, STEERS = [-1, -0.5, 0, 0.5, 1];
-  let x = L.start.x, y = L.start.y, a = L.start.a;
-  const path = [[x, y, a, 1]];
+  const VST = L.truck ? PK_TRUCK.STEER : PK.STEER;
+  let st = [L.start.x, L.start.y, L.start.a, L.start.ta != null ? L.start.ta : L.start.a];
+  const path = [[st[0], st[1], st[2], 1, null, st[3]]];
   for (const ch of code) {
     const m = ch.charCodeAt(0) - 97, dir = m < 5 ? 1 : -1, s = STEERS[m % 5];
-    for (let k = 0; k < 3; k++) [x, y, a] = pkMove(x, y, a, dir * STEP / 3, s * PK.STEER);
-    path.push([x, y, a, dir]);
+    for (let k = 0; k < 3; k++) st = pkStep(L, st, dir * STEP / 3, s * VST);
+    path.push([st[0], st[1], st[2], dir, null, st[3]]);
   }
   return path;
 }
@@ -5709,7 +5812,7 @@ function pkReplay(L, code) { // 把存好的解法(每個字 = 一步的檔位�
 /* ---------- 停車大師的 3D 畫面(Blender 做的車子、鴨子、香蕉皮、推車、柱子:assets/parking.glb) ---------- */
 const PK_CAR_COLORS = ['#e53935', '#1e6fe0', '#f2f3f5', '#2b2f38', '#2eaa4f', '#fbc02d', '#8e44c8', '#9aa3b1'];
 function pkView3D(LD, L, host) {
-  const { THREE, gltf } = LD, W = L.W, H = L.H, th = PK_THEMES[L.theme], dark = L.theme === 'night' || L.theme === 'garage', off = L.dark; // off:停電
+  const { THREE, gltf } = LD, W = L.W, H = L.H, th = PK_THEMES[L.theme], dark = L.theme === 'night' || L.theme === 'garage', off = L.dark, VS = L.truck ? PK_TRUCK.STEER : PK.STEER; // off:停電
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(1.75, window.devicePixelRatio || 1));
   renderer.shadowMap.enabled = true;
@@ -5812,6 +5915,7 @@ function pkView3D(LD, L, host) {
       m.castShadow = true; m.receiveShadow = true;
       if (opt && opt.paint && m.material.name === 'CarPaint') m.material = opt.paint;
       if (opt && opt.tail && m.material.name === 'TailLight') m.material = opt.tail;
+      if (opt && opt.paint2 && m.material.name === 'TrailerPaint') m.material = opt.paint2;
     });
     o.position.copy(P(x, y, opt && opt.h));
     o.rotation.y = -a;
@@ -5819,6 +5923,17 @@ function pkView3D(LD, L, host) {
     return o;
   }
   const obsObj = new Map();
+  const CONT = ['#d9442f', '#2f6fd1', '#e8a21f', '#2e9b5a', '#8e5bc8', '#9aa4b2'];
+  const ribCv = document.createElement('canvas'); // 貨櫃側面的直條紋
+  ribCv.width = 128; ribCv.height = 32;
+  { const g = ribCv.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, 128, 32); for (let i = 0; i < 16; i++) { g.fillStyle = 'rgba(0,0,0,.2)'; g.fillRect(i * 8 + 5, 0, 3, 32); g.fillStyle = 'rgba(255,255,255,.35)'; g.fillRect(i * 8 + 2, 0, 2, 32); } }
+  const ribTex = new THREE.CanvasTexture(ribCv);
+  ribTex.colorSpace = THREE.SRGBColorSpace; ribTex.wrapS = THREE.RepeatWrapping; ribTex.repeat.set(2, 1);
+  const cMats = {};
+  const cMat = c => cMats[c] || (cMats[c] = new THREE.MeshStandardMaterial({ color: CONT[c % CONT.length], map: ribTex, roughness: 0.55, metalness: 0.15 }));
+  const ctopMat = new THREE.MeshStandardMaterial({ color: '#8a929e', roughness: 0.7 });
+  const cTops = {};
+  const cTop = c => cTops[c] || (cTops[c] = new THREE.MeshStandardMaterial({ color: new THREE.Color(CONT[c % CONT.length]).multiplyScalar(0.8), roughness: 0.6, metalness: 0.1 })); // 貨櫃車頂:跟車身同色、深一點
   const hz = document.createElement('canvas'); // 黃黑斜紋(花台、障礙物的側面)
   hz.width = 64; hz.height = 16;
   { const x = hz.getContext('2d'); x.fillStyle = '#ffc61a'; x.fillRect(0, 0, 64, 16); x.fillStyle = '#202228'; for (let i = -16; i < 64; i += 16) { x.beginPath(); x.moveTo(i, 16); x.lineTo(i + 8, 16); x.lineTo(i + 16, 0); x.lineTo(i + 8, 0); x.fill(); } }
@@ -5828,6 +5943,10 @@ function pkView3D(LD, L, host) {
   L.obs.forEach(o => {
     if (o.k === 'car') obsObj.set(o, model(o.kind, o.x, o.y, o.a, { paint: paints[o.c % paints.length] }));
     else if (o.k === 'pillar') obsObj.set(o, model('Pillar', o.x, o.y, 0));
+    else if (o.k === 'container') { // 貨櫃:有直條紋的彩色鐵盒子
+      const m = new THREE.Mesh(new THREE.BoxGeometry(o.hl * 2, 2.7, o.hw * 2), [0, 1, 2, 3, 4, 5].map(f => (f === 2 ? cTop(o.c) : f === 3 ? ctopMat : cMat(o.c))));
+      m.position.copy(P(o.x, o.y, 1.4)); m.rotation.y = -o.a; m.castShadow = m.receiveShadow = true; scene.add(m); obsObj.set(o, m);
+    }
     else if (o.k === 'cone') { const m = model('Cone', o.x, o.y, 0); m.scale.setScalar(1.35); obsObj.set(o, m); }
     else if (o.k === 'planter') {
       const m = new THREE.Mesh(new THREE.BoxGeometry(o.hl * 2, 0.75, o.hw * 2), [hazard, hazard, curbTop, hazard, hazard, hazard]); // hl 沿著 x、hw 沿著 y(跟碰撞框一樣)
@@ -5873,7 +5992,7 @@ function pkView3D(LD, L, host) {
   }
   // 玩家的車(跑車)、對手的影子車
   const tailMat = (() => { let m = null; tpl('Sport').traverse(x => { if (x.isMesh && x.material.name === 'TailLight') m = x.material; }); return m.clone(); })();
-  let me = null;
+  let me = null, trailerObj = null;
   const ghosts = new Map();
   const ghostCar = (color, label) => {
     const paint = new THREE.MeshStandardMaterial({ color, roughness: 0.3, transparent: true, opacity: 0.5, depthWrite: false });
@@ -5934,16 +6053,16 @@ function pkView3D(LD, L, host) {
     scene.add(m);
     return m;
   });
-  function drawGuides(car, dir, steer) {
-    let x = car.x, y = car.y, a = car.a;
-    const hl = PK.L / 2 * dir, hw = PK.CW / 2 - 0.05;
+  function drawGuides(car, dir, steer) { // 卡車:前進畫車頭的兩個角、倒車畫車廂尾巴的兩個角
+    let st = [car.x, car.y, car.a, car.ta];
     for (let i = 0; i < GN; i++) {
-      const c = Math.cos(a), sn = Math.sin(a), nx = -sn * 0.08, ny = c * 0.08;
+      const bs = pkBoxes(L, st[0], st[1], st[2], st[3]), b = dir > 0 ? bs[0] : bs[bs.length - 1], hl = b.hl * dir, hw = b.hw - 0.05;
+      const c = Math.cos(b.a), sn = Math.sin(b.a), nx = -sn * 0.08, ny = c * 0.08;
       guides.forEach((m, k) => {
-        const v = k ? hw : -hw, px = x + c * hl - sn * v, py = y + sn * hl + c * v, p1 = P(px - nx, py - ny, 0.05), p2 = P(px + nx, py + ny, 0.05);
+        const v = k ? hw : -hw, px = b.x + c * hl - sn * v, py = b.y + sn * hl + c * v, p1 = P(px - nx, py - ny, 0.05), p2 = P(px + nx, py + ny, 0.05);
         m.geometry.attributes.position.array.set([p1.x, p1.y, p1.z, p2.x, p2.y, p2.z], i * 6);
       });
-      [x, y, a] = pkMove(x, y, a, dir * 0.3, steer);
+      st = pkStep(L, st, dir * 0.3, steer);
     }
     guides.forEach(m => { m.geometry.attributes.position.needsUpdate = true; m.visible = true; });
     guideMat.color.set(dir > 0 ? '#4ade80' : '#ffb020');
@@ -5954,18 +6073,21 @@ function pkView3D(LD, L, host) {
     render(now, S, dt) {
       fit();
       if (S.car && !me) {
-        me = model('Sport', S.car.x, S.car.y, S.car.a, { paint: new THREE.MeshStandardMaterial({ color: S.color, roughness: 0.22, metalness: 0.2 }), tail: tailMat });
+        const paintMe = new THREE.MeshStandardMaterial({ color: S.color, roughness: 0.22, metalness: 0.2 });
+        me = L.truck ? model('TruckCab', S.car.x, S.car.y, S.car.a, { paint: paintMe }) : model('Sport', S.car.x, S.car.y, S.car.a, { paint: paintMe, tail: tailMat });
+        if (L.truck) trailerObj = model('Trailer', S.car.x, S.car.y, S.car.ta, { paint2: new THREE.MeshStandardMaterial({ color: '#f4f5f7', roughness: 0.4 }) });
         if (off) for (const sg of [-1, 1]) { // 停電:只有車燈照得到
           const sl = new THREE.SpotLight('#fff3cf', 260, 30, 0.5, 0.55, 1.4);
-          sl.position.set(2.1, 0.7, sg * 0.6); sl.target.position.set(10, 0, sg * 1.2);
+          sl.position.set(L.truck ? 2.4 : 2.1, L.truck ? 1.3 : 0.7, sg * (L.truck ? 0.8 : 0.6)); sl.target.position.set(10, 0, sg * 1.2);
           me.add(sl, sl.target);
         }
       }
       if (me) {
         me.visible = !!S.car;
         if (S.car) { me.position.copy(P(S.car.x, S.car.y)); me.rotation.y = -S.car.a; me.rotation.z = S.car.bump || 0; }
-        tailMat.emissiveIntensity = S.braking ? 3 : 0.6;
-        if (S.car && S.guide) drawGuides(S.car, S.guide, S.car.steer * PK.STEER); else guides.forEach(m => { m.visible = false; });
+        if (trailerObj && S.car) { const tb = pkBoxes(L, S.car.x, S.car.y, S.car.a, S.car.ta)[1]; trailerObj.position.copy(P(tb.x, tb.y)); trailerObj.rotation.y = -S.car.ta; }
+        if (!L.truck) tailMat.emissiveIntensity = S.braking ? 3 : 0.6;
+        if (S.car && S.guide) drawGuides(S.car, S.guide, S.car.steer * VS); else guides.forEach(m => { m.visible = false; });
       }
       // 對手 / 教練的影子車:平滑地追上最新位置
       S.ghosts.forEach((gh, id) => {
@@ -6017,6 +6139,7 @@ const PK_MSG = {
   cart: ['購物車暴衝!', '是誰沒把推車放回去!', '推車:讓我過'],
   banana: ['滑~~~', '香蕉皮!!', '瑪利歐上身', '轉圈圈~'],
   cone: ['三角錐飛走了~', '全壘打!', '錐錐掰掰'],
+  jack: ['折刀了!車頭和車廂打架', '車廂:不要再轉了啦', '拖板車折成 V 字形'],
   robot: ['掃地機器人:我只是在打掃', '嗶嗶嗶!機器人哭哭', '機器人翻肚了'],
   mover: ['阿伯:你沒看到我在倒車嗎!', '叭!阿伯生氣了', '讓一下啦少年仔'],
   bump: ['咚咚!', '減速丘!慢一點', '屁股好痛!'],
@@ -6025,13 +6148,13 @@ const PK_MSG = {
 };
 function pkSession(LD, L, o) {
   // o: { stage, pad, color, label, spectate, wait, battle, onFinish, onFail, onPose }
-  const stage = o.stage, pad = o.pad;
+  const stage = o.stage, pad = o.pad, VS = L.truck ? PK_TRUCK.STEER : PK.STEER; // VS:最大轉向角(卡車比較小)
   stage.insertAdjacentHTML('beforeend', `<div class="pkhud"><span class="pkt">⏱ 0.0</span><span class="pkc">💥 0</span>${L.thief ? `<span class="pkth">🛒 阿姨 ${L.thief}</span>` : ''}${L.inv ? '<span class="pkinv">↔ 反向</span>' : ''}</div>
     <div class="pkmsg"></div><div class="pkhold"><i></i><span>停穩中…</span></div>`);
   const tEl = $('.pkt', stage), cEl = $('.pkc', stage), thEl = $('.pkth', stage), msgEl = $('.pkmsg', stage), holdEl = $('.pkhold', stage);
   const view = pkView3D(LD, L, stage);
   const S = {
-    car: o.spectate ? null : { x: L.start.x, y: L.start.y, a: L.start.a, v: 0, steer: 0, bump: 0 },
+    car: o.spectate ? null : { x: L.start.x, y: L.start.y, a: L.start.a, ta: L.start.ta != null ? L.start.ta : L.start.a, v: 0, steer: 0, bump: 0 },
     color: o.color || '#ffd23f', ghosts: new Map(), ducks: [], carts: [], movers: [], robots: L.robots.map(r => ({ ...r })), thief: null, inSpot: false, hold: 0, braking: false,
   };
   let steerIn = 0, thr = 0, jdir = null, started = false, t0 = 0, crashes = 0, pen = 0, done = false, cool = 0, spin = null, boost = 0, hornCd = 0, beepT = 0, raf = 0, last = 0, live = !o.spectate && !o.wait;
@@ -6157,31 +6280,40 @@ function pkSession(LD, L, o) {
     if (!live) { c.v *= Math.max(0, 1 - dt * 6); S.guide = 0; return; }
     let sIn = L.inv ? -steerIn : steerIn; // 鍵盤:左右是相對方向盤
     if (jdir != null && thr) { // 搖桿:車頭(前進)或車尾(倒車)要對準搖桿指的方向;倒車時方向盤的作用是相反的
-      const err = pkWrap((thr > 0 ? jdir : jdir + Math.PI) - c.a);
-      sIn = Math.max(-1, Math.min(1, err * 2.4)) * (thr > 0 ? 1 : -1);
+      if (L.truck && thr < 0) { // 卡車倒車:要讓「車廂」對準方向。車頭先偏到車廂的一邊,車廂才會慢慢轉過去
+        const aStar = c.ta - Math.max(-0.9, Math.min(0.9, pkWrap(jdir + Math.PI - c.ta) * 1.6));
+        sIn = Math.max(-1, Math.min(1, pkWrap(c.a - aStar) * 2.4));
+      } else {
+        const err = pkWrap((thr > 0 ? jdir : jdir + Math.PI) - c.a);
+        sIn = Math.max(-1, Math.min(1, err * 2.4)) * (thr > 0 ? 1 : -1);
+      }
     }
     c.steer += (sIn - c.steer) * Math.min(1, dt * 9);
     S.guide = thr ? Math.sign(thr) : c.v < -0.05 ? -1 : 1;
     S.braking = false;
-    if (spin) { c.a += spin.w * dt; c.v *= Math.max(0, 1 - dt * 1.8); spin.t -= dt; if (spin.t <= 0) spin = null; }
+    if (spin) { c.a += spin.w * dt; c.ta += pkWrap(c.a - c.ta) * Math.min(1, dt * 3); c.v *= Math.max(0, 1 - dt * 1.8); spin.t -= dt; if (spin.t <= 0) spin = null; }
     else if (thr > 0) { if (c.v < 0) { c.v = Math.min(0, c.v + 12 * dt); S.braking = true; } else c.v = Math.min(PK.VF, c.v + 4.2 * dt); }
     else if (thr < 0) { if (c.v > 0) { c.v = Math.max(0, c.v - 12 * dt); S.braking = true; } else c.v = Math.max(-PK.VR, c.v - 3.4 * dt); }
     else { const s = Math.sign(c.v); c.v = s * Math.max(0, Math.abs(c.v) - 7 * dt); S.braking = Math.abs(c.v) > 0.05; }
     if (c.v < -0.1) { S.braking = true; beepT -= dt; if (beepT <= 0) { beepT = 0.5; beep(1250, 0.05, 'sine', 0.035); } } // 倒車嗶嗶
     if (Math.abs(c.v) > 0.001) {
-      const [nx, ny, na] = pkMove(c.x, c.y, c.a, c.v * dt, spin ? 0 : c.steer * PK.STEER);
+      const [nx, ny, na, nta] = pkStep(L, [c.x, c.y, c.a, c.ta], c.v * dt, spin ? 0 : c.steer * VS);
+      const boxes = pkBoxes(L, nx, ny, na, nta);
       const dyn = [];
       S.ducks.forEach(line => line.forEach(d => dyn.push({ k: 'duck', x: d.x, y: d.y, a: 0, hl: 0.42, hw: 0.32 })));
       S.carts.forEach(cc => dyn.push({ k: 'cart', x: cc.x, y: cc.y, a: 0, hl: 0.55, hw: 0.35 }));
       S.movers.forEach((mv, i) => dyn.push({ k: 'mover', x: mv.x, y: mv.y, a: 0, hl: PK_LEN[L.movers[i].kind] / 2, hw: PK.CW / 2 }));
       S.robots.forEach(rb => dyn.push({ k: 'robot', x: rb.x, y: rb.y, a: 0, hl: 0.75, hw: 0.75 }));
-      const hit = pkHit(L, nx, ny, na) || dyn.find(d => Math.hypot(d.x - nx, d.y - ny) < d.hl + 2.6 && busObbHit(nx, ny, na, PK.L / 2, PK.CW / 2, d.x, d.y, 0, d.hl, d.hw));
+      const hit = pkJack(L, na, nta) ? { k: 'jack' } : pkHit(L, nx, ny, na, undefined, undefined, nta) || dyn.find(d => boxes.some(b => Math.hypot(d.x - b.x, d.y - b.y) < d.hl + b.hl + 2.2 && busObbHit(b.x, b.y, b.a, b.hl, b.hw, d.x, d.y, 0, d.hl, d.hw)));
       if (hit && hit.k === 'cone') { // 三角錐被撞飛(扣 1 秒,車子繼續走)
         hit.gone = true; hit.fly = { t0: performance.now(), vx: Math.cos(c.a) * c.v * 1.4 + (Math.random() - 0.5) * 2, vy: Math.sin(c.a) * c.v * 1.4 + (Math.random() - 0.5) * 2 };
         pen += 1; say(PK_MSG.cone, '#ffb36b'); beep(520, 0.08, 'triangle', 0.1); beep(780, 0.1, 'triangle', 0.08, 0.08);
-        c.v *= 0.75; c.x = nx; c.y = ny; c.a = na;
+        c.v *= 0.75; c.x = nx; c.y = ny; c.a = na; c.ta = nta;
+      } else if (hit && hit.k === 'jack') { // 折刀了:車頭和車廂夾太緊,不准再往這個方向開(不扣時間)
+        c.v = 0;
+        if (cool <= 0) { cool = 0.9; say(PK_MSG.jack, '#c4b5fd'); beep(160, 0.15, 'square', 0.08); }
       } else if (hit) { crash(hit); c.v = -c.v * 0.3; c.bump = 0.06; }
-      else { c.x = nx; c.y = ny; c.a = na; }
+      else { c.x = nx; c.y = ny; c.a = na; c.ta = nta; }
     }
     c.bump *= Math.max(0, 1 - dt * 8);
     // 減速丘:開太快會彈起來、變慢
@@ -6194,12 +6326,12 @@ function pkSession(LD, L, o) {
     // 香蕉皮
     L.bananas.forEach(b => {
       if (b.gone || Math.hypot(b.x - c.x, b.y - c.y) > 2.6) return;
-      if (!busObbHit(c.x, c.y, c.a, PK.L / 2, PK.CW / 2, b.x, b.y, 0, 0.4, 0.4)) return;
+      if (!pkBoxes(L, c.x, c.y, c.a, c.ta).some(bx => busObbHit(bx.x, bx.y, bx.a, bx.hl, bx.hw, b.x, b.y, 0, 0.4, 0.4))) return;
       b.gone = true; spin = { w: (Math.random() < 0.5 ? -1 : 1) * 7, t: 0.6 }; c.v = Math.sign(c.v || 1) * Math.max(2.5, Math.abs(c.v));
       pen += 1; say(PK_MSG.banana, '#ffe14d'); beep(600, 0.4, 'sine', 0.06); beep(300, 0.4, 'sine', 0.05, 0.2);
     });
     // 停好了嗎:位置對、方向對、車子停住 0.8 秒
-    S.inSpot = pkIn(L, c.x, c.y, c.a) && !spin;
+    S.inSpot = pkIn(L, c.x, c.y, c.a, 0, c.ta) && !spin;
     if (S.inSpot && Math.abs(c.v) < 0.35 && started) S.hold = Math.min(1, S.hold + dt / 0.8); else S.hold = Math.max(0, S.hold - dt * 2);
     holdEl.classList.toggle('on', S.inSpot);
     $('i', holdEl).style.width = Math.round(S.hold * 100) + '%';
@@ -6259,7 +6391,7 @@ function pkSession(LD, L, o) {
   return api;
 }
 
-/* ---------- 單人闖關:50 關,有星星、可以選關、密碼 0522 跳關 ---------- */
+/* ---------- 單人闖關:100 關,有星星、可以選關、密碼 0522 跳關 ---------- */
 function pkStars(total, par) { return total <= par ? 3 : total <= par * 1.6 ? 2 : 1; }
 function pkComment(st, cr) {
   if (st === 3 && !cr) return pick(['神之停車!駕訓班教練落淚', '完美!可以去考職業停車手', '這技術…你是代客泊車的吧']);
@@ -6377,7 +6509,7 @@ function parkGame() {
 const PKB = { R: 3, T: 90, PTS: [5, 3, 2, 1] };
 function hParking(H) {
   let round = 0, phase = 'idle', tok = 0, t0 = 0;
-  const tot = {}, ps = {}, NL = PK_PLAN.length, lvs = [rand(3, 15), rand(16, 32), rand(33, NL)];
+  const tot = {}, ps = {}, NL = PK_PLAN.length, pickLv = (a, b) => { const ok = []; for (let n = a; n <= b; n++) if (!PK_PLAN[n - 1].truck) ok.push(n); return pick(ok); }, lvs = [pickLv(3, 30), pickLv(31, 70), pickLv(71, NL)]; // 對戰不抽卡車關(卡車的影子車畫不出來)
   H.players.forEach(s => { tot[s] = 0; });
   function startRound() {
     round++;

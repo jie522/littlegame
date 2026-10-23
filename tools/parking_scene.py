@@ -278,6 +278,41 @@ bush = empty('Bush', (10, 3, 0))
 for (x, y, r, m) in ((0, 0, 0.5, 'leaf2'), (0.45, 0.12, 0.38, 'leaf'), (-0.4, -0.1, 0.35, 'leaf'), (0.05, 0.35, 0.33, 'leaf2')):
     ball('Leaves', r, (x, y, r * 0.75), MAT[m], bush, scale=(1, 1, 0.85), sub=1)
 
+# ---------------- 卡車連結車:車頭 TruckCab(原點在車頭中心、車頭朝 +X)和貨櫃車廂 Trailer(原點在車廂中心、前面朝 +X) ----------------
+MAT['trailer'] = make_mat('TrailerPaint', '#f4f5f7', rough=0.4)
+MAT['stripe2'] = make_mat('TrailerStripe', '#e53935', rough=0.45)
+cab = empty('TruckCab', (0, 14, 0))
+rbox('Chassis', 4.2, 2.0, 0.55, 0.95, MAT['dark'], cab, bevel=0.06)
+rbox('CabBody', 2.4, 2.4, 0.95, 3.05, MAT['paint'], cab, bevel=0.25, x=1.0)
+rbox('CabRoofFairing', 2.5, 2.3, 2.95, 3.6, MAT['paint'], cab, bevel=0.28, x=0.75, taper=(0.55, 0.9, -0.55))
+rbox('Windshield', 0.12, 2.0, 1.85, 2.9, MAT['glass'], cab, bevel=0.04, seg=2, x=2.18)
+for sg in (-1, 1):
+    rbox('SideWindow', 1.3, 0.1, 1.9, 2.8, MAT['glass'], cab, bevel=0.04, seg=2, x=1.3, y=sg * 1.21)
+    rbox('HeadLight', 0.1, 0.4, 1.2, 1.5, MAT['head'], cab, bevel=0.03, seg=2, x=2.22, y=sg * 0.8)
+    rbox('Mirror', 0.18, 0.5, 2.0, 2.9, MAT['dark'], cab, bevel=0.04, seg=2, x=2.0, y=sg * 1.5)
+    cyl('Stack', 0.11, 2.2, (-0.15, sg * 1.2, 2.05), MAT['chrome'], cab, seg=12, r2=0.09)
+rbox('Grille', 0.1, 1.5, 1.1, 1.8, MAT['chrome'], cab, bevel=0.03, seg=2, x=2.22)
+rbox('Bumper', 0.35, 2.4, 0.5, 0.95, MAT['dark'], cab, bevel=0.1, x=2.2)
+cyl('FifthWheel', 0.7, 0.95, (-1.5, 0, 1.02), MAT['steel'], cab, seg=24)
+for (wx, wy) in ((1.45, 1.0), (1.45, -1.0), (-1.1, 1.0), (-1.1, -1.0), (-2.0, 1.0), (-2.0, -1.0)):
+    cyl('Tire', 0.55, 0.42, (wx, wy, 0.55), MAT['tire'], cab, seg=22, axis='Y')
+    cyl('Rim', 0.3, 0.44, (wx, wy * 1.03, 0.55), MAT['chrome'], cab, seg=14, axis='Y')
+trl = empty('Trailer', (0, 18, 0))
+rbox('TrailerFloor', 7.2, 2.4, 0.85, 1.05, MAT['dark'], trl, bevel=0.04)
+rbox('Box', 7.2, 2.5, 1.05, 3.7, MAT['trailer'], trl, bevel=0.14)
+rbox('Band', 7.24, 2.54, 2.0, 2.35, MAT['stripe2'], trl, bevel=0.06, seg=2)
+for i in range(-3, 4):  # 貨櫃的直條紋
+    for sg in (-1, 1):
+        rbox('Rib', 0.1, 0.06, 1.15, 3.6, MAT['steel'], trl, x=i * 0.95, y=sg * 1.27)
+rbox('RearDoor', 0.1, 2.3, 1.2, 3.5, MAT['steel'], trl, bevel=0.03, seg=1, x=-3.62)
+for sg in (-1, 1):
+    rbox('TailLight', 0.1, 0.3, 1.1, 1.6, MAT['tail'], trl, bevel=0.03, seg=2, x=-3.65, y=sg * 1.0)
+    cyl('Leg', 0.09, 0.8, (2.8, sg * 0.8, 0.45), MAT['steel'], trl, seg=8)
+rbox('RearBumper', 0.25, 2.3, 0.7, 0.95, MAT['dark'], trl, bevel=0.05, seg=2, x=-3.6)
+for (wx, wy) in ((-2.4, 1.0), (-2.4, -1.0), (-3.3, 1.0), (-3.3, -1.0)):
+    cyl('Tire', 0.5, 0.4, (wx, wy, 0.5), MAT['tire'], trl, seg=22, axis='Y')
+    cyl('Rim', 0.28, 0.42, (wx, wy * 1.03, 0.5), MAT['chrome'], trl, seg=14, axis='Y')
+
 # ---------------- 匯出 ----------------
 bpy.ops.export_scene.gltf(filepath=OUT, export_format='GLB', export_apply=True, export_yup=True, export_cameras=False, export_lights=False)
 print('exported', OUT)
@@ -286,8 +321,8 @@ print('exported', OUT)
 if PREVIEW:
     cam = bpy.data.objects.new('Cam', bpy.data.cameras.new('Cam'))
     scene.collection.objects.link(cam)
-    cam.location = (14, -9, 9)
-    cam.rotation_euler = (math.radians(58), 0, math.radians(48))
+    cam.location = (10, 2, 12)
+    cam.rotation_euler = (math.radians(55), 0, math.radians(40))
     cam.data.lens = 30
     scene.camera = cam
     world = bpy.data.worlds.new('World')
