@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.24';
+const APP_VERSION = '2026.11.25';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -345,7 +345,9 @@ function hostSendTo(slot, m) { // 只傳給一位玩家(例如手牌,別人看�
   const c = NET.conns.get(slot);
   if (c && c.open) { try { c.send(m); } catch (e) { /* ignore */ } }
 }
+const TURN_GAMES = ['chess', 'morris', 'checkers', 'big2', 'seven', 'heart', 'memory'];
 function sendInput(m) {
+  if (!navigator.vibrate && TURN_GAMES.includes(NET.curG)) iosHaptic(); // iPhone:自己出手的當下震一下(這時候 iOS 才讓網頁觸發觸覺回饋)
   if (NET.role === 'host') queueMicrotask(() => hostInput(0, m));
   else if (NET.conn && NET.conn.open) { try { NET.conn.send(m); } catch (e) { /* ignore */ } }
 }
@@ -509,7 +511,7 @@ const GAMES = [
   },
   {
     id: 'big2', emoji: '🃏', name: '大老二', tag: '撲克+對戰', color: '#1e7a4a', desc: '打 5 局比誰賺最多,剩幾張就賠多少錢!',
-    rules: ['2~4 人,每人起始資金 $1000,打 5 局(有人破產就提前結束),最後錢最多的人贏', '大小:3 最小,接著 4、5…K、A,2 最大;同點數比花色 ♣ < ♦ < ♥ < ♠', '可以出單張、對子、五張牌(順子 < 葫蘆 < 鐵支 < 同花順),要出一樣張數而且比桌上大,不然就按「過」', '大家都過了,最後出牌的人可以重新自由出牌;拿到 ♣3 的人先出,第一手要包含 ♣3', '每局最先把牌出完的人贏錢:輸家付「底 $50 + 剩下的張數 × $10」,剩 10 張以上 ×2、一張都沒出(全關)×3', '手牌只有自己看得到,不會出可以按「💡 提示」'],
+    rules: ['2~4 人,每人起始資金 $1000,打 5 局(有人破產就提前結束),最後錢最多的人贏', '大小:3 最小,接著 4、5…K、A,2 最大;同點數比花色 ♣ < ♦ < ♥ < ♠', '可以出單張、對子、五張牌(順子、葫蘆、鐵支、同花順),要出一樣張數而且比桌上大,不然就按「過」', '五張牌要出「同牌型」才能比大小:順子只能被更大的順子壓、葫蘆只能被更大的葫蘆壓;只有「鐵支」和「同花順」可以壓過任何五張牌(同花順比鐵支大)', '大家都過了,最後出牌的人可以重新自由出牌;拿到 ♣3 的人先出,第一手要包含 ♣3', '每局最先把牌出完的人贏錢:輸家付「底 $50 + 剩下的張數 × $10」,剩 10 張以上 ×2、一張都沒出(全關)×3', '手牌只有自己看得到,不會出可以按「💡 提示」'],
     host: hBig2, view: vBig2, noCountdown: true,
   },
   {
@@ -786,6 +788,7 @@ function playView(m) {
   const T = resetView();
   app.innerHTML = '';
   const me = PLAYERS[NET.mySlot];
+  NET.curG = g.id;
   const root = el('div', 'play play-' + g.id);
   setTimeout(() => { root.style.animation = 'none'; root.style.opacity = 1; }, 450); // 進場淡入只要 0.3 秒;3D 載入讓手機忙的時候動畫會卡在半透明(整個畫面霧霧的),時間到就強制拿掉
   root.style.setProperty('--c', me.color);
@@ -6694,7 +6697,7 @@ function cdTable(V, title) {
 /* =========================================================
    大老二 🃏(2~4 人):把手上的牌最先出完的人贏
    大小:3 < 4 < … < K < A < 2;同點數比花色 ♣ < ♦ < ♥ < ♠(梅花 3 最小、黑桃 2 最大)
-   可以出:單張、對子、五張牌(順子 < 葫蘆 < 鐵支 < 同花順);要出一樣張數、而且比桌上大,不然就「過」
+   可以出:單張、對子、五張牌(順子、葫蘆、鐵支、同花順);要出一樣張數、而且比桌上大,不然就「過」
    大家都過,最後出牌的人就可以重新自由出牌。拿到梅花 3 的人先出,第一手要包含梅花 3
    ========================================================= */
 const B2_TYPE = ['', '順子', '葫蘆', '鐵支', '同花順'];
@@ -6719,7 +6722,14 @@ function b2Eval(cards) { // 這組牌是什麼牌型、有多大;不是合法牌
   const topCard = cards.find(c => cdRank(c) === (top === 14 ? 1 : top)), flush = cards.every(c => cdSuit(c) === cdSuit(cards[0]));
   return { n, key: (flush ? 4000 : 1000) + top * 4 + [3, 2, 1, 0][cdSuit(topCard)], name: flush ? '同花順' : '順子' };
 }
-const b2Beats = (a, b) => !b || (a.n === b.n && a.key > b.key);
+const b2Cls = ev => (ev.n === 5 ? Math.floor(ev.key / 1000) : 0); // 1 順子、2 葫蘆、3 鐵支、4 同花順
+const b2Beats = (a, b) => { // 能不能壓過桌上的牌:單張、對子要同張數;五張牌要同牌型,只有鐵支和同花順可以壓過別的牌型
+  if (!b) return true;
+  if (a.n !== b.n) return false;
+  if (a.n < 5) return a.key > b.key;
+  const ca = b2Cls(a), cb = b2Cls(b);
+  return ca === cb ? a.key > b.key : ca >= 3 && ca > cb;
+};
 function b2Combos(hand) { // 手上所有可以出的組合(順子每種只挑幾個代表)
   const out = [], byR = {};
   const sorted = hand.slice().sort((a, b) => b2Pow(a) - b2Pow(b));
@@ -6862,7 +6872,7 @@ function vBig2(V) {
     passB.disabled = !myTurn() || !st.table;
     const ev = b2Eval([...sel]);
     T.info.innerHTML = !st ? '' : st.done || st.rend ? `💰 你有 <b>$${st.money[me]}</b>` : myTurn()
-      ? `<b class="cdyou">輪到你!</b>${sel.size ? (ev ? `${ev.name}${st.table && !b2Beats(ev, st.table.ev) ? '<i>(比桌上小)</i>' : ''}` : '<i>這不是合法的牌型</i>') : st.must ? '第一手要包含 ♣3' : st.table ? '壓過桌上的牌,或按「過」' : '自由出牌!'}`
+      ? `<b class="cdyou">輪到你!</b>${sel.size ? (ev ? `${ev.name}${st.table && !b2Beats(ev, st.table.ev) ? '<i>(壓不過桌上的牌)</i>' : ''}` : '<i>這不是合法的牌型</i>') : st.must ? '第一手要包含 ♣3' : st.table ? '壓過桌上的牌,或按「過」' : '自由出牌!'}`
       : `等 ${esc(pinfo(st.turn).name)} 出牌…`;
     if (st && !st.done && !st.rend) T.info.insertAdjacentHTML('beforeend', `<small class="cdwallet">💰 $${st.money[me]} · 剩 ${hand.length} 張 = −$${b2Pay(hand.length, st.init[me])}</small>`);
     V.root.classList.toggle('myturn', myTurn());
