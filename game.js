@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.23';
+const APP_VERSION = '2026.11.24';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -127,6 +127,7 @@ function buzz(ms) {
   } catch (e) { /* ignore */ }
 }
 const buzzTurn = () => buzz(22); // 輪到你了:微震一下
+const buzzOther = () => buzz(10); // 換成對方了:更輕的一下(只是提醒換人,手機不用一直盯著畫面)
 
 function toast(msg) {
   const t = el('div', 'toast', esc(msg));
@@ -1464,7 +1465,7 @@ function vMemory(V) {
       const p = pinfo(m.turn);
       V.stage(`<div class="turn">輪到 ${p.emoji} ${esc(p.name)}…</div>`);
     }
-    if (myTurn && lastTurn !== V.me) { SFX.tick(); buzzTurn(); }
+    if (myTurn && lastTurn !== V.me) { SFX.tick(); buzzTurn(); } else if (!myTurn && lastTurn != null && m.turn !== lastTurn) buzzOther();
     lastTurn = m.turn;
   };
 }
@@ -1913,7 +1914,7 @@ function vChess(V) {
           if (m.last.slot === V.me) SFX.good(); else if (fighting()) { SFX.bad(); buzz(80); } else SFX.tap();
         } else SFX.tap();
       }
-      if (myTurn() && lastTurn !== V.me) { buzzTurn(); if (m.turn !== lastTurn) SFX.tick(); }
+      if (myTurn() && lastTurn !== V.me) { buzzTurn(); if (m.turn !== lastTurn) SFX.tick(); } else if (fighting() && !myTurn() && lastTurn != null && m.turn !== lastTurn) buzzOther();
       if (m.idle >= 40 && m.idle % 3 === 1 && m.last && m.last.type === 'move') toast(`再 ${50 - m.idle} 步沒有翻棋或吃子就平手`);
       lastTurn = m.turn;
     } else if (m.e === 'over') {
@@ -2629,7 +2630,7 @@ function vMorris(V) {
         else if (L.rm != null) { beep(220, 0.18, 'triangle', 0.12); if (fighting() && L.slot !== me) buzz(90); }
         else beep(rand(380, 460), 0.07, 'sine', 0.14);
       }
-      if (myTurn() && lastTurn !== me) buzzTurn();
+      if (myTurn() && lastTurn !== me) buzzTurn(); else if (!myTurn() && lastTurn != null && m.turn !== lastTurn) buzzOther();
       lastTurn = m.turn;
     } else if (m.e === 'over') {
       over = true;
@@ -2951,6 +2952,7 @@ function vHeart(V) {
     }
     nextEl.innerHTML = st.phase === 'play' || st.phase === 'match' ? `下一張喊 <b>${HEART_RANK[st.call]}</b>` : '';
     if (m.ev === 'turn' && myTurn() && (!prev || prev.turn !== me || prev.phase !== 'play')) buzzTurn();
+    else if (m.ev === 'turn' && !myTurn() && prev && prev.turn !== m.turn) buzzOther();
     renderSeats();
     renderCtl();
   };
@@ -4090,7 +4092,7 @@ function vCheckers(V) {
       if (balls.size !== st.occ.filter(o => o >= 0).length || [...balls].some(([i, b]) => st.occ[i] !== +b.dataset.s)) rebuild();
       drawTrail(st.last && st.last.path);
       renderSeats(); showDests(); renderStatus();
-      if (st.turn === me && !over && (!prev || prev.turn !== me)) { buzzTurn(); SFX.join(); }
+      if (st.turn === me && !over && (!prev || prev.turn !== me)) { buzzTurn(); SFX.join(); } else if (st.turn !== me && !over && prev && prev.turn !== st.turn && st.order.includes(me)) buzzOther();
     };
     if (m.last && m.last.id !== lastId) {
       lastId = m.last.id;
@@ -6903,6 +6905,7 @@ function vBig2(V) {
       else { beep(520, 0.07, 'triangle', 0.08); if (m.last.name === '鐵支' || m.last.name === '同花順') { T.say(`<b class="boom">${m.last.name}!!</b>`, 1400); buzz([60, 40, 60]); } }
     }
     if (myTurn() && (!prev || prev.turn !== me)) { buzzTurn(); SFX.tick(); }
+    else if (!st.done && !st.rend && !myTurn() && prev && prev.turn !== m.turn && m.order.includes(me)) buzzOther();
     renderTable(); render();
     clearInterval(timerT);
     if (m.rend) { // 一局結束:誰付了多少錢
@@ -7038,6 +7041,7 @@ function vSeven(V) {
     if (m.intro) T.say(`<div class="big">7️⃣</div><b>排七</b><small>${pinfo(m.turn).emoji} ${m.turn === me ? '你' : esc(pinfo(m.turn).name)} 拿到 ♠7,先出!</small>`, 2200);
     if (m.last && (!prev || JSON.stringify(prev.last) !== JSON.stringify(m.last))) { if (m.last.type === 'cover') beep(220, 0.1, 'sine', 0.06); else beep(520, 0.07, 'triangle', 0.08); }
     if (myTurn() && (!prev || prev.turn !== me)) { buzzTurn(); SFX.tick(); }
+    else if (!st.done && !st.rend && !myTurn() && prev && prev.turn !== m.turn && m.order.includes(me)) buzzOther();
     if (myTurn()) { // 只有一張可以出的時候,幫忙先選好
       const ok = hand.filter(c => (m.first ? c === SEV_START : sevOk(m.board, c)));
       if (ok.length === 1) sel = ok[0];
