@@ -69,7 +69,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.42';
+const APP_VERSION = '2026.11.43';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -675,6 +675,8 @@ const GAME_CATS = { // 一個遊戲可以在好幾個分類裡
   big2: ['card'], seven: ['card'],
   bomb: ['action'], parking: ['action'], tower: ['reaction', 'action'],
 };
+/* 遊戲卡片的圖示:assets/game_icons.webp 是 4 x 4 的素材圖(tools/game_icons.py),順序要和這裡一樣 */
+const GAME_ICON = ['reaction', 'math', 'color', 'memory', 'chess', 'shaft', 'morris', 'heart', 'bomb', 'checkers', 'flood', 'parking', 'big2', 'seven', 'schulte', 'tower'];
 const inCat = (g, c) => c === 'all' || (GAME_CATS[g.id] || []).includes(c);
 
 /* ---------- 個人最佳紀錄(存在這支手機裡):反應類遊戲要記「最快幾秒」 ---------- */
@@ -727,7 +729,7 @@ function lobbyView() {
       ${NET.cat ? `<button class="cback">◀ 全部分類</button>
       <section class="games">${GAMES.filter(g => inCat(g, NET.cat)).map(g => `
         <button class="gcard" data-g="${g.id}" style="--g:${g.color}" ${enough ? '' : 'disabled'}>
-          <span class="gico">${g.emoji}</span><b>${g.name}</b><span class="tag">${g.tag}</span>${recChip(g)}
+          <span class="gico" style="--ix:${GAME_ICON.indexOf(g.id) % 4};--iy:${Math.floor(GAME_ICON.indexOf(g.id) / 4)}"></span><b>${g.name}</b><span class="tag">${g.tag}</span>${recChip(g)}
         </button>`).join('')}
       </section>` : `<section class="cats">${CATS.map(c => `
         <button class="ccard" data-c="${c.id}" style="--g:${c.color};--bg:${c.bg};--bd:${c.bd};--tc:${c.tc};--sc:${c.sc};${c.art}" ${enough ? '' : 'disabled'}>

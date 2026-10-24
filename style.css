@@ -2171,3 +2171,12 @@ button:disabled { cursor: not-allowed; }
 .play-tower .tov { background: rgba(20,30,60,.66); color: #fff; text-shadow: var(--ol-sm); text-align: center; gap: 6px; padding: 12px; }
 .play-tower .tov .small { font-size: .85rem; line-height: 1.6; }
 .play-tower .tov .ffinal { margin-top: 6px; min-width: 70%; }
+
+/* 遊戲卡片的圖示:設計稿裡的插圖(assets/game_icons.webp,4 x 4 拼圖,--ix / --iy 是第幾欄、第幾列) */
+.gico {
+  aspect-ratio: 1.4;
+  background: url(assets/game_icons.webp) calc(var(--ix, 0) * 100% / 3) calc(var(--iy, 0) * 100% / 3) / 400% 400% no-repeat, var(--g);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.35);
+  font-size: 0;
+}
+@media (max-height: 760px) { .gico { aspect-ratio: 1.4; } }
