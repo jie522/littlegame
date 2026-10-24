@@ -69,7 +69,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.40';
+const APP_VERSION = '2026.11.41';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -127,7 +127,7 @@ function buzz(ms) {
     else if (ms) iosHaptic();
   } catch (e) { /* ignore */ }
 }
-const buzzTurn = () => buzz(22); // 輪到你了:微震一下
+const buzzTurn = () => { buzz(22); SFX.tick(); }; // 輪到你了:微震一下 + 叮一聲(iPhone 的網頁這時候不能震,只能靠聲音提醒)
 const buzzOther = () => buzz(10); // 換成對方了:更輕的一下(只是提醒換人,手機不用一直盯著畫面)
 
 function toast(msg) {
@@ -1535,7 +1535,7 @@ function vMemory(V) {
       const p = pinfo(m.turn);
       V.stage(`<div class="turn">輪到 ${p.emoji} ${esc(p.name)}…</div>`);
     }
-    if (myTurn && lastTurn !== V.me) { SFX.tick(); buzzTurn(); } else if (!myTurn && lastTurn != null && m.turn !== lastTurn) buzzOther();
+    if (myTurn && lastTurn !== V.me) buzzTurn(); else if (!myTurn && lastTurn != null && m.turn !== lastTurn) buzzOther();
     lastTurn = m.turn;
   };
 }
@@ -1984,7 +1984,7 @@ function vChess(V) {
           if (m.last.slot === V.me) SFX.good(); else if (fighting()) { SFX.bad(); buzz(80); } else SFX.tap();
         } else SFX.tap();
       }
-      if (myTurn() && lastTurn !== V.me) { buzzTurn(); if (m.turn !== lastTurn) SFX.tick(); } else if (fighting() && !myTurn() && lastTurn != null && m.turn !== lastTurn) buzzOther();
+      if (myTurn() && lastTurn !== V.me) buzzTurn(); else if (fighting() && !myTurn() && lastTurn != null && m.turn !== lastTurn) buzzOther();
       if (m.idle >= 40 && m.idle % 3 === 1 && m.last && m.last.type === 'move') toast(`再 ${50 - m.idle} 步沒有翻棋或吃子就平手`);
       lastTurn = m.turn;
     } else if (m.e === 'over') {
@@ -4190,7 +4190,7 @@ function vCheckers(V) {
       if (balls.size !== st.occ.filter(o => o >= 0).length || [...balls].some(([i, b]) => st.occ[i] !== +b.dataset.s)) rebuild();
       drawTrail(st.last && st.last.path);
       renderSeats(); showDests(); renderStatus();
-      if (st.turn === me && !over && (!prev || prev.turn !== me)) { buzzTurn(); SFX.join(); } else if (st.turn !== me && !over && prev && prev.turn !== st.turn && st.order.includes(me)) buzzOther();
+      if (st.turn === me && !over && (!prev || prev.turn !== me)) buzzTurn(); else if (st.turn !== me && !over && prev && prev.turn !== st.turn && st.order.includes(me)) buzzOther();
     };
     if (m.last && m.last.id !== lastId) {
       lastId = m.last.id;
@@ -7021,7 +7021,7 @@ function vBig2(V) {
       if (m.last.type === 'pass') beep(330, 0.08, 'triangle', 0.06);
       else { beep(520, 0.07, 'triangle', 0.08); if (m.last.name === '鐵支' || m.last.name === '同花順') { T.say(`<b class="boom">${m.last.name}!!</b>`, 1400); buzz([60, 40, 60]); } }
     }
-    if (myTurn() && (!prev || prev.turn !== me)) { buzzTurn(); SFX.tick(); }
+    if (myTurn() && (!prev || prev.turn !== me)) buzzTurn();
     else if (!st.done && !st.rend && !myTurn() && prev && prev.turn !== m.turn && m.order.includes(me)) buzzOther();
     renderTable(); render();
     clearInterval(timerT);
@@ -7162,7 +7162,7 @@ function vSeven(V) {
     st = m;
     if (m.intro) T.say(`<div class="big">7️⃣</div><b>排七</b><small>${pinfo(m.turn).emoji} ${m.turn === me ? '你' : esc(pinfo(m.turn).name)} 拿到 ♠7,先出!</small>`, 2200);
     if (m.last && (!prev || JSON.stringify(prev.last) !== JSON.stringify(m.last))) { if (m.last.type === 'cover') beep(220, 0.1, 'sine', 0.06); else beep(520, 0.07, 'triangle', 0.08); }
-    if (myTurn() && (!prev || prev.turn !== me)) { buzzTurn(); SFX.tick(); }
+    if (myTurn() && (!prev || prev.turn !== me)) buzzTurn();
     else if (!st.done && !st.rend && !myTurn() && prev && prev.turn !== m.turn && m.order.includes(me)) buzzOther();
     if (myTurn()) { // 只有一張可以出的時候,幫忙先選好
       const ok = hand.filter(c => (m.first ? c === SEV_START : sevOk(m.board, c)));
