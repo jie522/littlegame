@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.32';
+const APP_VERSION = '2026.11.33';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -6772,8 +6772,19 @@ function cdTable(V, title) {
     }).join('');
   };
   // 自己的手牌:疊在一起排開,點一下抬起來(選取)
-  T.drawHand = (cards, sel, can) => {
+  T.drawHand = (cards, sel, can, bySuit) => {
     const w = T.hand.clientWidth || 340, n = cards.length;
+    if (bySuit) { // 排七:一種花色一排(牌已經依花色排好),每張牌都看得到完整的牌角,牌可以做大
+      const groups = [0, 1, 2, 3].map(su => cards.filter(c => cdSuit(c) === su)).filter(g => g.length);
+      const cw = Math.min(72, Math.max(60, w * 0.19)), rowH = cw * 1.4 * 0.41;
+      T.hand.style.setProperty('--cw', cw + 'px');
+      T.hand.style.height = cw * 1.4 + (groups.length - 1) * rowH + 24 + 'px';
+      T.hand.innerHTML = groups.map((g, r) => {
+        const step = g.length > 1 ? Math.min(cw * 0.78, (w - cw - 8) / (g.length - 1)) : 0, x0 = 4;
+        return g.map((c, j) => cdCard(c, (sel && sel.has(c) ? 'sel' : '') + (can && !can(c) ? ' dim' : '') + (can && can(c) ? ' ok' : '')).replace('class="ck', `style="left:${x0 + j * step}px;top:${20 + r * rowH}px;z-index:${r * 20 + j + 1}" class="ck`)).join('');
+      }).join('');
+      return;
+    }
     // 牌放大、疊多一點(看露出來的牌角);超過 8 張就排兩排(後排是小的、前排是大的),每張可以更大
     const rows = n > 8 ? 2 : 1, per = Math.ceil(n / rows);
     const cw = rows === 2 ? Math.min(96, Math.max(64, w * 0.26)) : Math.min(88, Math.max(58, w * 0.21)), rowH = cw * 1.4 * 0.52;
@@ -7110,7 +7121,7 @@ function vSeven(V) {
   function render() {
     if (!st) return;
     const mustCover = myTurn() && !hand.some(can);
-    T.drawHand(sorted(), new Set(sel != null ? [sel] : []), myTurn() ? c => (mustCover ? true : can(c)) : null);
+    T.drawHand(sorted(), new Set(sel != null ? [sel] : []), myTurn() ? c => (mustCover ? true : can(c)) : null, true);
     playB.disabled = !myTurn() || sel == null || !can(sel);
     coverB.disabled = !mustCover || sel == null;
     coverB.style.display = mustCover ? '' : 'none';
