@@ -1986,7 +1986,7 @@ button:disabled { cursor: not-allowed; }
 .cdfree { display: flex; flex-direction: column; align-items: center; gap: 6px; color: rgba(255,255,255,.75); font-size: 2.6rem; }
 .cdfree b { font-size: .95rem; }
 .ck { position: absolute; width: var(--cw); height: calc(var(--cw) * 1.4); }
-.cdme { display: flex; flex-direction: column; align-items: stretch; gap: 4px; }
+.cdme { width: 100%; display: flex; flex-direction: column; align-items: stretch; gap: 4px; }
 .cdmeinfo { min-height: 20px; text-align: center; color: #fff; font-weight: 800; font-size: .85rem; }
 .cdmeinfo i { font-style: normal; color: #ffb3b3; }
 .cdyou { color: #ffe066; margin-right: 6px; animation: pulse .5s ease-in-out infinite alternate; }
@@ -2107,3 +2107,24 @@ button:disabled { cursor: not-allowed; }
 .cm { border-radius: 6px; line-height: 1; gap: 1px; }
 .cm b { font-size: 1.2rem; }
 .cm i { font-size: 1.05rem; }
+/* 排七:對手資訊改成一行,讓出空間給放大的手牌和桌面 */
+.play-seven .cdop { flex-direction: row; justify-content: center; gap: 6px; padding: 3px 8px; max-width: 170px; }
+.play-seven .cdop .cdav .pe { height: 24px; }
+.play-seven .cdop .cdthink { bottom: -10px; }
+.play-seven .cdhand .ck.sel { transform: translateY(-14px); }
+
+/* ===== 沙漏倒倒樂 ===== */
+.play-sand { background: #b0773f url(assets/sand_bg.jpg) center / cover no-repeat; }
+.play-sand .pad { background: transparent; border: none; box-shadow: none; padding: 0 4px 6px; }
+.sdwrap { width: 100%; height: 100%; display: flex; flex-direction: column; gap: 6px; }
+.sdbox { position: relative; flex: 1; min-height: 0; border-radius: 18px; background: rgba(70,40,15,.18); }
+.sdcv { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+.sdleft { padding: 3px 10px; border-radius: 999px; background: rgba(0,0,0,.28); color: #fff; font-weight: 900; font-size: .85rem; }
+.sdleft b { font-family: "Fredoka", var(--font); color: #ffe066; }
+.play-sand .schtarget b { color: #c97a1c; }
+.play-sand { gap: 6px; }
+.play-sand .stage { flex: none; padding: 0; background: transparent; border: none; box-shadow: none; overflow: visible; }
+.play-sand .sin { gap: 0; }
+.play-sand .pad { flex: 1; min-height: 0; display: flex; }
+.play-sand .fseat { background: rgba(60,32,10,.8); }
+.play-sand .ffinal small { opacity: .75; font-size: .75rem; }
