@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.27';
+const APP_VERSION = '2026.11.28';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -521,8 +521,8 @@ const GAMES = [
   },
   {
     id: 'schulte', emoji: '🔢', name: '專注力方格', tag: '專注+競速', color: '#7c5cff', desc: '依序點 1、2、3…,比誰最快!',
-    rules: ['大家拿到同一張方格,裡面有 1 到最後一個數字,位置全部打亂', '倒數完一起開始,依序從 1 點到最後一個,越快越好', '點錯一次罰 0.5 秒,所以不要亂點!', '3 局越來越大:4×4、5×5、6×6,每局看你的速度還有等級(S 最厲害)', '每局第 1 名 5 分、第 2 名 3 分…,3 局總分最高的人贏'],
-    host: hSchulte, view: vSchulte, noCountdown: true,
+    rules: ['大家拿到同一張方格,裡面有 1 到最後一個數字,位置全部打亂', '倒數完一起開始,依序從 1 點到最後一個,越快越好', '點錯一次罰 0.5 秒,所以不要亂點!', '3 局,方格大小由房主在開始前選(3×3 到 7×7,三局可以一樣也可以不一樣),每局看你的速度還有等級(S 最厲害)', '每局第 1 名 5 分、第 2 名 3 分…,3 局總分最高的人贏,最後也會列出 3 局的總時間'],
+    host: hSchulte, view: vSchulte, opts: schOpts, noCountdown: true,
   },
 ];
 const GAME = Object.fromEntries(GAMES.map(g => [g.id, g]));
@@ -756,6 +756,7 @@ function introView(g) {
     </div>`;
   app.appendChild(d);
   introPlayers();
+  if (isHost && g.opts) g.opts(d);
   if (isHost) {
     $('.go', d).addEventListener('click', () => hostStartGame(g));
     $('.toback', d).addEventListener('click', hostToLobby);
@@ -982,7 +983,7 @@ function hostStartGame(g) {
   const T = makeTimers();
   NET.hostT = T;
   const players = NET.players.map(p => p.slot);
-  const H = { g, s: T, players, scores: {}, done: false };
+  const H = { g, s: T, players, scores: {}, done: false, opts: (NET.opts && NET.opts[g.id]) || null }; // opts:房主在介紹畫面選的選項(例如舒爾特方格的大小)
   players.forEach(s => { H.scores[s] = 0; });
   H.bs = {};
   H.bc = m => { hostBroadcast(m); botsHear(H, m); };
@@ -7079,7 +7080,34 @@ function vSeven(V) {
    大家拿到同一張方格比速度(2~4 人)。3 局越來越大:4×4、5×5、6×6;點錯一次罰 0.5 秒
    第 1 名 5 分、第 2 名 3 分、第 3 名 2 分、第 4 名 1 分
    ========================================================= */
-const SCH = { SIZES: [4, 5, 6], T: [60, 90, 120], PTS: [5, 3, 2, 1], PEN: 500, S: { 4: 14, 5: 24, 6: 38 } };
+const SCH = { SIZES: [5, 5, 5], PICK: [3, 4, 5, 6, 7], PTS: [5, 3, 2, 1], PEN: 500, S: { 3: 7, 4: 14, 5: 24, 6: 38, 7: 55 } };
+const schLimit = n => Math.round(40 + n * n * 2.4); // 每局的時間限制(秒):格子越多給越久
+const schSizes = () => { const a = store.get('schSizes', null); return Array.isArray(a) && a.length === 3 && a.every(x => SCH.PICK.includes(x)) ? a : SCH.SIZES.slice(); };
+/* 房主在介紹畫面選每一局的方格大小(可以三局一樣,也可以不一樣) */
+function schOpts(d) {
+  let sizes = schSizes();
+  NET.opts = NET.opts || {};
+  const save = () => { NET.opts.schulte = { sizes: sizes.slice() }; store.set('schSizes', sizes); };
+  save();
+  const box = el('div', 'schopt');
+  const draw = () => {
+    box.innerHTML = `<div class="schopt-t">🔢 方格大小(每局可以不一樣)</div>
+      ${sizes.map((n, r) => `<div class="schrow"><b>第 ${r + 1} 局</b><div class="seg">${SCH.PICK.map(x => `<button data-r="${r}" data-n="${x}" class="${x === n ? 'on' : ''}">${x}×${x}</button>`).join('')}</div></div>`).join('')}
+      <div class="schpre"><button data-p="same">三局一樣</button><button data-p="up">越來越大</button><button data-p="down">越來越小</button></div>
+      <small>${sizes.every(x => x === sizes[0]) ? `三局都是 ${sizes[0]}×${sizes[0]}(${sizes[0] * sizes[0]} 個數字)` : `${sizes.map(x => x + '×' + x).join(' → ')}`}</small>`;
+  };
+  draw();
+  box.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.p) { // 以第 1 局的大小為基準:一樣 / 每局 +1(最多 7)/ 每局 -1(最少 3)
+      const s0 = sizes[0], up = Math.min(5, s0), down = Math.max(5, s0);
+      sizes = b.dataset.p === 'same' ? [s0, s0, s0] : b.dataset.p === 'up' ? [up, up + 1, up + 2] : [down, down - 1, down - 2];
+    } else sizes[+b.dataset.r] = +b.dataset.n;
+    save(); draw(); SFX.tap();
+  });
+  $('.players', d).before(box);
+}
 const schRank = (ms, size) => { // 等級:S 是專注力很強(5×5 約 24 秒內),依方格大小換算
   const base = SCH.S[size] * 1000;
   return ms <= base ? ['S', '太神啦!'] : ms <= base * 1.4 ? ['A', '很棒!'] : ms <= base * 2 ? ['B', '不錯喔'] : ['C', '繼續加油'];
@@ -7087,22 +7115,23 @@ const schRank = (ms, size) => { // 等級:S 是專注力很強(5×5 約 24 秒�
 const schTime = ms => { const s = Math.floor(ms / 1000), c = Math.floor(ms % 1000 / 10); return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}.${String(c).padStart(2, '0')}`; };
 
 function hSchulte(H) {
+  const sizes = (H.opts && H.opts.sizes) || SCH.SIZES, R = sizes.length;
   let round = 0, phase = 'idle', size = 4, N = 16, tok = 0, t0 = 0;
-  const tot = {}, ps = {};
-  H.players.forEach(s => { tot[s] = 0; });
+  const tot = {}, ps = {}, sumMs = {};
+  H.players.forEach(s => { tot[s] = 0; sumMs[s] = 0; });
   function startRound() {
     round++;
-    size = SCH.SIZES[round - 1]; N = size * size;
+    size = sizes[round - 1]; N = size * size;
     const grid = shuffle(Array.from({ length: N }, (_, i) => i + 1));
     H.players.forEach(s => { ps[s] = { k: 0, miss: 0, done: 0, ms: 0 }; });
     phase = 'cd';
-    H.bc({ t: 'g', e: 'prep', rd: round, R: SCH.SIZES.length, n: size });
+    H.bc({ t: 'g', e: 'prep', rd: round, R, n: size });
     H.countdown(() => {
       phase = 'play';
       t0 = Date.now();
-      H.bc({ t: 'g', e: 'round', rd: round, R: SCH.SIZES.length, n: size, grid, T: SCH.T[round - 1], order: H.players });
+      H.bc({ t: 'g', e: 'round', rd: round, R, n: size, grid, T: schLimit(size), order: H.players });
       const my = ++tok;
-      H.s.after(SCH.T[round - 1] * 1000, () => { if (my === tok && phase === 'play') endRound(); });
+      H.s.after(schLimit(size) * 1000, () => { if (my === tok && phase === 'play') endRound(); });
     });
   }
   const finishers = () => H.players.filter(s => ps[s].done).sort((a, b) => ps[a].ms - ps[b].ms);
@@ -7110,10 +7139,11 @@ function hSchulte(H) {
     phase = 'rend'; tok++;
     const fin = finishers(), pts = {};
     fin.forEach((s, k) => { pts[s] = SCH.PTS[k] || 1; tot[s] += pts[s]; });
+    H.players.forEach(s => { sumMs[s] += ps[s].done ? ps[s].ms : schLimit(size) * 1000; }); // 沒點完的算時間用完
     H.players.forEach(s => { H.scores[s] = tot[s]; });
     H.bc({ t: 'score', scores: H.scores });
-    H.bc({ t: 'g', e: 'rend', rd: round, n: size, fin, pts, tot, ms: Object.fromEntries(fin.map(s => [s, ps[s].ms])), miss: Object.fromEntries(H.players.map(s => [s, ps[s].miss])), found: Object.fromEntries(H.players.map(s => [s, ps[s].k])), N, last: round >= SCH.SIZES.length });
-    H.s.after(4800, () => (round >= SCH.SIZES.length ? H.finish() : startRound()));
+    H.bc({ t: 'g', e: 'rend', rd: round, n: size, fin, pts, tot, ms: Object.fromEntries(fin.map(s => [s, ps[s].ms])), miss: Object.fromEntries(H.players.map(s => [s, ps[s].miss])), found: Object.fromEntries(H.players.map(s => [s, ps[s].k])), N, sumMs: { ...sumMs }, last: round >= R });
+    H.s.after(4800, () => (round >= R ? H.finish() : startRound()));
   }
   const allDone = () => H.active().every(s => ps[s] && ps[s].done);
   return {
@@ -7165,7 +7195,7 @@ function vSchulte(V) {
   }
   function build() {
     gridEl.style.gridTemplateColumns = `repeat(${size}, 1fr)`;
-    gridEl.innerHTML = grid.map(n => `<button class="sch" data-n="${n}" style="font-size:${size === 4 ? 2.1 : size === 5 ? 1.7 : 1.35}rem"><span>${n}</span></button>`).join('');
+    gridEl.innerHTML = grid.map(n => `<button class="sch" data-n="${n}" style="font-size:${{ 3: 2.7, 4: 2.1, 5: 1.7, 6: 1.35, 7: 1.1 }[size]}rem"><span>${n}</span></button>`).join('');
     tiles = $$('.sch', gridEl);
   }
   function upd() {
@@ -7232,7 +7262,7 @@ function vSchulte(V) {
         const k = m.fin.indexOf(s);
         return `<span>${k >= 0 ? ['🥇', '🥈', '🥉', '🎀'][k] : '💤'} ${pinfo(s).emoji} ${s === me ? '你' : esc(pinfo(s).name)} <small>${k >= 0 ? schTime(m.ms[s]) : `找到 ${m.found[s]}/${m.N}`}</small> <b>${k >= 0 ? `+${m.pts[s]}` : '+0'}</b><i>共 ${m.tot[s]} 分</i></span>`;
       }).join('');
-      cover.innerHTML = `<div class="small">第 ${m.rd} 局結果</div><div class="ffinal">${rows}</div><div class="small">${m.last ? '比賽結束!' : '下一局方格更大…'}</div>`;
+      cover.innerHTML = `<div class="small">第 ${m.rd} 局結果</div><div class="ffinal">${rows}</div><div class="small">${m.last ? `比賽結束!總時間:${Object.keys(m.sumMs).map(Number).sort((a, b) => m.sumMs[a] - m.sumMs[b]).map(s => `${s === me ? '你' : esc(pinfo(s).name)} ${schTime(m.sumMs[s])}`).join(' · ')}` : '下一局馬上開始…'}</div>`;
       cover.classList.add('on');
     }
   };

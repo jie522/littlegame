@@ -2067,3 +2067,15 @@ button:disabled { cursor: not-allowed; }
 .play-schulte .sin { gap: 0; }
 .play-schulte .pad { flex: 1; min-height: 0; display: flex; }
 .play-schulte .fseat { background: rgba(20,16,40,.82); }
+
+/* 專注力方格:房主選方格大小 */
+.schopt { width: 100%; display: flex; flex-direction: column; gap: 6px; padding: 10px 10px 8px; border-radius: 16px; background: rgba(124,92,255,.12); border: 3px solid var(--ink); }
+.schopt-t { font-weight: 900; font-size: .95rem; text-align: center; }
+.schrow { display: flex; align-items: center; gap: 6px; }
+.schrow b { flex: none; width: 3.4em; font-size: .82rem; }
+.schrow .seg { flex: 1; display: flex; gap: 3px; }
+.schrow .seg button { flex: 1; padding: 6px 0; border-radius: 10px; background: #fff; border: 2px solid var(--ink); box-shadow: 0 2px 0 var(--ink); font: 900 .78rem "Fredoka", var(--font); color: var(--ink); }
+.schrow .seg button.on { background: linear-gradient(#a994ff, #7c5cff); color: #fff; text-shadow: var(--ol-sm); }
+.schpre { display: flex; gap: 6px; justify-content: center; }
+.schpre button { padding: 4px 10px; border-radius: 999px; background: #ffe066; border: 2px solid var(--ink); font-weight: 900; font-size: .75rem; color: var(--ink); }
+.schopt small { text-align: center; font-weight: 800; opacity: .75; }
