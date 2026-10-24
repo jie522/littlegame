@@ -69,7 +69,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.38';
+const APP_VERSION = '2026.11.39';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -2536,7 +2536,8 @@ function hMorris(H) {
 function vMorris(V) {
   let st = null, sel = null, targets = [], over = false, lastTurn = null, coverT = null;
   const me = V.me;
-  const colorOf = s => NMM_COLORS[st && st.colors && st.colors[s] != null ? st.colors[s] : 0].c;
+  const colIdx = s => (st && st.colors && st.colors[s] != null ? st.colors[s] : 0);
+  const colorOf = s => NMM_COLORS[colIdx(s)].c;
   const chipsEl = $('.chips', V.root);
   chipsEl.className = 'cstatus'; // 上方只留一條狀態列
   chipsEl.innerHTML = '<span class="cs">對局準備中…</span>';
@@ -2587,7 +2588,7 @@ function vMorris(V) {
     const card = s => {
       const p = pinfo(s), h = st.hand[s];
       const tray = h
-        ? Array.from({ length: h }, () => `<i class="hd" style="--pc:${colorOf(s)}"></i>`).join('') + `<span class="hn">手上 ${h}</span>`
+        ? Array.from({ length: h }, () => `<i class="hd" style="--pc:${colorOf(s)};--ci:${colIdx(s)}"></i>`).join('') + `<span class="hn">手上 ${h}</span>`
         : `<span class="gnone">${st.cnt[s] === 3 ? '只剩 3 顆:可以飛!' : '棋子都上場了'}</span>`;
       return `<div class="pcard${st.turn === s && !over ? ' now' : ''}" style="--c:${p.color}">
         <div class="pav">${p.full}</div>
@@ -2630,7 +2631,7 @@ function vMorris(V) {
       if (x == null) { p.innerHTML = ''; return; }
       const cls = 'mp' + (sel === i ? ' sel' : '') + (removable.includes(i) ? ' rmable' : '')
         + (nmmInMill(b, i) ? ' inmill' : '') + (movable.has(i) ? ' can' : '') + (isNew && L.to === i ? ' fresh' : '');
-      p.innerHTML = `<div class="${cls}" style="--pc:${colorOf(x)}"></div>`;
+      p.innerHTML = `<div class="${cls}" style="--pc:${colorOf(x)};--ci:${colIdx(x)}"></div>`;
     });
     // 已經成三的線:金色發光
     const P2 = i => NMM_XY[i].map(P);
