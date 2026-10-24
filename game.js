@@ -68,7 +68,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.31';
+const APP_VERSION = '2026.11.32';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -7122,11 +7122,16 @@ function vSeven(V) {
   }
   function renderBoard() {
     T.seats(st.order, me, st.counts, st.done ? null : st.turn, s => (st.cov[s] ? `<span class="cdpassed">蓋 ${st.cov[s]}</span>` : ''));
-    T.mid.innerHTML = `<div class="svboard">${[0, 1, 2, 3].map(su => {
+    const oldBd = $('.svboard', T.mid), oldSl = oldBd ? oldBd.scrollLeft : null;
+    T.mid.innerHTML = `<div class="svboard"><div class="svin">${[0, 1, 2, 3].map(su => {
       const b = st.board[su];
       return `<div class="svrow">${Array.from({ length: 13 }, (_, i) => { const r = i + 1, c = su * 13 + i, on = b && r >= b.lo && r <= b.hi, isNew = st.last && st.last.type === 'play' && st.last.c === c;
         return `<span class="svslot${r === 7 ? ' seven' : ''}${isNew ? ' new' : ''}">${on ? cdMini(c) : `<i class="${su === 1 || su === 2 ? 'red' : ''}">${r === 7 ? HEART_SUIT[su] : ''}</i>`}</span>`; }).join('')}</div>`;
-    }).join('')}</div>${st.last ? `<div class="cdwho">${pinfo(st.last.s).emoji} ${st.last.s === me ? '你' : esc(pinfo(st.last.s).name)} ${st.last.type === 'play' ? `出了 <b>${cdLabel(st.last.c)}</b>` : '<b>蓋了一張牌</b> 🙈'}</div>` : ''}`;
+    }).join('')}</div></div>${st.last ? `<div class="cdwho">${pinfo(st.last.s).emoji} ${st.last.s === me ? '你' : esc(pinfo(st.last.s).name)} ${st.last.type === 'play' ? `出了 <b>${cdLabel(st.last.c)}</b>` : '<b>蓋了一張牌</b> 🙈'}</div>` : ''}`;
+    // 牌放大後排不下 13 欄,可以左右滑:一開始對準中間的 7,有人出牌就捲到那張牌
+    const bd = $('.svboard', T.mid), sv = $$('.svslot', bd)[6], nw = $('.svslot.new', bd);
+    bd.scrollLeft = oldSl ? oldSl : sv.offsetLeft - (bd.clientWidth - sv.offsetWidth) / 2;
+    if (nw) { const l = nw.offsetLeft, w = nw.offsetWidth; if (l < bd.scrollLeft + 6 || l + w > bd.scrollLeft + bd.clientWidth - 6) bd.scrollLeft = l - (bd.clientWidth - w) / 2; }
   }
   T.hand.addEventListener('pointerdown', e => {
     const k = e.target.closest('.ck');
