@@ -54,21 +54,22 @@ const CHAR_IMGS = CHARS.map(c => ({ full: loadImg('assets/chars/' + c.id + '.png
 /* 走路圖(下樓梯用):每個角色有向左跑、向右跑各一張 */
 const WALK_IMGS = CHARS.map(c => ({ l: loadImg('assets/chars/walk_' + c.id + '_l.png'), r: loadImg('assets/chars/walk_' + c.id + '_r.png') }));
 const charHTML = c => '<img class="pe" src="assets/chars/head_' + c.id + '.png" alt="">';
+const charFull = c => '<img class="pf" src="assets/chars/' + c.id + '.png" alt="">'; // 完整的角色插畫(座位、玩家卡片用,圓框裡會切到上半身)
 /* PLAYERS[座位]:目前這個座位的玩家用的角色;emoji 欄位是文字裡用的小頭像(圖片),畫布遊戲用 CHAR_IMG */
-const PLAYERS = [0, 1, 2, 3].map(i => ({ slot: i, ch: i, ...CHARS[i], file: CHARS[i].id, emoji: charHTML(CHARS[i]) }));
+const PLAYERS = [0, 1, 2, 3].map(i => ({ slot: i, ch: i, ...CHARS[i], file: CHARS[i].id, emoji: charHTML(CHARS[i]), full: charFull(CHARS[i]) }));
 const CHAR_IMG = [0, 1, 2, 3].map(i => CHAR_IMGS[i]);
 const dispName = p => { const c = CHARS[p.ch != null ? p.ch : p.slot]; return p.bot ? '🤖' + c.name : (p.name || c.name); };
 function applyChars() {
   for (let s = 0; s < 4; s++) {
     const p = NET.players.find(x => x.slot === s);
     const ci = p && p.ch != null ? p.ch : s, c = CHARS[ci];
-    PLAYERS[s] = { slot: s, ch: ci, ...c, file: c.id, emoji: charHTML(c), name: p ? dispName(p) : c.name };
+    PLAYERS[s] = { slot: s, ch: ci, ...c, file: c.id, emoji: charHTML(c), full: charFull(c), name: p ? dispName(p) : c.name };
     CHAR_IMG[s] = CHAR_IMGS[ci];
   }
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.35';
+const APP_VERSION = '2026.11.38';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -524,11 +525,6 @@ const GAMES = [
     rules: ['大家拿到同一張方格,裡面有 1 到最後一個數字,位置全部打亂', '倒數完一起開始,依序從 1 點到最後一個,越快越好', '點錯一次罰 0.5 秒,所以不要亂點!', '3 局,方格大小由房主在開始前選(3×3 到 7×7,三局可以一樣也可以不一樣),每局看你的速度還有等級(S 最厲害)', '每局第 1 名 5 分、第 2 名 3 分…,3 局總分最高的人贏,最後也會列出 3 局的總時間'],
     host: hSchulte, view: vSchulte, opts: schOpts, noCountdown: true,
   },
-  {
-    id: 'sand', emoji: '⏳', name: '沙漏倒倒樂', tag: '益智+競速', color: '#e0a04a', desc: '把彩色沙子倒進同色的杯子!',
-    rules: ['大家拿到同一關:一行一行的彩色沙塊疊在玻璃漏斗上', '點一行(只會倒最下面那塊),沙子流過漏斗:有同色、還沒裝滿的杯子就倒進杯子', '沒有同色杯子的沙會先進「暫存瓶」(5 個);5 個都滿了還要再倒 → 沙子滿出來,這關重來(罰 3 秒)', '杯子裝滿 3 塊就蓋上蓋子送走,下一杯補上來,暫存瓶裡同色的沙會自己倒進去', '3 關越來越難(顏色變多,後面的沙塊會蓋住變成「?」),每關第 1 名 5 分、第 2 名 3 分…,總分最高的人贏'],
-    host: hSand, view: vSand, noCountdown: true,
-  },
 ];
 const GAME = Object.fromEntries(GAMES.map(g => [g.id, g]));
 
@@ -636,7 +632,7 @@ function playerChipsHTML(withStars) {
     const P = PLAYERS[p.slot];
     const tags = (p.bot ? '<span class="ptag">電腦</span>' : '') + (p.slot === 0 ? '<span class="ptag">房主</span>' : '') + (p.slot === NET.mySlot ? '<span class="ptag me">我</span>' : '');
     return `<div class="pchip${p.online ? '' : ' off'}" style="--c:${P.color};--soft:${P.soft}">
-      <span class="pemo">${P.emoji}</span><span class="pname">${esc(PLAYERS[p.slot].name)}</span>${tags}
+      <span class="pemo pface">${P.full}</span><span class="pname">${esc(PLAYERS[p.slot].name)}</span>${tags}
       ${withStars ? `<span class="pstar">⭐ ${NET.stars[p.slot] || 0}</span>` : ''}</div>`;
   }).join('');
 }
@@ -654,24 +650,24 @@ function seatHTML(slot) {
   return `<div class="seat${p.online ? '' : ' off'}${slot === NET.mySlot ? ' mine' : ''}" style="--c:${P.color};--soft:${P.soft}">
     ${slot === NET.mySlot ? '<i class="swap">✎</i>' : ''}
     ${isHost && p.bot ? `<button class="kick" data-slot="${slot}" aria-label="移除電腦">✕</button>` : ''}
-    <div class="ava-big">${P.emoji}</div><b class="sname">${esc(PLAYERS[slot].name)}</b>
+    <div class="sart">${P.full}</div><b class="sname">${esc(PLAYERS[slot].name)}</b>
     <div class="stags">${tags}</div><div class="sstar">⭐ ${NET.stars[slot] || 0}</div></div>`;
 }
 
 /* ---------- 遊戲分類(房主選遊戲:先選分類,再選遊戲) ---------- */
 const CATS = [
-  { id: 'reaction', emoji: '⚡', name: '反應', color: '#ffbf1f', desc: '比誰手最快' },
-  { id: 'puzzle', emoji: '🧠', name: '益智', color: '#3fbf78', desc: '動動腦' },
-  { id: 'board', emoji: '♟️', name: '棋類', color: '#a0703f', desc: '輪流下棋' },
-  { id: 'card', emoji: '🃏', name: '撲克牌', color: '#d63a4a', desc: '牌桌上見' },
-  { id: 'action', emoji: '🏁', name: '動作競速', color: '#ff7a1a', desc: '即時對決' },
-  { id: 'all', emoji: '🎲', name: '全部遊戲', color: '#7c5cff', desc: '一次看完' },
+  { id: 'reaction', emoji: '⚡', name: '反應', color: '#f2b52a', desc: '比誰手最快', bg: '#fff0c2', bd: '#f5c24a', tc: '#7a5200', sc: '#6b4a00', art: '--bs:354.61%;--bx:5.29%;--by:5.26%' },
+  { id: 'puzzle', emoji: '🧠', name: '益智', color: '#3fbf78', desc: '動動腦', bg: '#daf6e3', bd: '#59c98a', tc: '#fff', sc: '#1f7a4a', art: '--bs:354.61%;--bx:50.42%;--by:5.26%' },
+  { id: 'board', emoji: '♟️', name: '棋類', color: '#3a7bd5', desc: '輪流下棋', bg: '#d9e8ff', bd: '#5b9be8', tc: '#fff', sc: '#1f4f93', art: '--bs:354.61%;--bx:95.68%;--by:5.26%' },
+  { id: 'card', emoji: '🃏', name: '撲克牌', color: '#d94f78', desc: '牌桌上見', bg: '#ffdbe6', bd: '#ef7c9c', tc: '#fff', sc: '#a02a50', art: '--bs:354.61%;--bx:5.29%;--by:74.74%' },
+  { id: 'action', emoji: '🏁', name: '動作競速', color: '#ff8a1f', desc: '即時對決', bg: '#ffe2c2', bd: '#ffa24d', tc: '#fff', sc: '#a85400', art: '--bs:354.61%;--bx:50.42%;--by:74.74%' },
+  { id: 'all', emoji: '🎲', name: '全部遊戲', color: '#7c5cff', desc: '一次看完', bg: '#e4dbff', bd: '#9b84ff', tc: '#fff', sc: '#4d34b8', art: '--bs:354.61%;--bx:95.68%;--by:74.74%' },
 ];
 const GAME_CATS = { // 一個遊戲可以在好幾個分類裡
   reaction: ['reaction'], color: ['reaction'], heart: ['reaction', 'card'], shaft: ['reaction', 'action'], schulte: ['reaction', 'puzzle'],
   math: ['puzzle'], memory: ['puzzle'], flood: ['puzzle'],
   chess: ['board'], morris: ['board'], checkers: ['board'],
-  big2: ['card'], seven: ['card'], sand: ['puzzle'],
+  big2: ['card'], seven: ['card'],
   bomb: ['action'], parking: ['action'],
 };
 const inCat = (g, c) => c === 'all' || (GAME_CATS[g.id] || []).includes(c);
@@ -728,8 +724,8 @@ function lobbyView() {
           <span class="gico">${g.emoji}</span><b>${g.name}</b><span class="tag">${g.tag}</span>${recChip(g)}
         </button>`).join('')}
       </section>` : `<section class="cats">${CATS.map(c => `
-        <button class="ccard" data-c="${c.id}" style="--g:${c.color}" ${enough ? '' : 'disabled'}>
-          <span class="cico">${c.emoji}</span><b>${c.name}</b><small>${GAMES.filter(g => inCat(g, c.id)).length} 款 · ${c.desc}</small>
+        <button class="ccard" data-c="${c.id}" style="--g:${c.color};--bg:${c.bg};--bd:${c.bd};--tc:${c.tc};--sc:${c.sc};${c.art}" ${enough ? '' : 'disabled'}>
+          <span class="cart"></span><b class="cname">${c.name}</b><small class="csub">${GAMES.filter(g => inCat(g, c.id)).length} 款・${c.desc}</small>
         </button>`).join('')}
       </section>`}` : `
       <section class="panel waiting"><div class="spin">🎲</div><p>等房主選遊戲…</p></section>`}
@@ -1923,7 +1919,7 @@ function vChess(V) {
       const ks = oc ? [...st.dead[oc]].sort((x, y) => CHESS_RANK[y] - CHESS_RANK[x]) : []; // 這位玩家吃掉的對方棋子
       const now = st.turn === s && !over;
       return `<div class="pcard${now ? ' now' : ' idle'}" style="--c:${p.color}">${now ? `<em class="pturn">${s === V.me ? '輪到你!' : '思考中…'}</em>` : ''}
-        <div class="pav">${p.emoji}${c ? `<i class="pdot ${c}"></i>` : ''}</div>
+        <div class="pav">${p.full}${c ? `<i class="pdot ${c}"></i>` : ''}</div>
         <div class="pinfo"><b>${who(s)}</b><span class="pcnt">${c ? (c === 'r' ? '紅方' : '黑方') + ' · 剩 ' + st.left[c] : '尚未定色'}</span></div>
         <div class="ptro">${ks.length ? ks.map(k => `<i class="gp ${oc}">${CHESS_NAME[oc][k]}</i>`).join('') : '<span class="gnone">吃子紀錄</span>'}</div>
       </div>`;
@@ -2594,7 +2590,7 @@ function vMorris(V) {
         ? Array.from({ length: h }, () => `<i class="hd" style="--pc:${colorOf(s)}"></i>`).join('') + `<span class="hn">手上 ${h}</span>`
         : `<span class="gnone">${st.cnt[s] === 3 ? '只剩 3 顆:可以飛!' : '棋子都上場了'}</span>`;
       return `<div class="pcard${st.turn === s && !over ? ' now' : ''}" style="--c:${p.color}">
-        <div class="pav">${p.emoji}</div>
+        <div class="pav">${p.full}</div>
         <div class="pinfo"><b>${who(s)}</b><span class="pcnt">場上 ${st.cnt[s]} · 被吃 ${st.lost[s]}</span></div>
         ${s === me && !over ? `<button class="cpick" style="--pc:${colorOf(s)}" aria-label="換棋子顏色"><i></i>換色</button>` : `<i class="cdot" style="--pc:${colorOf(s)}"></i>`}
         <div class="ptro mhand">${tray}</div>
@@ -2924,7 +2920,7 @@ function vHeart(V) {
     $('.hseats', V.root).innerHTML = st.order.map(s => {
       const p = pinfo(s), n = st.hands[s];
       return `<div class="hseat${st.turn === s && (st.phase === 'play') ? ' now' : ''}${p.online ? '' : ' off'}${s === me ? ' me' : ''}" data-s="${s}" style="--pc:${p.color}">
-        <span class="hav">${p.emoji}</span><b>${who(s)}</b>
+        <span class="hav">${p.full}</span><b>${who(s)}</b>
         <span class="hcnt"><i></i><i></i><i></i><em>${(st.safe || []).includes(s) ? '✅' : n}</em></span></div>`;
     }).join('');
   }
@@ -7377,445 +7373,6 @@ function vSchulte(V) {
 }
 
 /* =========================================================
-   沙漏倒倒樂 ⏳(顏色沙子解謎,2~4 人比速度)
-   一行一行的「沙塊」疊在玻璃漏斗上,只能點每一行最下面那塊(貼著漏斗的);
-   沙子流過漏斗:有同色、還沒裝滿的杯子就流進杯子,沒有就流進暫存小瓶(5 個)。
-   杯子裝滿 3 塊就蓋上軟木塞送走,下一個杯子補上來,暫存瓶裡同色的沙會自己倒進新杯子。
-   暫存瓶全滿還要再放 → 沙子滿出來,這關重來(罰 3 秒)。
-   關卡產生:先決定一條「照這個順序點一定過得了」的順序,再把沙塊照順序疊進各行,所以每關都有解
-   素材(背景、漏斗、玻璃罐、軟木塞)是 tools/sand_scene.py 用 Blender 算出來的
-   ========================================================= */
-const SAND_COLS = ['#e8383d', '#ff9f1c', '#ffd23f', '#3fbf78', '#3f8cff', '#9b6bff', '#ffa3dc', '#2ed3c6']; // 紅橘黃綠藍紫粉青,粉紅調淡一點才不會跟紅色搞混
-const SAND = { CAP: 3, BUF: 5, ACT: 2, R: 3, T: [90, 120, 150], PTS: [5, 3, 2, 1], PEN: 3000 };
-const sandRng = seed => () => { // mulberry32:同一個種子大家拿到同一關
-  seed = (seed + 0x6D2B79F5) | 0;
-  let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-};
-function sandNew(L) {
-  return { cols: L.cols.map(c => c.slice()), q: L.Q.slice(SAND.ACT), cups: L.Q.slice(0, SAND.ACT).map(c => ({ c, n: 0 })), buf: Array(SAND.BUF).fill(null), done: 0, total: L.total, over: null };
-}
-/* 點第 k 行最下面的沙塊;改 S,回傳要播的動畫事件(不能點就回傳 null) */
-function sandTap(S, k) {
-  if (S.over || !S.cols[k] || !S.cols[k].length) return null;
-  const c = S.cols[k].shift(), ev = [];
-  S.done++;
-  const i = S.cups.findIndex(u => u && u.c === c && u.n < SAND.CAP);
-  if (i >= 0) { S.cups[i].n++; ev.push({ k: 'pour', col: k, c, to: 'cup', i }); }
-  else {
-    const j = S.buf.indexOf(null);
-    if (j < 0) { S.over = 'fail'; ev.push({ k: 'pour', col: k, c, to: 'spill' }, { k: 'fail' }); return ev; }
-    S.buf[j] = c;
-    ev.push({ k: 'pour', col: k, c, to: 'buf', i: j });
-  }
-  for (let again = true; again;) { // 杯子滿了就送走、補新杯子、把暫存的同色沙倒進去(可能連續好幾個)
-    again = false;
-    for (let i2 = 0; i2 < S.cups.length; i2++) {
-      const u = S.cups[i2];
-      if (!u || u.n < SAND.CAP) continue;
-      const nx = S.q.length ? { c: S.q.shift(), n: 0 } : null;
-      S.cups[i2] = nx;
-      ev.push({ k: 'ship', i: i2, nx: nx ? nx.c : null });
-      if (nx) S.buf.forEach((b, j) => { if (b === nx.c && nx.n < SAND.CAP) { S.buf[j] = null; nx.n++; ev.push({ k: 'pull', j, i: i2, c: b }); } });
-      again = true;
-    }
-  }
-  if (S.cups.every(u => !u)) { S.over = 'win'; ev.push({ k: 'win' }); }
-  else if (S.cols.every(col => !col.length)) { S.over = 'fail'; ev.push({ k: 'fail' }); }
-  return ev;
-}
-/* 產生第 lv 關(種子一樣就一樣) */
-function sandLevel(lv, seed) {
-  const R = sandRng(seed), ri = n => Math.floor(R() * n);
-  const shuf = a => { for (let i = a.length - 1; i > 0; i--) { const j = ri(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; };
-  const nc = Math.min(7, 2 + lv), ncol = Math.min(6, 3 + lv), win = 1 + Math.min(lv, 4), hide = lv >= 3 ? 2 : lv === 2 ? 4 : 99;
-  const pal = shuf(SAND_COLS.map((_, i) => i)).slice(0, nc);
-  let best = null;
-  for (let tries = 0; tries < 300; tries++) {
-    const Q = shuf(pal.flatMap(c => [c, c]));
-    const S = Q.flatMap(c => [c, c, c]);
-    for (let n = 0; n < S.length * 3; n++) { const a = ri(S.length), b = Math.min(S.length - 1, a + 1 + ri(win)); [S[a], S[b]] = [S[b], S[a]]; }
-    // 照 S 的順序點一遍,看暫存瓶最多用到幾個
-    const t = sandNew({ cols: [S], Q, total: S.length });
-    let mb = 0, ok = true;
-    while (t.cols[0].length) { if (!sandTap(t, 0)) { ok = false; break; } if (t.over === 'fail') { ok = false; break; } mb = Math.max(mb, t.buf.filter(x => x != null).length); }
-    if (!ok || t.over !== 'win' || mb > SAND.BUF - 1) continue;
-    const L = { Q, S, mb };
-    if (!best || Math.abs(mb - Math.min(3, lv + 1)) < Math.abs(best.mb - Math.min(3, lv + 1))) best = L;
-    if (mb >= Math.min(3, lv + 1)) break;
-  }
-  if (!best) { const Q = shuf(pal.flatMap(c => [c, c])); best = { Q, S: Q.flatMap(c => [c, c, c]), mb: 0 }; }
-  const cols = Array.from({ length: ncol }, () => []), maxH = Math.ceil(best.S.length / ncol) + 1;
-  best.S.forEach(c => { // 照順序疊進各行:前面的在下面,所以照 S 的順序點,每次都是某一行的最下面
-    const ok = cols.map((col, k) => k).filter(k => cols[k].length < maxH);
-    cols[ok[ri(ok.length)]].push(c);
-  });
-  return { lv, Q: best.Q, cols: cols.filter(c => c.length), hide, total: best.S.length };
-}
-
-function hSand(H) {
-  let round = 0, phase = 'idle', tok = 0, t0 = 0;
-  const tot = {}, ps = {}, sumMs = {};
-  H.players.forEach(s => { tot[s] = 0; sumMs[s] = 0; });
-  const T = () => SAND.T[Math.min(round, SAND.T.length) - 1];
-  function startRound() {
-    round++;
-    const seed = Math.floor(Math.random() * 1e9);
-    H.players.forEach(s => { ps[s] = { pct: 0, done: 0, ms: 0, fails: 0 }; });
-    phase = 'cd';
-    H.bc({ t: 'g', e: 'prep', rd: round, R: SAND.R, lv: round });
-    H.countdown(() => {
-      phase = 'play';
-      t0 = Date.now();
-      H.bc({ t: 'g', e: 'round', rd: round, R: SAND.R, lv: round, seed, T: T(), order: H.players });
-      const my = ++tok;
-      H.s.after(T() * 1000, () => { if (my === tok && phase === 'play') endRound(); });
-    });
-  }
-  const finishers = () => H.players.filter(s => ps[s].done).sort((a, b) => ps[a].ms - ps[b].ms);
-  function endRound() {
-    phase = 'rend'; tok++;
-    const fin = finishers(), pts = {};
-    fin.forEach((s, k) => { pts[s] = SAND.PTS[k] || 1; tot[s] += pts[s]; });
-    H.players.forEach(s => { sumMs[s] += ps[s].done ? ps[s].ms : T() * 1000; H.scores[s] = tot[s]; });
-    H.bc({ t: 'score', scores: H.scores });
-    H.bc({ t: 'g', e: 'rend', rd: round, fin, pts, tot, ms: Object.fromEntries(fin.map(s => [s, ps[s].ms])), pct: Object.fromEntries(H.players.map(s => [s, ps[s].pct])), fails: Object.fromEntries(H.players.map(s => [s, ps[s].fails])), sumMs: { ...sumMs }, last: round >= SAND.R });
-    H.s.after(5000, () => (round >= SAND.R ? H.finish() : startRound()));
-  }
-  const allDone = () => H.active().every(s => ps[s] && ps[s].done);
-  return {
-    start() { startRound(); },
-    input(slot, m) {
-      const p = ps[slot];
-      if (phase !== 'play' || !p || p.done || m.e !== 'p') return;
-      if (m.fail) p.fails = Math.min(99, p.fails + 1);
-      p.pct = Math.max(0, Math.min(1, +m.pct || 0));
-      if (m.done) { p.done = Date.now(); p.pct = 1; p.ms = Math.max(1000, p.done - t0) + p.fails * SAND.PEN; }
-      H.bc({ t: 'g', e: 'p', s: slot, pct: p.pct, fails: p.fails, done: p.done ? finishers().indexOf(slot) + 1 : 0, ms: p.ms });
-      if (allDone()) H.s.after(900, () => { if (phase === 'play') endRound(); });
-    },
-    presence() { if (phase === 'play' && allDone()) endRound(); },
-  };
-}
-
-/* 沙子的顆粒感:每種顏色先畫一張有亮暗小點的小圖,拿來當填色的花紋 */
-const SAND_PAT = {};
-function sandPattern(ctx, color) {
-  if (SAND_PAT[color]) return SAND_PAT[color];
-  const c = document.createElement('canvas');
-  c.width = c.height = 48;
-  const g = c.getContext('2d');
-  g.fillStyle = color;
-  g.fillRect(0, 0, 48, 48);
-  for (let i = 0; i < 700; i++) {
-    const l = Math.random() < 0.5;
-    g.fillStyle = l ? `rgba(255,255,255,${0.12 + Math.random() * 0.25})` : `rgba(60,30,0,${0.08 + Math.random() * 0.18})`;
-    g.fillRect(Math.random() * 48, Math.random() * 48, 1 + Math.random() * 1.4, 1 + Math.random() * 1.4);
-  }
-  return (SAND_PAT[color] = ctx.createPattern(c, 'repeat'));
-}
-const SAND_IMG = {};
-const sandImg = n => SAND_IMG[n] || (SAND_IMG[n] = Object.assign(new Image(), { src: `assets/sand_${n}.png` }));
-
-function vSand(V) {
-  const me = V.me;
-  let L = null, S = null, D = null, live = false, t0 = 0, endAt = 0, timerT = null, others = {}, order = [], fails = 0, lv = 1, seed = 0;
-  let evq = [], cur = null, grains = [], lay = null, colOff = [], shake = 0;
-  V.stage('<div class="schseats"></div>');
-  V.pad.innerHTML = `
-    <div class="sdwrap">
-      <div class="schhead"><span class="schtarget">第 <b>1</b> 關</span><span class="sdleft">剩 <b>0</b> 塊</span><span class="schtime">00:00.00</span></div>
-      <div class="sdbox"><canvas class="sdcv"></canvas><div class="cover"></div></div>
-    </div>`;
-  const box = $('.sdbox', V.pad), cv = $('.sdcv', V.pad), ctx = cv.getContext('2d'), cover = $('.cover', box);
-  const lvEl = $('.schtarget b', V.pad), leftEl = $('.sdleft b', V.pad), timeEl = $('.schtime', V.pad), seatsEl = $('.schseats', V.root);
-  ['funnel', 'jar', 'lid'].forEach(sandImg);
-  const who = s => (s === me ? '你' : esc(pinfo(s).name));
-
-  function renderSeats() {
-    seatsEl.innerHTML = order.map(s => {
-      const p = pinfo(s), o = others[s] || { pct: 0 };
-      const tag = o.done ? `<em class="fwin">${['🥇', '🥈', '🥉', '🎀'][o.done - 1]}</em>` : '';
-      return `<div class="fseat${s === me ? ' me' : ''}${p.online ? '' : ' off'}" data-s="${s}" style="--pc:${p.color}">
-        <span class="fnm">${p.emoji}<b>${who(s)}</b></span>${tag}
-        <span class="fpg"><i style="width:${Math.round((o.pct || 0) * 100)}%"></i></span><small>${o.done ? schTime(o.ms) : Math.round((o.pct || 0) * 100) + '%'}${o.fails ? ` · 💥${o.fails}` : ''}</small></div>`;
-    }).join('');
-  }
-
-  /* ---------- 版面:上面沙塊、中間漏斗、下面暫存瓶和杯子 ---------- */
-  function layout() {
-    const dpr = Math.min(2, window.devicePixelRatio || 1), W = box.clientWidth, Hh = box.clientHeight;
-    if (!W || !Hh || !L) return;
-    cv.width = Math.round(W * dpr); cv.height = Math.round(Hh * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const ncol = L.cols.length, rows = Math.max(...L.cols.map(c => c.length)), gap = 5;
-    const cupH = Math.min(124, Hh * 0.22), cupW = cupH * 264 / 320, bufH = Math.min(62, cupH * 0.52), bufW = bufH * 264 / 320;
-    const cellW = Math.min(64, (W - 20 - (ncol - 1) * gap) / ncol);
-    const funW = Math.min(W - 8, ncol * (cellW + gap) + 46), funH = funW * 0.34;
-    const gridAvail = Hh - funH * 0.86 - bufH - cupH - 46;
-    const cellH = Math.max(14, Math.min(cellW * 0.62, (gridAvail - (rows - 1) * gap) / rows));
-    const gx = (W - (ncol * cellW + (ncol - 1) * gap)) / 2, gBot = 6 + rows * cellH + (rows - 1) * gap;
-    const fy = gBot - funH * 0.1, neck = { x: W / 2, y: fy + funH * 0.86 };
-    const by = neck.y + 10, bx = (W - (SAND.BUF * bufW + (SAND.BUF - 1) * 8)) / 2;
-    const cy = by + bufH + 14;
-    lay = { W, Hh, ncol, rows, gap, cellW, cellH, gx, gBot, fy, funW, funH, neck, by, bx, bufW, bufH, cy, cupW, cupH,
-      cupX: i => W * (i === 0 ? 0.32 : 0.68) - cupW / 2, bufX: j => bx + j * (bufW + 8) };
-  }
-  const colX = k => lay.gx + k * (lay.cellW + lay.gap);
-  const blockY = (k, i) => lay.gBot - (i + 1) * lay.cellH - i * lay.gap - (colOff[k] || 0);
-  const inner = (x, y, w, h) => ({ x: x + w * 0.14, y: y + h * 0.1, w: w * 0.72, h: h * 0.82 });
-  const cupRect = i => { const u = D.cups[i]; return { x: lay.cupX(i) + (u ? u.off : 0) * lay.W, y: lay.cy - (u ? u.bob : 0), w: lay.cupW, h: lay.cupH }; };
-  const bufRect = j => ({ x: lay.bufX(j), y: lay.by, w: lay.bufW, h: lay.bufH });
-
-  function rr(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
-  function drawFill(rc, v, cap, color) { // 容器裡的沙:高度照份量,上面一點點圓弧
-    if (v <= 0.001 || !color) return;
-    const a = inner(rc.x, rc.y, rc.w, rc.h), h = a.h * Math.min(1, v / cap), top = a.y + a.h - h;
-    ctx.save();
-    rr(a.x, a.y, a.w, a.h, a.w * 0.12); ctx.clip();
-    ctx.fillStyle = sandPattern(ctx, color);
-    ctx.beginPath();
-    ctx.moveTo(a.x, top + 3);
-    ctx.quadraticCurveTo(a.x + a.w / 2, top - Math.min(6, h * 0.3), a.x + a.w, top + 3);
-    ctx.lineTo(a.x + a.w, a.y + a.h); ctx.lineTo(a.x, a.y + a.h); ctx.closePath();
-    ctx.fill();
-    // 一層一層的分界(每塊沙一層)
-    ctx.strokeStyle = 'rgba(0,0,0,.12)'; ctx.lineWidth = 1;
-    for (let k = 1; k < Math.floor(v + 0.001) && k < cap; k++) { const yy = a.y + a.h - a.h * k / cap; ctx.beginPath(); ctx.moveTo(a.x, yy); ctx.lineTo(a.x + a.w, yy); ctx.stroke(); }
-    ctx.restore();
-  }
-  function drawJar(rc, color, v, cap, lid) {
-    if (color != null) { // 杯子的顏色:玻璃後面淡淡的底色 + 上方一顆顏色標籤
-      const a = inner(rc.x, rc.y, rc.w, rc.h);
-      ctx.fillStyle = SAND_COLS[color] + '44';
-      rr(a.x, a.y, a.w, a.h, a.w * 0.12); ctx.fill();
-    }
-    drawFill(rc, v, cap, color != null ? SAND_COLS[color] : null);
-    const img = sandImg('jar');
-    if (img.complete && img.naturalWidth) ctx.drawImage(img, rc.x, rc.y, rc.w, rc.h);
-    else { ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 2; rr(rc.x + 2, rc.y + 2, rc.w - 4, rc.h - 4, 8); ctx.stroke(); }
-    if (lid > 0) {
-      const li = sandImg('lid'), lw = rc.w * 1.02, lh = lw * 120 / 264, ly = rc.y - lh * 0.55 - (1 - lid) * rc.h * 0.8;
-      ctx.globalAlpha = Math.min(1, lid * 1.5);
-      if (li.complete && li.naturalWidth) ctx.drawImage(li, rc.x + (rc.w - lw) / 2, ly, lw, lh);
-      ctx.globalAlpha = 1;
-    }
-  }
-  function draw(now) {
-    if (!lay) return;
-    const { W, Hh } = lay;
-    ctx.clearRect(0, 0, W, Hh);
-    ctx.save();
-    if (shake > 0) ctx.translate((Math.random() - 0.5) * shake, 0);
-    const fi = sandImg('funnel');
-    if (fi.complete && fi.naturalWidth) ctx.drawImage(fi, (W - lay.funW) / 2, lay.fy, lay.funW, lay.funH);
-    // 沙塊
-    const pulse = 0.55 + 0.45 * Math.sin(now / 220);
-    D.cols.forEach((col, k) => col.forEach((c, i) => {
-      const x = colX(k), y = blockY(k, i), w = lay.cellW, h = lay.cellH;
-      if (y + h < -4) return;
-      const hid = i >= L.hide;
-      ctx.fillStyle = hid ? sandPattern(ctx, '#b89b74') : sandPattern(ctx, SAND_COLS[c]);
-      rr(x, y, w, h, Math.min(8, h * 0.3)); ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,.22)'; rr(x + 3, y + 2, w - 6, h * 0.28, 4); ctx.fill();
-      ctx.lineWidth = i === 0 && live ? 2.5 : 1.5;
-      ctx.strokeStyle = i === 0 && live ? `rgba(255,255,255,${0.55 + 0.45 * pulse})` : 'rgba(60,30,0,.35)';
-      rr(x, y, w, h, Math.min(8, h * 0.3)); ctx.stroke();
-      if (hid) { ctx.fillStyle = 'rgba(70,45,20,.75)'; ctx.font = `900 ${Math.round(h * 0.6)}px Fredoka, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('?', x + w / 2, y + h / 2 + 1); }
-    }));
-    // 暫存瓶
-    for (let j = 0; j < SAND.BUF; j++) { const b = D.buf[j]; drawJar(bufRect(j), b ? b.c : null, b ? b.v : 0, 1, 0); }
-    ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.font = '800 11px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    ctx.fillText(`暫存瓶 ${D.buf.filter(Boolean).length}/${SAND.BUF}`, W / 2, lay.by + lay.bufH + 1);
-    // 杯子
-    for (let i = 0; i < SAND.ACT; i++) {
-      const u = D.cups[i];
-      if (!u) continue;
-      const rc = cupRect(i);
-      ctx.globalAlpha = u.alpha;
-      drawJar(rc, u.c, u.v, SAND.CAP, u.lid);
-      ctx.fillStyle = SAND_COLS[u.c]; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5;
-      ctx.beginPath(); ctx.arc(rc.x + rc.w / 2, rc.y + rc.h + 9, 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      ctx.globalAlpha = 1;
-    }
-    // 接下來的杯子
-    const nq = D.q.slice(0, 4);
-    if (nq.length) {
-      ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.font = '800 10px sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-      const qx = W - 18, qy = lay.cy + 6;
-      ctx.save(); ctx.textAlign = 'center'; ctx.fillText('下一杯', qx, qy - 2); ctx.restore();
-      nq.forEach((c, k) => { ctx.fillStyle = SAND_COLS[c]; ctx.globalAlpha = 1 - k * 0.18; ctx.beginPath(); ctx.arc(qx, qy + 14 + k * 17, 6.5, 0, Math.PI * 2); ctx.fill(); });
-      ctx.globalAlpha = 1;
-    }
-    // 沙粒
-    grains.forEach(g => { ctx.fillStyle = g.col; ctx.fillRect(g.x - 1.3, g.y - 1.3, 2.6, 2.6); });
-    ctx.restore();
-  }
-
-  /* ---------- 動畫:事件一個一個播(沙子流下去、蓋蓋子送走、暫存瓶倒進新杯子) ---------- */
-  const tint = (hex, k) => { const n = parseInt(hex.slice(1), 16), f = v => Math.max(0, Math.min(255, Math.round(v * k))); return `rgb(${f(n >> 16)},${f((n >> 8) & 255)},${f(n & 255)})`; };
-  function spawn(G, from, to, c, onLand, d0) { // from/to:{x,y,w,h};沙粒先到漏斗口(有的話)再到目標
-    for (let n = 0; n < G; n++) {
-      const sx = from.x + Math.random() * from.w, sy = from.y + Math.random() * from.h;
-      grains.push({ sx, sy, x: sx, y: sy, viaNeck: from.neck, tx: to.x + to.w * (0.25 + Math.random() * 0.5), ty: to.y + to.h * 0.55, t: -n * (d0 / G) - Math.random() * 20, col: tint(SAND_COLS[c], 0.85 + Math.random() * 0.3), onLand, d1: 150, d2: 170, ev: cur });
-    }
-  }
-  function startEv(e, now) {
-    cur = { e, t0: now, dur: 380 };
-    if (e.k === 'pour') {
-      const from = { ...e.from, neck: true };
-      const land = e.to === 'cup' ? () => { D.cups[e.i].v += 1 / 30; } : e.to === 'buf' ? () => { D.buf[e.i].v += 1 / 30; } : null;
-      if (e.to === 'buf') D.buf[e.i] = { c: e.c, v: 0 };
-      const to = e.to === 'cup' ? inner(...Object.values(cupRect(e.i))) : e.to === 'buf' ? inner(...Object.values(bufRect(e.i))) : { x: lay.W * 0.3, y: lay.Hh + 30, w: lay.W * 0.4, h: 10 };
-      spawn(30, from, to, e.c, land, 110);
-      cur.dur = 470;
-      beep(200 + Math.random() * 60, 0.18, 'triangle', 0.03);
-    } else if (e.k === 'ship') {
-      cur.dur = e.nx != null ? 720 : 480;
-      SFX.good();
-    } else if (e.k === 'pull') {
-      const from = inner(...Object.values(bufRect(e.j))), to = inner(...Object.values(cupRect(e.i)));
-      spawn(24, { ...from, neck: false }, to, e.c, () => { D.cups[e.i].v += 1 / 24; D.buf[e.j].v = Math.max(0, D.buf[e.j].v - 1 / 24); }, 90);
-      cur.dur = 380;
-    } else if (e.k === 'fail') {
-      cur.dur = 300; shake = 9; SFX.bad(); buzz([60, 40, 120]);
-    } else if (e.k === 'win') cur.dur = 200;
-  }
-  function endEv(e) {
-    if (e.k === 'pour') { if (e.to === 'cup') D.cups[e.i].v = Math.round(D.cups[e.i].v); else if (e.to === 'buf') D.buf[e.i].v = 1; }
-    else if (e.k === 'pull') { D.buf[e.j] = null; D.cups[e.i].v = Math.round(D.cups[e.i].v); }
-    else if (e.k === 'ship') { D.cups[e.i] = e.nx != null ? { c: e.nx, v: 0, lid: 0, off: 0, alpha: 1, bob: 0 } : null; if (e.nx != null) D.q.shift(); }
-    else if (e.k === 'fail') onFail();
-    else if (e.k === 'win') onWin();
-  }
-  function stepEv(now) {
-    if (!cur) return;
-    const p = Math.min(1, (now - cur.t0) / cur.dur), e = cur.e;
-    if (e.k === 'ship') { // 先蓋蓋子、往右滑走,新杯子從左邊滑進來
-      const u = D.cups[e.i];
-      const t1 = 0.35, t2 = e.nx != null ? 0.68 : 1;
-      if (p < t1) { u.lid = p / t1; u.bob = Math.sin(p / t1 * Math.PI) * 4; }
-      else if (p < t2) { u.lid = 1; u.off = ((p - t1) / (t2 - t1)) ** 2 * 0.9; u.alpha = 1 - (p - t1) / (t2 - t1); }
-      else if (e.nx != null) {
-        if (!u.fresh) { D.cups[e.i] = { c: e.nx, v: 0, lid: 0, off: -0.9, alpha: 0, bob: 0, fresh: true }; }
-        const q = (p - t2) / (1 - t2), w = D.cups[e.i];
-        w.off = -0.9 * (1 - q) ** 2; w.alpha = q;
-      }
-    }
-    if (p >= 1 && !grains.some(g => g.ev === cur)) { const done = cur.e; cur = null; endEv(done); }
-  }
-  function tick(now) {
-    if (!cv.isConnected) return;
-    if (!cur && evq.length) startEv(evq.shift(), now);
-    // 沙粒移動
-    const dt = 16;
-    grains = grains.filter(g => {
-      g.t += dt;
-      if (g.t < 0) { g.x = -99; return true; }
-      const n = lay.neck;
-      if (g.viaNeck && g.t < g.d1) { const q = g.t / g.d1, e = q * q; g.x = g.sx + (n.x + (Math.random() - 0.5) * 3 - g.sx) * e; g.y = g.sy + (n.y - g.sy) * e; return true; }
-      const t2 = g.viaNeck ? g.t - g.d1 : g.t, q = Math.min(1, t2 / g.d2), e = q * q, ox = g.viaNeck ? n.x : g.sx, oy = g.viaNeck ? n.y : g.sy;
-      g.x = ox + (g.tx - ox) * e; g.y = oy + (g.ty - oy) * e - (g.viaNeck ? 0 : Math.sin(q * Math.PI) * 30);
-      if (q >= 1) { if (g.onLand) g.onLand(); return false; }
-      return true;
-    });
-    colOff = colOff.map(o => (o > 0.5 ? o * 0.72 : 0));
-    shake = shake > 0.3 ? shake * 0.85 : 0;
-    stepEv(now);
-    draw(now);
-    requestAnimationFrame(tick);
-  }
-
-  function reset() { // 一關開始(或失敗重來)
-    S = sandNew(L);
-    D = { cols: L.cols.map(c => c.slice()), cups: S.cups.map(u => ({ c: u.c, v: 0, lid: 0, off: 0, alpha: 1, bob: 0 })), buf: Array(SAND.BUF).fill(null), q: S.q.slice() };
-    evq = []; cur = null; grains = []; colOff = L.cols.map(() => 0);
-    leftEl.textContent = S.total;
-    layout();
-  }
-  function onFail() {
-    if (others[me] && others[me].done) return;
-    fails++;
-    cover.innerHTML = `<div class="big">💥</div><div>暫存瓶滿出來了!</div><div class="small">這關重來(罰 3 秒)</div>`;
-    cover.classList.add('on');
-    live = false;
-    setTimeout(() => { if (!cv.isConnected || !L || others[me] && others[me].done) return; reset(); cover.classList.remove('on'); live = true; }, 1500);
-  }
-  function onWin() { SFX.good(); buzz([30, 30, 60]); }
-  cv.addEventListener('pointerdown', e => {
-    e.preventDefault();
-    if (!live || !lay) return;
-    const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
-    if (y > lay.gBot + lay.funH * 0.3) return;
-    const k = D.cols.findIndex((_, i) => x >= colX(i) - lay.gap / 2 && x <= colX(i) + lay.cellW + lay.gap / 2);
-    if (k < 0 || !D.cols[k].length) return;
-    const from = { x: colX(k), y: blockY(k, 0), w: lay.cellW, h: lay.cellH };
-    const ev = sandTap(S, k);
-    if (!ev) return;
-    D.cols[k].shift();
-    colOff[k] = (colOff[k] || 0) + lay.cellH + lay.gap;
-    ev[0].from = from;
-    evq.push(...ev);
-    leftEl.textContent = S.total - S.done;
-    if (S.over === 'fail') { live = false; V.send({ e: 'p', pct: 0, fail: 1 }); }
-    else if (S.over === 'win') { live = false; clearInterval(timerT); V.send({ e: 'p', pct: 1, done: 1 }); }
-    else V.send({ e: 'p', pct: S.done / S.total });
-    others[me] = { ...(others[me] || {}), pct: S.over === 'fail' ? 0 : S.done / S.total };
-    renderSeats();
-  });
-  new ResizeObserver(() => { if (cv.isConnected) layout(); }).observe(box);
-  requestAnimationFrame(tick);
-
-  V.countdown = k => {
-    cover.innerHTML = k > 0 ? `<div class="big cdn pulse">${k}</div>` : '<div class="big cdn go">GO!</div>';
-    cover.classList.add('on');
-    if (k > 0) SFX.tick(); else SFX.go();
-  };
-  V.on = m => {
-    if (m.e === 'prep') {
-      live = false; clearInterval(timerT); fails = 0;
-      cover.innerHTML = `<div class="big">⏳</div><div>第 ${m.rd} / ${m.R} 關</div><div class="small">點每一行最下面的沙塊,倒進同色的杯子!<br>沒有同色杯子會先進暫存瓶,5 個都滿就失敗</div>`;
-      cover.classList.add('on');
-      lvEl.textContent = m.rd; timeEl.textContent = '00:00.00';
-    } else if (m.e === 'round') {
-      lv = m.lv; seed = m.seed; order = m.order; others = {}; fails = 0;
-      order.forEach(s => { others[s] = { pct: 0 }; });
-      L = sandLevel(lv, seed);
-      reset();
-      live = order.includes(me);
-      renderSeats();
-      cover.classList.remove('on');
-      t0 = performance.now(); endAt = t0 + m.T * 1000;
-      clearInterval(timerT);
-      timerT = setInterval(() => { if (!cv.isConnected) return clearInterval(timerT); if (!(others[me] && others[me].done)) timeEl.textContent = schTime(performance.now() - t0 + fails * SAND.PEN); }, 50);
-      if (!live) toast('觀戰中');
-    } else if (m.e === 'p') {
-      const o = others[m.s] || (others[m.s] = {});
-      if (m.s !== me || m.done) o.pct = m.pct;
-      o.done = m.done; o.ms = m.ms; o.fails = m.fails;
-      if (m.s === me && m.done) {
-        clearInterval(timerT); timeEl.textContent = schTime(m.ms);
-        setTimeout(() => {
-          cover.innerHTML = `<div class="big">${['🥇', '🥈', '🥉', '🎀'][m.done - 1]}</div><div>過關!第 ${m.done} 名</div><div class="small">${schTime(m.ms)}${m.fails ? `(含失敗罰時 ${m.fails * SAND.PEN / 1000} 秒)` : ''}</div>`;
-          cover.classList.add('on');
-        }, 900);
-        if (m.done === 1) SFX.win();
-      } else if (m.s !== me && m.done) beep(990, 0.1, 'sine', 0.1);
-      renderSeats();
-    } else if (m.e === 'rend') {
-      live = false; clearInterval(timerT);
-      const rows = Object.keys(m.tot).map(Number).sort((a, b) => m.tot[b] - m.tot[a]).map(s => {
-        const k = m.fin.indexOf(s);
-        return `<span>${k >= 0 ? ['🥇', '🥈', '🥉', '🎀'][k] : '💤'} ${pinfo(s).emoji} ${who(s)} <small>${k >= 0 ? schTime(m.ms[s]) : `完成 ${Math.round(m.pct[s] * 100)}%`}</small> <b>${k >= 0 ? `+${m.pts[s]}` : '+0'}</b><i>共 ${m.tot[s]} 分</i></span>`;
-      }).join('');
-      cover.innerHTML = `<div class="small">第 ${m.rd} 關結果</div><div class="ffinal">${rows}</div><div class="small">${m.last ? '比賽結束!' : '下一關更難,馬上開始…'}</div>`;
-      cover.classList.add('on');
-    }
-  };
-}
-
-/* =========================================================
    電腦玩家的行為:聽到房主的廣播,就像真人一樣送出操作
    ========================================================= */
 function botsHear(H, m) {
@@ -8241,22 +7798,6 @@ BOTS.schulte = (H, s, m, k) => {
     const mm = miss;
     H.s.after(Math.round(t), () => { if (H.bs[s] === st) botSend(H, s, { e: 'p', k: i, miss: mm }); });
   }
-};
-
-/* 沙漏倒倒樂的電腦:照關卡產生時那條一定過得了的順序點(真人看不到),越強越快;弱的有時會先失敗一次再重來 */
-BOTS.sand = (H, s, m, k) => {
-  if (m.t !== 'g' || m.e !== 'round' || !m.order.includes(s)) return;
-  const L = sandLevel(m.lv, m.seed), N = L.total, st = H.bs[s] = { rd: m.rd };
-  const per = rand(950, 1450) * k.spd * (1.35 - k.sk * 0.6);
-  const go = (t, failAt) => {
-    for (let i = 1; i <= N; i++) {
-      t += per * (0.75 + Math.random() * 0.5);
-      if (i === failAt) { H.s.after(Math.round(t), () => { if (H.bs[s] === st) { botSend(H, s, { e: 'p', pct: 0, fail: 1 }); } }); return go(t + 1600, -1); }
-      const pct = i / N;
-      H.s.after(Math.round(t), () => { if (H.bs[s] === st) botSend(H, s, i === N ? { e: 'p', pct: 1, done: 1 } : { e: 'p', pct }); });
-    }
-  };
-  go(rand(1200, 2200), Math.random() < (1 - k.sk) * 0.7 ? rand(Math.floor(N * 0.4), N - 2) : -1);
 };
 
 /* ---------- 防止雙指縮放 / 長按選單 ---------- */

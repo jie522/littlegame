@@ -2113,18 +2113,30 @@ button:disabled { cursor: not-allowed; }
 .play-seven .cdop .cdthink { bottom: -10px; }
 .play-seven .cdhand .ck.sel { transform: translateY(-14px); }
 
-/* ===== 沙漏倒倒樂 ===== */
-.play-sand { background: #b0773f url(assets/sand_bg.jpg) center / cover no-repeat; }
-.play-sand .pad { background: transparent; border: none; box-shadow: none; padding: 0 4px 6px; }
-.sdwrap { width: 100%; height: 100%; display: flex; flex-direction: column; gap: 6px; }
-.sdbox { position: relative; flex: 1; min-height: 0; border-radius: 18px; background: rgba(70,40,15,.18); }
-.sdcv { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
-.sdleft { padding: 3px 10px; border-radius: 999px; background: rgba(0,0,0,.28); color: #fff; font-weight: 900; font-size: .85rem; }
-.sdleft b { font-family: "Fredoka", var(--font); color: #ffe066; }
-.play-sand .schtarget b { color: #c97a1c; }
-.play-sand { gap: 6px; }
-.play-sand .stage { flex: none; padding: 0; background: transparent; border: none; box-shadow: none; overflow: visible; }
-.play-sand .sin { gap: 0; }
-.play-sand .pad { flex: 1; min-height: 0; display: flex; }
-.play-sand .fseat { background: rgba(60,32,10,.8); }
-.play-sand .ffinal small { opacity: .75; font-size: .75rem; }
+
+/* 角色插畫放到卡片上 */
+.pf { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 50% 6%; }
+.seat { padding: 6px 3px 5px; }
+.seat::before { height: 52%; }
+.sart { position: relative; width: 100%; height: 88px; display: flex; align-items: flex-end; justify-content: center; overflow: visible; }
+.sart .pf { width: auto; height: 100%; object-fit: contain; object-position: 50% 100%; filter: drop-shadow(0 3px 0 rgba(31,56,100,.22)); }
+.seat.empty .ava-big { margin-top: 18px; }
+.seat.off .sart { filter: grayscale(1); }
+.pchip .pface { width: 30px; height: 30px; border-radius: 50%; overflow: hidden; background: #fff; border: 2px solid var(--c); flex: none; }
+.pcard { grid-template-columns: 48px 1fr; }
+.pav { width: 48px; height: 48px; background: var(--soft, #fff); }
+.pav .pf { border-radius: 50%; }
+.pav .pf { object-position: 50% 4%; transform: scale(1.12); transform-origin: 50% 12%; }
+.pdot { z-index: 1; }
+.hav { overflow: hidden; border-radius: 50%; }
+.hav .pf { object-position: 50% 4%; }
+.hseat .hav { width: 42px; height: 42px; border-radius: 50%; overflow: hidden; background: #fff; border: 2px solid var(--pc); flex: none; display: block; }
+
+/* 遊戲分類卡片(照設計稿):淡色漸層卡片 + 左上亮面 + 大插圖 + 名稱膠囊 + 款數膠囊 */
+.cats { gap: 14px; }
+.ccard { position: relative; gap: 0; padding: 7px 7px 9px; border-radius: 24px; background: linear-gradient(165deg, #fff 0%, var(--bg) 70%); border: 3px solid var(--bd); box-shadow: 0 5px 0 var(--bd), 0 8px 14px rgba(40,50,80,.16); overflow: hidden; }
+.ccard::after { content: ""; position: absolute; left: 10px; top: 8px; width: 34px; height: 15px; border-radius: 50%; background: rgba(255,255,255,.85); transform: rotate(-24deg); }
+.ccard:active:not(:disabled) { transform: translateY(4px); box-shadow: 0 1px 0 var(--bd), 0 3px 8px rgba(40,50,80,.16); }
+.ccard .cart { display: block; width: 100%; aspect-ratio: 282 / 180; background: url(assets/cats.webp) var(--bx) var(--by) / var(--bs) auto no-repeat; border-radius: 16px 16px 4px 4px; -webkit-mask-image: linear-gradient(#000 82%, transparent); mask-image: linear-gradient(#000 82%, transparent); margin-bottom: 4px; }
+.ccard .cname { position: relative; display: block; width: 86%; padding: 5px 0 6px; border-radius: 999px; background: linear-gradient(#fff2, #0000), var(--g); box-shadow: inset 0 -3px 0 rgba(0,0,0,.14), 0 2px 0 rgba(0,0,0,.1); color: var(--tc); font-size: 1.25rem; letter-spacing: .08em; text-shadow: none; }
+.ccard .csub { position: relative; display: block; width: 86%; margin-top: 6px; padding: 3px 0; border-radius: 999px; background: rgba(255,255,255,.62); color: var(--sc); font-size: .72rem; font-weight: 800; opacity: 1; }
