@@ -7,7 +7,7 @@ import bpy, bmesh, math, sys, os
 
 argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
 OUT = argv[0] if argv else os.getcwd()
-COLORS = ['#e8444f', '#3f7de8', '#2fb36b', '#f2b800', '#8c5be8', '#ff8a3d', '#34344a', '#f4f1ea']
+COLORS = ['#e8444f', '#3f7de8', '#2fb36b', '#f2b800', '#8c5be8', '#ff8a3d', '#34344a', '#e2ddd0']
 XY = [(0, 0), (3, 0), (6, 0), (1, 1), (3, 1), (5, 1), (2, 2), (3, 2), (4, 2), (0, 3), (1, 3), (2, 3), (4, 3), (5, 3), (6, 3), (2, 4), (3, 4), (4, 4), (1, 5), (3, 5), (5, 5), (0, 6), (3, 6), (6, 6)]
 S = 10.0  # 棋盤邊長(單位),整張圖就是這個範圍
 
@@ -163,7 +163,7 @@ render(os.path.join(OUT, 'morris_board.png'), 1024, 1024)
 
 # ================= 2) 棋子(8 顆寶石棋子排成一列) =================
 sc = reset()
-world(0.6, '#ffffff')
+world(0.45, '#ffffff')
 
 
 def lathe(name, prof, segs=96):
@@ -195,15 +195,15 @@ for i, hexc in enumerate(COLORS):
     m.use_nodes = True
     p = m.node_tree.nodes.get('Principled BSDF')
     p.inputs['Base Color'].default_value = (*hexrgb(hexc), 1)
-    p.inputs['Roughness'].default_value = 0.16
-    p.inputs['Coat Weight'].default_value = 1.0
-    p.inputs['Coat Roughness'].default_value = 0.05
+    p.inputs['Roughness'].default_value = 0.34
+    p.inputs['Coat Weight'].default_value = 0.18
+    p.inputs['Coat Roughness'].default_value = 0.3
     p.inputs['Subsurface Weight'].default_value = 0.15
     p.inputs['Subsurface Radius'].default_value = (0.25, 0.25, 0.25)
-    p.inputs['Specular IOR Level'].default_value = 0.8
+    p.inputs['Specular IOR Level'].default_value = 0.25
     o.data.materials.append(m)
-area((-3, 4, 8), (math.radians(20), math.radians(-15), 0), 6, 900, '#ffffff')
-area((5, -3, 4), (math.radians(-30), math.radians(35), 0), 4, 240, '#ffe8c8')
+area((-3, 4, 8), (math.radians(20), math.radians(-15), 0), 10, 520, '#ffffff')
+area((5, -3, 4), (math.radians(-30), math.radians(35), 0), 8, 100, '#ffe8c8')
 # 8 顆排成一列:相機照整排,每顆佔 256 像素
 bpy.ops.object.camera_add(location=(0, 0, 20), rotation=(0, 0, 0))
 cam = bpy.context.object
