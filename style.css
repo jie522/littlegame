@@ -2153,3 +2153,30 @@ button:disabled { cursor: not-allowed; }
 .mp.sel { transform: translateY(-5px) scale(1.14); box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--pc), 0 0 18px 6px var(--pc); }
 @keyframes rmpulse { from { box-shadow: 0 0 0 3px #ee4b4b, 0 0 6px 2px rgba(238,75,75,.5); } to { box-shadow: 0 0 0 5px #ee4b4b, 0 0 18px 7px rgba(238,75,75,.85); } }
 .hd { width: 16px; height: 16px; border: none; background: url(assets/morris_stones.png) calc(var(--ci, 0) * 100% / 7) 0 / 800% 100% no-repeat; filter: drop-shadow(0 1px 1px rgba(30,15,0,.4)); }
+
+/* 高樓疊疊樂 */
+.play-tower .stage { flex: 1; padding: 5px; background: transparent; border-color: transparent; box-shadow: none; }
+.play-tower .sin { height: 100%; justify-content: center; gap: 4px; }
+.play-tower .pad { display: none; }
+.play-tower { touch-action: none; user-select: none; -webkit-user-select: none; }
+.play-tower .tcv { border-color: #1f2a44; }
+.play-tower .hud { gap: 4px 6px; font-size: .78rem; font-weight: 800; }
+.play-tower .hud:empty { display: none; }
+.tws { display: inline-flex; align-items: center; gap: 3px; padding: 2px 9px; border-radius: 999px; background: #fff; border: 2px solid var(--pc); }
+.tws b { font-family: "Fredoka", var(--font); font-size: .95rem; }
+.tws i { font-style: normal; font-size: .62rem; }
+.tws .pe { height: 1.3em; }
+.tws.out { opacity: .55; }
+.tws.off { filter: grayscale(1); opacity: .5; }
+.play-tower .tov { background: rgba(20,30,60,.66); color: #fff; text-shadow: var(--ol-sm); text-align: center; gap: 6px; padding: 12px; }
+.play-tower .tov .small { font-size: .85rem; line-height: 1.6; }
+.play-tower .tov .ffinal { margin-top: 6px; min-width: 70%; }
+
+/* 遊戲卡片的圖示:設計稿裡的插圖(assets/game_icons.webp,4 x 4 拼圖,--ix / --iy 是第幾欄、第幾列) */
+.gico {
+  aspect-ratio: 1.4;
+  background: url(assets/game_icons.webp) calc(var(--ix, 0) * 100% / 3) calc(var(--iy, 0) * 100% / 3) / 400% 400% no-repeat, var(--g);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.35);
+  font-size: 0;
+}
+@media (max-height: 760px) { .gico { aspect-ratio: 1.4; } }
