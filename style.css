@@ -2179,3 +2179,33 @@ button:disabled { cursor: not-allowed; }
   font-size: 0;
 }
 @media (max-height: 760px) { .gico { aspect-ratio: 1.4; } }
+
+/* 排七:蓋牌要看得清楚、結算面板要夠大 */
+.play-seven .cdop { flex-wrap: wrap; row-gap: 3px; }
+.svcov { flex: 0 0 100%; text-align: center; padding: 1px 8px; border-radius: 999px; background: linear-gradient(#ffb454, #ff8a1f); color: #3a1c00; border: 2px solid #fff; font-weight: 900; font-size: .8rem; box-shadow: 0 2px 0 rgba(0,0,0,.35); }
+.svcov.new { animation: svpop .5s ease-out; }
+@keyframes svpop { 0% { transform: scale(.4); } 55% { transform: scale(1.25); } 100% { transform: scale(1); } }
+.play-seven .cdcov { margin-right: auto; padding: 5px 12px; border-radius: 999px; background: rgba(0,0,0,.35); border: 2px solid rgba(255,255,255,.25); color: rgba(255,233,168,.75); font-size: .9rem; font-weight: 900; white-space: nowrap; }
+.play-seven .cdcov.has { background: linear-gradient(#ffb454, #ff8a1f); border-color: #fff; color: #3a1c00; box-shadow: 0 2px 0 rgba(0,0,0,.35); }
+.play-seven .cdcov b { font-size: 1.1rem; font-family: "Fredoka", var(--font); }
+.cdwho.cov { background: linear-gradient(#ffb454, #ff8a1f); border: 2px solid #fff; color: #3a1c00; font-size: .95rem; font-weight: 900; padding: 4px 16px; animation: svpop .5s ease-out; }
+.cdwho.cov b { color: #3a1c00; }
+.play-seven .cdmsg { top: 3%; max-height: 94%; overflow-y: auto; pointer-events: auto; width: min(96%, 380px); padding: 12px 12px 12px; gap: 5px; background: rgba(8,20,13,.97); border-width: 4px; box-shadow: 0 0 0 3px rgba(0,0,0,.4), 0 14px 40px rgba(0,0,0,.6); }
+.play-seven .cdmsg .big { font-size: 2.8rem; }
+.play-seven .cdmsg .svtitle { font-size: 1.6rem; color: #ffe066; text-shadow: var(--ol-sm); }
+.play-seven .cdmsg > small { font-size: .95rem; }
+.svresl { width: 100%; display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
+.svres { display: flex; flex-direction: column; gap: 3px; padding: 6px 10px; border-radius: 14px; background: rgba(255,255,255,.08); border: 2px solid rgba(255,255,255,.14); text-align: left; }
+.svres.win { background: rgba(255,214,90,.16); border-color: #ffd23f; }
+.svres.me { box-shadow: inset 0 0 0 2px rgba(125,255,176,.55); }
+.svr1 { display: flex; align-items: center; gap: 8px; }
+.svr1 em { font-style: normal; font-size: 1.5rem; line-height: 1; }
+.svr1 .svn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 1.2rem; font-weight: 900; }
+.svr1 .svn .pe { height: 1.5em; vertical-align: middle; }
+.svr1 .svp { font-family: "Fredoka", var(--font); font-size: 1.8rem; line-height: 1; color: #ffe066; }
+.svr1 .svp small { font-size: .85rem; margin-left: 2px; opacity: .85; }
+.svres.win .svp { color: #7dffb0; }
+.svr2 { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.svr2 small { font-size: .78rem; opacity: .8; margin-right: 2px; }
+.svr2 { gap: 3px; }
+.svr2 .cm { width: 27px; height: 34px; }
