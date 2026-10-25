@@ -73,7 +73,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.40';
+const APP_VERSION = '2026.11.41';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -556,7 +556,8 @@ function recordResult(m) {
   if (r === 'w') x.w++; else if (r === 'd') x.d++;
   st.streak = r === 'w' ? st.streak + 1 : r === 'l' ? 0 : st.streak;
   st.best = Math.max(st.best, st.streak);
-  st.log.unshift({ g: m.g, r, t: Date.now(), m: NET.solo ? 's' : 'r', n: m.players.length - 1 });
+  st.log.unshift({ g: m.g, r, t: Date.now(), m: NET.solo ? 's' : 'r', n: m.players.length - 1,
+    o: m.players.filter(s => s !== NET.mySlot).map(s => { const p = pinfo(s); return (p.bot ? '🤖' : '') + p.name; }) });
   st.log.length = Math.min(st.log.length, 20);
   store.set('stats', st);
   return { r, x };
@@ -933,6 +934,7 @@ function resultsView(m) {
   const iWon = m.winners.includes(NET.mySlot);
   if (iWon) store.set('wins', store.get('wins', 0) + 1);
   const rec = recordResult(m);
+  if (rec) cloudSync();
   const tb = statsTotal(getStats()).w - (rec && rec.r === 'w' ? 1 : 0);
   const tierUp = rec && rec.r === 'w' && tierOf(tb + 1) > tierOf(tb) ? TIERS[tierOf(tb + 1)] : null;
   const title = m.winners.length === 0 ? '沒有贏家 😆'
@@ -1013,13 +1015,73 @@ function statsView() {
     return `<div class="lrow"><i class="lm ${mark[e.r][1]}">${mark[e.r][0]}</i><span>${g ? g.emoji + g.name : e.g}</span>
         <small>${e.m === 's' ? '對電腦' : e.n ? `${e.n + 1} 人房` : '房間'} · ${dt.getMonth() + 1}/${dt.getDate()}</small></div>`;
   }).join('') : '<p class="lempty">還沒有紀錄,去玩一場吧!</p>'}</div>
-    <p class="snote">戰績只存在這支手機裡;換手機或清除瀏覽器資料就會歸零。</p>
-    <div class="sbtns"><button class="btn big blue back"><span class="bi">◀</span><span class="bt">回首頁</span></button>
+    <p class="snote">${CLOUD_URL ? '戰績會同步到雲端,別人也能查到你。' : '戰績只存在這支手機裡;換手機或清除瀏覽器資料就會歸零。'}</p>
+    <div class="sbtns">${CLOUD_URL ? '<button class="btn big green cloud"><span class="bi">🌐</span><span class="bt">全部玩家</span></button>' : ''}<button class="btn big blue back"><span class="bi">◀</span><span class="bt">回首頁</span></button>
       ${tot.p ? '<button class="btn white sm reset">清除戰績</button>' : ''}</div>`;
   app.appendChild(d);
   $('.back', d).addEventListener('click', () => home());
+  const cb = $('.cloud', d);
+  if (cb) cb.addEventListener('click', () => cloudView());
   const rs = $('.reset', d);
   if (rs) rs.addEventListener('click', () => { if (confirm('確定要清除所有戰績嗎?')) { store.set('stats', emptyStats()); store.set('wins', 0); store.set('records', {}); statsView(); } });
+}
+
+/* ---------- 雲端戰績(選用):把每位玩家的戰績存到 Firebase Realtime Database,任何人都能反查 ----------
+   用法:建立一個 Realtime Database,把網址貼到 CLOUD_URL(例如 'https://xxx-default-rtdb.firebaseio.com'),
+   規則設成 players 底下可讀寫。CLOUD_URL 空白時整個功能隱藏,遊戲照常運作。 */
+const CLOUD_URL = '';
+const myPid = () => { let id = store.get('pid', ''); if (!id) { id = Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4); store.set('pid', id); } return id; };
+function cloudSync() {
+  if (!CLOUD_URL) return;
+  const st = getStats(), tot = statsTotal(st);
+  const body = { name: myName() || CHARS[myChar()].name, ch: myChar(), t: Date.now(), p: tot.p, w: tot.w, d: tot.d, best: st.best, g: st.g, log: st.log.slice(0, 20) };
+  fetch(CLOUD_URL + '/players/' + myPid() + '.json', { method: 'PUT', body: JSON.stringify(body), keepalive: true }).catch(() => { /* 離線就算了,下一場會再同步 */ });
+}
+async function cloudView(pid) {
+  resetView();
+  app.innerHTML = '';
+  const d = el('div', 'screen stats');
+  d.innerHTML = `${ribbon('玩家戰績', 'gold')}<p class="lempty"><span class="spin-s">⏳</span> 讀取中…</p>`;
+  app.appendChild(d);
+  let all = null;
+  try { all = await (await fetch(CLOUD_URL + '/players.json')).json() || {}; } catch (e) { /* 下面顯示失敗 */ }
+  if (!d.isConnected) return;
+  const back = () => `<div class="sbtns"><button class="btn big blue back"><span class="bi">◀</span><span class="bt">${pid ? '回排行榜' : '回我的戰績'}</span></button></div>`;
+  const bind = () => $('.back', d).addEventListener('click', () => (pid ? cloudView() : statsView()));
+  if (!all) { d.innerHTML = `${ribbon('玩家戰績', 'gold')}<p class="lempty">連不上雲端,晚點再試試</p>${back()}`; return bind(); }
+  const mark = { w: ['勝', 'w'], l: ['敗', 'l'], d: ['平', 'd'] };
+  if (pid && all[pid]) {
+    const x = all[pid], c = CHARS[x.ch] || CHARS[0], lost = x.p - x.w - x.d;
+    const rows = GAMES.filter(g => x.g && x.g[g.id] && x.g[g.id].p).sort((a, b) => x.g[b.id].w / x.g[b.id].p - x.g[a.id].w / x.g[a.id].p);
+    const log = Object.values(x.log || {});
+    d.innerHTML = `${ribbon(esc(x.name), 'gold')}
+      <div class="tiercard"><div class="tem"><img src="assets/chars/head_${c.id}.png" alt="" style="height:1.1em"></div>
+        <div class="tinfo"><b>${TIERS[tierOf(x.w)].e} ${TIERS[tierOf(x.w)].n}</b><small>${x.w} 勝 · ${lost} 敗 · ${x.d} 平 · 最高連勝 ${x.best || 0}</small></div></div>
+      <div class="sgrid"><div><b>${x.p}</b><small>總場次</small></div><div><b>${x.w}</b><small>勝場</small></div><div><b>${pct(x.w, x.p)}</b><small>勝率</small></div><div><b>${x.best || 0}</b><small>最高連勝</small></div></div>
+      <h2 class="shead">🎮 各遊戲</h2>
+      <div class="glist">${rows.map(g => { const y = x.g[g.id]; return `<div class="grow"><span class="ge">${g.emoji}</span><span class="gn">${g.name}</span><span class="gw">${y.w}勝 / ${y.p}場</span><b class="gp">${pct(y.w, y.p)}</b></div>`; }).join('') || '<p class="lempty">還沒有紀錄</p>'}</div>
+      <h2 class="shead">📜 最近對戰</h2>
+      <div class="llist">${log.map(e => { const g = GAME[e.g], dt = new Date(e.t), o = e.o ? Object.values(e.o) : [];
+        return `<div class="lrow"><i class="lm ${(mark[e.r] || mark.d)[1]}">${(mark[e.r] || mark.d)[0]}</i><span>${g ? g.emoji + g.name : esc(e.g)}${o.length ? ' · 對 ' + o.map(esc).join('、') : ''}</span><small>${dt.getMonth() + 1}/${dt.getDate()}</small></div>`; }).join('') || '<p class="lempty">還沒有紀錄</p>'}</div>
+      ${back()}`;
+    return bind();
+  }
+  const list = Object.entries(all).map(([id, x]) => ({ id, ...x })).sort((a, b) => b.w - a.w || b.p - a.p);
+  d.innerHTML = `${ribbon('全部玩家', 'gold')}
+    <input class="csearch" type="search" maxlength="8" placeholder="🔍 輸入名字查詢" style="width:calc(100% - 20px);margin:0 10px;padding:10px 14px;border:3px solid var(--ink);border-radius: 999px;font:inherit;font-weight:800">
+    <div class="glist clist"></div>
+    <p class="snote">共 ${list.length} 位玩家 · 點名字看詳細戰績</p>
+    <div class="sbtns"><button class="btn big blue back"><span class="bi">◀</span><span class="bt">回我的戰績</span></button></div>`;
+  const box = $('.clist', d);
+  const draw = q => {
+    const rs = list.filter(x => !q || String(x.name).includes(q));
+    box.innerHTML = rs.map((x, k) => { const c = CHARS[x.ch] || CHARS[0];
+      return `<div class="grow" data-id="${x.id}" style="cursor:pointer"><span class="gk">${!q && k < 3 ? ['🥇', '🥈', '🥉'][k] : k + 1}</span><span class="ge"><img src="assets/chars/head_${c.id}.png" alt="" style="height:1.4em;vertical-align:middle"></span><span class="gn">${esc(x.name)}${x.id === myPid() ? '(我)' : ''}</span><span class="gw">${x.w}勝 / ${x.p}場</span><b class="gp">${pct(x.w, x.p)}</b></div>`; }).join('') || '<p class="lempty">找不到這位玩家</p>';
+    $$('.grow', box).forEach(r => r.addEventListener('click', () => cloudView(r.dataset.id)));
+  };
+  draw('');
+  $('.csearch', d).addEventListener('input', e => draw(e.target.value.trim()));
+  bind();
 }
 
 function confetti() {
