@@ -540,9 +540,9 @@ const GAMES = [
     host: hXqmj, view: vXqmj, noCountdown: true,
   },
   {
-    id: 'g2048', emoji: '🔶', name: '2048', tag: '益智+競速', color: '#f59b3b', desc: '滑動合併方塊,120 秒比誰分數高!',
-    rules: ['大家同時開始,各自在自己的手機上玩 2048', '在畫面上滑動(電腦用方向鍵),每個方塊只會往那個方向推一格', '推到一樣的數字會合成一個(2+2=4、4+4=8…),合成出來的數字就是你得到的分數;沒有被推到的不會自己合併', '每次移動後會多出一個新方塊;格子塞滿又不能合併就卡死了', '120 秒內分數最高的人獲勝!'],
-    host: hG2048, view: vG2048, noCountdown: true,
+    id: 'g2048', emoji: '🔶', name: '2048', tag: '益智+競速', color: '#f59b3b', desc: '滑動合併方塊,限時比誰分數高!',
+    rules: ['大家同時開始,各自在自己的手機上玩 2048', '在畫面上滑動(電腦用方向鍵),每個方塊只會往那個方向推一格', '推到一樣的數字會合成一個(2+2=4、4+4=8…),合成出來的數字就是你得到的分數;沒有被推到的不會自己合併', '每次移動後會多出一個新方塊;格子塞滿又不能合併就卡死了', '時間由房主選(1 / 2 / 3 / 5 / 10 分鐘,預設 5 分鐘),時間到分數最高的人獲勝!'],
+    host: hG2048, view: vG2048, opts: g2048Opts, noCountdown: true,
   },
 ];
 const GAME = Object.fromEntries(GAMES.map(g => [g.id, g]));
@@ -714,7 +714,8 @@ function recList() { // [{g, label, text}]:有紀錄的遊戲
   one('heart', '最快拍牌', f('heart', recSec));
   one('shaft', '最深', f('shaft', v => 'B' + v + ' 層'));
   one('tower', '最高', f('tower', v => v + ' 層'));
-  one('g2048', '最高分', f('g2048', v => v + ' 分'));
+  const g48 = G2048_MINS.map(n => [n, n === 2 ? Math.max(recGet('g2048', 2) || 0, recGet('g2048') || 0) || null : recGet('g2048', n)]).filter(x => x[1] != null); // 舊版固定 120 秒,它的紀錄算在 2 分鐘
+  if (g48.length) { one('g2048', '最高分', g48.map(([n, v]) => n + ' 分鐘 ' + v + ' 分').join(' · ')); out[out.length - 1].v48 = Object.fromEntries(g48); }
   const sch = [3, 4, 5, 6, 7].map(n => [n, recGet('schulte', n)]).filter(x => x[1] != null);
   if (sch.length) one('schulte', '最快完成', sch.map(([n, v]) => n + '×' + n + ' ' + recSec(v)).join(' · '));
   return out;
@@ -722,7 +723,7 @@ function recList() { // [{g, label, text}]:有紀錄的遊戲
 function recChip(g) { // 遊戲卡片上的一行紀錄
   const r = recList().find(x => x.g.id === g.id);
   if (!r) return '';
-  const short = g.id === 'schulte' ? (() => { const n = [5, 4, 6, 3, 7].find(x => recGet('schulte', x) != null); return n + '×' + n + ' ' + recSec(recGet('schulte', n)); })() : r.text;
+  const short = g.id === 'schulte' ? (() => { const n = [5, 4, 6, 3, 7].find(x => recGet('schulte', x) != null); return n + '×' + n + ' ' + recSec(recGet('schulte', n)); })() : g.id === 'g2048' ? (() => { const x = [5, 3, 10, 2, 1].map(n => [n, r.v48[n]]).find(a => a[1] != null); return x[0] + ' 分鐘 ' + x[1] + ' 分'; })() : r.text;
   return `<span class="rec">🏆 ${short}</span>`;
 }
 
@@ -7897,15 +7898,36 @@ function vTower(V) {
 }
 
 /* =========================================================
-   2048 🔶(大家同時開始,各自在手機上滑動合併方塊,120 秒內比誰分數高)
+   2048 🔶(大家同時開始,各自在手機上滑動合併方塊,限時比誰分數高;時間 1 / 2 / 3 / 5 / 10 分鐘,房主選,預設 5 分鐘)
    每支手機自己玩自己的棋盤(網路慢也公平),新方塊用同一個種子產生;只把「分數、最大方塊、有沒有卡死」傳給房主
    方塊和棋盤是 Blender 算圖(assets/g2048_tiles.webp:4 x 4 格,第 i 格是 2^(i+1);assets/g2048_board.webp),數字由畫布畫上去
    棋盤座標:邊長 B,外框 PAD = .045B、格子間距 GAP = .03B(要和 tools/g2048_scene.py 對得上)
    ========================================================= */
-const G2048 = { T: 120, PAD: 0.045, GAP: 0.03 };
+const G2048 = { T: 300, PAD: 0.045, GAP: 0.03 }; // T:預設 5 分鐘;房主可以在介紹畫面改(1 / 2 / 3 / 5 / 10 分鐘)
+const G2048_MINS = [1, 2, 3, 5, 10];
+function g2048Min() { const m = +store.get('g2048Min', 5); return G2048_MINS.includes(m) ? m : 5; }
+function g2048Opts(d) { // 房主在介紹畫面選比賽時間,記在這支手機裡(預設 5 分鐘)
+  let min = g2048Min();
+  NET.opts = NET.opts || {};
+  const save = () => { NET.opts.g2048 = { min }; store.set('g2048Min', min); };
+  save();
+  const box = el('div', 'schopt');
+  const draw = () => {
+    box.innerHTML = `<div class="schopt-t">⏱ 比賽時間</div><div class="schrow"><div class="seg">${G2048_MINS.map(x => `<button data-m="${x}" class="${x === min ? 'on' : ''}">${x} 分鐘</button>`).join('')}</div></div>`;
+  };
+  draw();
+  box.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    min = +b.dataset.m; save(); draw(); SFX.tap();
+  });
+  $('.players', d).before(box);
+}
+const g2048Dur = sec => (sec % 60 ? sec + ' 秒' : sec / 60 + ' 分鐘');
 const G2048_TILES = loadImg('assets/g2048_tiles.webp'), G2048_BOARD = loadImg('assets/g2048_board.webp');
 
 function hG2048(H) {
+  const T = ((H.opts && H.opts.min) || 5) * 60; // 比賽秒數
   let phase = 'idle';
   const ps = {};
   H.players.forEach(s => { ps[s] = { sc: 0, mx: 0, out: false }; });
@@ -7920,11 +7942,11 @@ function hG2048(H) {
   }
   return {
     start() {
-      H.bc({ t: 'g', e: 'prep', order: H.players });
+      H.bc({ t: 'g', e: 'prep', order: H.players, T });
       H.s.after(2600, () => H.countdown(() => {
         phase = 'play';
-        H.bc({ t: 'g', e: 'go', seed: rand(1, 1e9), T: G2048.T, order: H.players });
-        H.s.after(G2048.T * 1000 + 400, () => end('time'));
+        H.bc({ t: 'g', e: 'go', seed: rand(1, 1e9), T, order: H.players });
+        H.s.after(T * 1000 + 400, () => end('time'));
       }));
     },
     input(slot, m) {
@@ -7949,7 +7971,7 @@ function vG2048(V) {
   const C = canvasStage(V, 9 / 16, true), ctx = C.ctx;
   V.pad.innerHTML = '';
   const ink = '#5a3a1e', FONT = '"Fredoka", "Noto Sans TC", sans-serif';
-  let live = false, out = false, order = [], endAt = 0, rng = null;
+  let live = false, out = false, order = [], endAt = 0, rng = null, total = G2048.T;
   let grid, tiles, ghosts, score, mx, moveT, now = 0, parts = [], pops = [], lastSec = -1, WH = 640, shake = 0;
   const others = {}; // 每個座位:{ sc, mx, out }
   const who = s => (s === me ? '你' : esc(pinfo(s).name));
@@ -8100,7 +8122,7 @@ function vG2048(V) {
     // 上方:分數、時間
     txt('分數', 14, 24, 14, '#fff3d6');
     txt(String(score), 14, 62, 40);
-    const left = endAt ? Math.max(0, Math.ceil((endAt - performance.now()) / 1000)) : G2048.T;
+    const left = endAt ? Math.max(0, Math.ceil((endAt - performance.now()) / 1000)) : total;
     txt('時間', W - 14, 24, 14, '#fff3d6', 'right');
     txt(Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0'), W - 14, 62, 36, left <= 10 && endAt ? '#ff6b6b' : '#fff', 'right');
     // 每個人的分數
@@ -8181,14 +8203,15 @@ function vG2048(V) {
 
   V.on = m => {
     if (m.e === 'prep') {
-      order = m.order;
-      C.overlay('<div class="big">🔶</div><div><b>2048</b></div><div class="small">滑動一次,每個方塊往那個方向推一格<br>推到一樣的數字會合成一個,分數就是合成的數字<br>120 秒內分數最高的人獲勝!</div>');
+      order = m.order; total = m.T || G2048.T;
+      C.overlay(`<div class="big">🔶</div><div><b>2048</b></div><div class="small">滑動一次,每個方塊往那個方向推一格<br>推到一樣的數字會合成一個,分數就是合成的數字<br>${g2048Dur(m.T || total)}內分數最高的人獲勝!</div>`);
     } else if (m.e === 'go') {
       order = m.order;
       rng = towerRng(m.seed);
       reset();
       spawn(now); spawn(now);
       live = order.includes(me);
+      total = m.T;
       endAt = performance.now() + m.T * 1000;
       if (!live) C.overlay('<div class="small">👀 觀戰中</div>', 1500);
     } else if (m.e === 'p') {
@@ -8196,7 +8219,7 @@ function vG2048(V) {
     } else if (m.e === 'over') {
       live = false; clearTimeout(repT);
       const rk = Object.keys(m.sc).map(Number).sort((a, b) => m.sc[b] - m.sc[a]);
-      const nb = order.includes(me) && recBest('g2048', m.sc[me], true);
+      const nb = order.includes(me) && recBest('g2048', m.sc[me], true, total / 60);
       C.overlay(`<div class="big">${m.reason === 'time' ? '⏰' : '🏁'}</div><div>${m.reason === 'time' ? '時間到!' : '大家都玩完了!'}</div>
         <div class="ffinal">${rk.map((s, k) => `<span>${['🥇', '🥈', '🥉', '🎀'][k] || ''} ${pinfo(s).emoji} ${who(s)} <b>${m.sc[s]} 分</b>${m.mx[s] ? ` · 最大 ${m.mx[s]}` : ''}</span>`).join('')}</div>
         ${nb ? `<div class="small">🏆 你的新紀錄:${m.sc[me]} 分</div>` : ''}`);
@@ -9046,7 +9069,7 @@ BOTS.g2048 = (H, s, m, k) => { // 每隔一段時間加一次分數,越後面每
   const step = () => {
     if (H.bs[s] !== st || Date.now() > end) return;
     st.n++;
-    st.sc += Math.round((6 + st.n * 0.26) * (0.55 + Math.random() * 0.9) * k.sk);
+    st.sc += Math.round((6 + 40 * (1 - Math.exp(-st.n / 150))) * (0.55 + Math.random() * 0.9) * k.sk); // 越後面每步分數越高,但漸漸趨緩(時間可以選到 10 分鐘)
     let mx = 2; while (mx * 8 <= st.sc) mx *= 2;
     botSend(H, s, { e: 'p', sc: st.sc, mx });
     H.s.after(Math.round(rand(650, 1050) * k.spd), step);
