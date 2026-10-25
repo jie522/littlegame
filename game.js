@@ -73,7 +73,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.54';
+const APP_VERSION = '2026.11.55';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -530,8 +530,8 @@ const GAMES = [
     host: hSchulte, view: vSchulte, opts: schOpts, noCountdown: true,
   },
   {
-    id: 'tower', emoji: '🏗️', name: '高樓疊疊樂', tag: '反應+競速', color: '#2f8fe8', desc: '吊車放樓層,比誰蓋得最高!',
-    rules: ['大家同時開始,各自在自己的手機上蓋大樓', '吊車會左右擺動,擺到大樓正上方時點一下畫面,把這一層放下去', '對得剛剛好是「完美」!連續 3 次完美可以回一顆 ❤️', '歪太多會整層掉下去扣一顆 ❤️;3 顆愛心用完就停在那裡', '越高吊車擺得越快、大樓也會晃,100 秒內蓋最多層的人獲勝!'],
+    id: 'tower', emoji: '🏗️', name: '高樓疊疊樂', tag: '反應+競速', color: '#2f8fe8', desc: '吊車放樓層,完美連擊有加乘!',
+    rules: ['大家同時開始,各自在自己的手機上蓋大樓', '吊車會左右擺動,擺到大樓正上方時點一下畫面,把這一層放下去', '每蓋一層 10 分;對得剛剛好是「完美」,而且連續完美有加乘:×2、×3、×4,最多 ×5!', '連續 3 次完美可以回一顆 ❤️;沒對準加乘就歸零', '歪太多會整層掉下去扣一顆 ❤️;3 顆愛心用完就停在那裡', '越高吊車擺得越快、大樓也會晃,100 秒內分數最高的人獲勝!'],
     host: hTower, view: vTower, noCountdown: true,
   },
   {
@@ -713,7 +713,7 @@ function recList() { // [{g, label, text}]:有紀錄的遊戲
   one('color', '最快拍對', f('color', recSec));
   one('heart', '最快拍牌', f('heart', recSec));
   one('shaft', '最深', f('shaft', v => 'B' + v + ' 層'));
-  one('tower', '最高', f('tower', v => v + ' 層'));
+  one('tower', '最高', f('tower', v => v + ' 層' + (recGet('towerPts') ? ' · ' + recGet('towerPts') + ' 分' : '')));
   const g48 = G2048_MINS.map(n => [n, n === 2 ? Math.max(recGet('g2048', 2) || 0, recGet('g2048') || 0) || null : recGet('g2048', n)]).filter(x => x[1] != null); // 舊版固定 120 秒,它的紀錄算在 2 分鐘
   if (g48.length) { one('g2048', '最高分', g48.map(([n, v]) => n + ' 分鐘 ' + v + ' 分').join(' · ')); out[out.length - 1].v48 = Object.fromEntries(g48); }
   const sch = [3, 4, 5, 6, 7].map(n => [n, recGet('schulte', n)]).filter(x => x[1] != null);
@@ -7478,11 +7478,12 @@ function vSchulte(V) {
    每支手機自己算物理(網路慢也公平),只把「蓋到幾層、剩幾顆愛心」傳給房主
    座標:寬 360;地面 y = 0,往上是負的;第 k 層(0 是一樓大廳)佔 y = -(k+1)*BH ~ -k*BH
    ========================================================= */
-const TOWER = { T: 100, LIVES: 3, W: 360, BW: 104, BH: 50, PERF: 6, OK: 0.62, R: 330, AMP: 118, HOOK: 112 };
+const TOWER = { PTS: 10, T: 100, LIVES: 3, W: 360, BW: 104, BH: 50, PERF: 6, OK: 0.62, R: 330, AMP: 118, HOOK: 112 };
 const TOWER_COLORS = ['#ef4b4b', '#33b864', '#3b82f6', '#f5b301', '#8b5cf6', '#fb8c3a', '#14b8a6', '#ec5c9b'];
 /* Blender 算圖的樓層(tools/tower_scene.py):4 x 3 格,每格 384 x 168 像素 = 128 x 56 單位;0~7 樓層、8 一樓大廳、9 吊具
    樓層本體(BW x BH)在格子正中間;吊具的底(碰到樓層頂的地方)在格子底往上 3 單位 */
 const TOWER_IMG = loadImg('assets/tower_floors.webp');
+const towerMult = combo => Math.min(5, 1 + combo); // 連續完美的加乘:第 1 次 ×2、第 2 次 ×3…最多 ×5
 const towerPeriod = fl => Math.max(1.15, 2.5 - fl * 0.045); // 吊車擺一趟(來回)的秒數,越高越快
 function towerRng(a) { // 有種子的亂數:大家拿到一樣的樓層顏色順序
   return () => {
@@ -7496,14 +7497,14 @@ function towerRng(a) { // 有種子的亂數:大家拿到一樣的樓層顏色�
 function hTower(H) {
   let phase = 'idle';
   const ps = {};
-  H.players.forEach(s => { ps[s] = { fl: 0, lv: TOWER.LIVES, out: false }; });
+  H.players.forEach(s => { ps[s] = { fl: 0, pts: 0, lv: TOWER.LIVES, out: false }; });
   const allOut = () => H.active().every(s => ps[s].out);
   function end(reason) {
     if (phase === 'end') return;
     phase = 'end';
-    H.players.forEach(s => { H.scores[s] = ps[s].fl; });
+    H.players.forEach(s => { H.scores[s] = ps[s].pts; });
     H.bc({ t: 'score', scores: H.scores });
-    H.bc({ t: 'g', e: 'over', reason, fl: Object.fromEntries(H.players.map(s => [s, ps[s].fl])) });
+    H.bc({ t: 'g', e: 'over', reason, fl: Object.fromEntries(H.players.map(s => [s, ps[s].fl])), pts: Object.fromEntries(H.players.map(s => [s, ps[s].pts])) });
     H.s.after(4200, H.finish);
   }
   return {
@@ -7520,12 +7521,14 @@ function hTower(H) {
       if (phase !== 'play' || !p || p.out || m.e !== 'p') return;
       const fl = Math.max(0, Math.min(999, Math.floor(+m.fl) || 0));
       if (fl > p.fl + 1) return; // 一次最多多一層
+      const pts = Math.floor(+m.pts) || 0; // 分數:每層最多 10 x 5 分
+      if (pts >= p.pts && pts <= p.pts + TOWER.PTS * 5 * (fl - p.fl)) p.pts = pts;
       p.fl = Math.max(p.fl, fl);
       p.lv = Math.max(0, Math.min(TOWER.LIVES, Math.floor(+m.lv) || 0));
       p.out = p.lv <= 0;
-      H.scores[slot] = p.fl;
+      H.scores[slot] = p.pts;
       H.bc({ t: 'score', scores: H.scores });
-      H.bc({ t: 'g', e: 'p', s: slot, fl: p.fl, lv: p.lv, out: p.out });
+      H.bc({ t: 'g', e: 'p', s: slot, fl: p.fl, pts: p.pts, lv: p.lv, out: p.out });
       if (allOut()) H.s.after(1500, () => end('all'));
     },
     presence() { if (phase === 'play' && allOut()) end('all'); },
@@ -7548,12 +7551,13 @@ function towerEndless() {
   showBest();
   $('.twback', root).addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); home(); });
   const V = { root, pad: $('.pad', root), me: 0, send() {}, on: () => {} };
-  V.endless = fl => {
-    const nb = recBest('tower', fl, true);
+  V.endless = (fl, pts) => {
+    const nb = recBest('tower', fl, true), nbP = recBest('towerPts', pts, true);
     showBest();
-    if (nb) { SFX.win(); confetti(); }
+    if (nb || nbP) { SFX.win(); confetti(); }
     const ov = $('.tov', root);
-    ov.innerHTML = `<div class="big">${nb ? '🏆' : '🏚️'}</div><div>愛心用完了!</div><div class="small">這次蓋了 <b>${fl}</b> 層${nb ? ' · 新紀錄!' : ` · 最高 ${best()} 層`}</div>
+    ov.innerHTML = `<div class="big">${nb || nbP ? '🏆' : '🏚️'}</div><div>愛心用完了!</div>
+      <div class="small"><b>${pts}</b> 分${nbP ? '(新紀錄!)' : ` · 最高 ${recGet('towerPts') || 0} 分`}<br>蓋了 <b>${fl}</b> 層${nb ? '(新紀錄!)' : ` · 最高 ${best()} 層`}</div>
       <div class="twbtns"><button class="btn big green twagain"><span class="bi">🔁</span><span class="bt">再蓋一次</span></button></div>`;
     ov.classList.add('on');
     $('.twagain', ov).addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); start(); });
@@ -7575,6 +7579,7 @@ function vTower(V) {
   let live = false, out = false, order = [], endAt = 0, colors = [];
   let blocks = [], hang = null, nextAt = 0, falls = [], parts = [], pops = [];
   let fl = 0, lives = TOWER.LIVES, combo = 0, ph = 0, swT = 0, kickA = 0, kickT = 9, shake = 0, flash = 0;
+  let pts = 0, shownPts = 0, ptsPulse = 0, gold = 0, waves = [], bigs = []; // 分數、分數跳動、金色光暈、完美的光環、畫面中間的大字
   let WH = 640, camTop = -(640 - 90), camX = 0, lastSec = -1, now = 0;
   const who = s => (s === me ? '你' : esc(pinfo(s).name));
 
@@ -7591,6 +7596,7 @@ function vTower(V) {
   function reset() {
     blocks = [{ x: W / 2, c: -1 }];
     fl = 0; lives = TOWER.LIVES; combo = 0; ph = 0; swT = 0; kickA = 0; kickT = 9;
+    pts = 0; shownPts = 0; ptsPulse = 0; gold = 0; waves = []; bigs = [];
     hang = null; nextAt = 0; falls = []; parts = []; pops = []; out = false;
     camX = 0;
   }
@@ -7603,7 +7609,13 @@ function vTower(V) {
       parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - spd * 0.3, t: 0, life: 0.5 + Math.random() * 0.4, col, r: 2 + Math.random() * 3 });
     }
   }
-  const report = () => V.send({ e: 'p', fl, lv: lives });
+  function sparkle(x, y, n) { // 往上飄的金色星星
+    for (let i = 0; i < n; i++) {
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.4, v = 90 + Math.random() * 170;
+      parts.push({ x: x + (Math.random() - 0.5) * BW, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: 0, life: 0.8 + Math.random() * 0.6, col: Math.random() < 0.3 ? '#fff6c8' : '#ffd23f', r: 4 + Math.random() * 4, star: true, g: 60 });
+    }
+  }
+  const report = () => V.send({ e: 'p', fl, pts, lv: lives });
 
   function drop() {
     if (!live || !hang || hang.st !== 'swing') return;
@@ -7623,17 +7635,27 @@ function vTower(V) {
       burst(X + BW / 2, topY, 5, '#ffffffcc', 70);
       if (perfect) {
         combo++;
+        const mu = towerMult(combo), gain = TOWER.PTS * mu;
+        pts += gain; ptsPulse = 1;
         flash = 1;
-        burst(X, topY - BH / 2, 16, '#ffd84a', 190);
-        [784, 988, 1175].forEach((f, i) => beep(f, 0.1, 'triangle', 0.1, i * 0.05));
+        gold = Math.min(1, 0.4 + combo * 0.15);
+        shake = Math.max(shake, 0.1 + Math.min(combo, 5) * 0.03);
+        waves.push({ x: X, y: topY - BH / 2, t: 0, w: 1 + Math.min(combo, 5) * 0.25 }, { x: X, y: topY - BH / 2, t: -0.12, w: 0.7 });
+        burst(X, topY - BH / 2, 16 + Math.min(combo, 5) * 5, '#ffd84a', 190 + Math.min(combo, 5) * 25);
+        sparkle(X, topY - BH, 8 + Math.min(combo, 5) * 4);
+        const base = 784 * Math.pow(2, Math.min(combo - 1, 8) / 12); // 連續完美越來越高音
+        [1, 1.26, 1.5, 2].slice(0, combo >= 3 ? 4 : 3).forEach((f, i) => beep(base * f, 0.11, 'triangle', 0.1, i * 0.055));
         if (combo >= 3 && combo % 3 === 0 && lives < TOWER.LIVES) { lives++; pop('+❤️', X, topY - BH - 26, '#ff5d73'); }
-        pop(combo > 1 ? `完美 x${combo}!` : '完美!', X, topY - BH, '#ffd84a');
+        bigs.push({ text: mu > 1 ? `完美 ×${mu}` : '完美!', sub: '+' + gain, t: 0, mu });
+        buzz(combo >= 3 ? [30, 40, 50] : 30);
       } else {
+        if (combo >= 2) pop('連擊中斷', X, topY - BH - 22, '#c9d6ff');
         combo = 0;
+        pts += TOWER.PTS; ptsPulse = 0.5;
         beep(170, 0.09, 'square', 0.09);
-        if (ad < BW * 0.25) pop('好!', X, topY - BH, '#ffffff');
+        pop(ad < BW * 0.25 ? '好! +10' : '+10', X, topY - BH, '#ffffff');
       }
-      buzz(perfect ? 25 : 15);
+      if (!perfect) buzz(15);
     } else { // 歪太多:翻下去
       combo = 0;
       lives--;
@@ -7644,7 +7666,7 @@ function vTower(V) {
       pop('-❤️', hang.x, hang.y - 10, '#ff5d73');
       if (lives <= 0) {
         out = true; live = false;
-        if (V.endless) setTimeout(() => V.endless(fl), 900);
+        if (V.endless) setTimeout(() => V.endless(fl, pts), 900);
         else setTimeout(() => { if (out) C.overlay(`<div class="big">🏚️</div><div>愛心用完了!</div><div class="small">你蓋了 <b>${fl}</b> 層,等其他人蓋完…</div>`); }, 900);
       }
     }
@@ -7679,14 +7701,18 @@ function vTower(V) {
     }
     falls.forEach(f => { f.vy += 1500 * dt; f.x += f.vx * dt; f.y += f.vy * dt; f.rot += f.vr * dt; });
     falls = falls.filter(f => f.y - camTop < WH + 200);
-    parts.forEach(p => { p.t += dt; p.vy += 300 * dt; p.x += p.vx * dt; p.y += p.vy * dt; });
+    parts.forEach(p => { p.t += dt; p.vy += (p.g || 300) * dt; p.x += p.vx * dt; p.y += p.vy * dt; });
     parts = parts.filter(p => p.t < p.life);
     pops.forEach(p => { p.t += dt; });
     pops = pops.filter(p => p.t < 1.1);
+    waves.forEach(w => { w.t += dt; }); waves = waves.filter(w => w.t < 0.7);
+    bigs.forEach(b => { b.t += dt; }); bigs = bigs.filter(b => b.t < 1.15).slice(-2);
+    gold = Math.max(0, gold - dt * 1.1); ptsPulse = Math.max(0, ptsPulse - dt * 3);
+    shownPts += (pts - shownPts) * Math.min(1, dt * 9); if (Math.abs(pts - shownPts) < 0.5) shownPts = pts;
     if (live && endAt) {
       const left = Math.ceil((endAt - performance.now()) / 1000);
       if (left !== lastSec) { lastSec = left; if (left <= 5 && left > 0) beep(880, 0.06, 'sine', 0.08); }
-      if (left <= 0) { live = false; hang = null; C.overlay(`<div class="big">⏰</div><div>時間到!</div><div class="small">你蓋了 <b>${fl}</b> 層</div>`); }
+      if (left <= 0) { live = false; hang = null; C.overlay(`<div class="big">⏰</div><div>時間到!</div><div class="small"><b>${pts}</b> 分 · 蓋了 <b>${fl}</b> 層</div>`); }
     }
   }
 
@@ -7704,7 +7730,14 @@ function vTower(V) {
     const x = -BW / 2, y = -BH / 2;
     if (TOWER_IMG.complete && TOWER_IMG.naturalWidth) { // Blender 算圖的樓層
       sprite(c < 0 ? 8 : c, -64, y - 3);
-      if (glow) { ctx.fillStyle = `rgba(255,255,255,${glow * 0.75})`; C.rr(x, y, BW, BH, 5); }
+      if (glow) { // 完美:金色外框 + 一層金光
+        ctx.save();
+        ctx.shadowColor = '#ffd23f'; ctx.shadowBlur = 24 * glow;
+        ctx.strokeStyle = `rgba(255,214,64,${glow})`; ctx.lineWidth = 4;
+        ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x - 3, y - 2, BW + 6, BH + 2, 6); else ctx.rect(x - 3, y - 2, BW + 6, BH + 2); ctx.stroke();
+        ctx.restore();
+        ctx.fillStyle = `rgba(255,236,150,${glow * 0.55})`; C.rr(x, y, BW, BH, 5);
+      }
       ctx.restore();
       return;
     }
@@ -7817,7 +7850,23 @@ function vTower(V) {
         drawBlock(hang.x, hang.y, hang.c, hang.rot);
       } else drawCrane(hang);
     }
-    parts.forEach(p => { ctx.globalAlpha = 1 - p.t / p.life; ctx.fillStyle = p.col; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill(); });
+    waves.forEach(w => { // 完美的光環:從那一層往外擴散的金色橢圓
+      if (w.t < 0) return;
+      const k = w.t / 0.7, r = (30 + k * 210) * w.w;
+      ctx.globalAlpha = (1 - k) * 0.9;
+      ctx.strokeStyle = '#ffe066'; ctx.lineWidth = 7 * (1 - k) + 1;
+      ctx.beginPath(); ctx.ellipse(w.x, w.y, r * 1.25, r * 0.5, 0, 0, Math.PI * 2); ctx.stroke();
+    });
+    ctx.globalAlpha = 1;
+    parts.forEach(p => {
+      ctx.globalAlpha = 1 - p.t / p.life; ctx.fillStyle = p.col;
+      if (p.star) { // 四角星,一邊飄一邊轉
+        const r = p.r * (1 - 0.4 * p.t / p.life), a = p.t * 6;
+        ctx.beginPath();
+        for (let i = 0; i < 8; i++) { const rr = i % 2 ? r * 0.38 : r, aa = a + i * Math.PI / 4; ctx.lineTo(p.x + Math.cos(aa) * rr, p.y + Math.sin(aa) * rr); }
+        ctx.closePath(); ctx.fill();
+      } else { ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill(); }
+    });
     ctx.globalAlpha = 1;
     ctx.textAlign = 'center';
     pops.forEach(p => {
@@ -7829,10 +7878,55 @@ function vTower(V) {
     });
     ctx.globalAlpha = 1;
     ctx.restore();
-    // 上方的狀態:層數、時間、愛心
+    if (gold > 0 && combo >= 2) { // 連續完美:畫面四周泛金光
+      const vg = ctx.createRadialGradient(W / 2, WH / 2, Math.min(W, WH) * 0.35, W / 2, WH / 2, Math.max(W, WH) * 0.75);
+      vg.addColorStop(0, 'rgba(255,210,63,0)'); vg.addColorStop(1, `rgba(255,190,40,${gold * 0.55})`);
+      ctx.fillStyle = vg; ctx.fillRect(0, 0, W, WH);
+    }
+    bigs.forEach(b => { // 畫面中間的「完美 ×3」:彈出來、停一下、往上淡出
+      const t = b.t, sc = t < 0.14 ? 0.3 + t / 0.14 * 1.1 : t < 0.3 ? 1.4 - (t - 0.14) / 0.16 * 0.4 : 1;
+      ctx.save();
+      ctx.globalAlpha = t > 0.8 ? Math.max(0, 1 - (t - 0.8) / 0.35) : 1;
+      ctx.translate(W / 2, WH * 0.3 - Math.max(0, t - 0.6) * 50);
+      ctx.scale(sc, sc);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+      const cols = [null, ['#fff3a0', '#ffc400'], ['#ffe38a', '#ff9d1a'], ['#ffd0a0', '#ff6a3d'], ['#ffc2e0', '#ff3d8e'], ['#e6c8ff', '#9b5cff']][b.mu];
+      const g = ctx.createLinearGradient(0, -24, 0, 22);
+      g.addColorStop(0, cols[0]); g.addColorStop(1, cols[1]);
+      ctx.font = `900 ${b.mu >= 4 ? 46 : 40}px Fredoka, "Noto Sans TC", sans-serif`;
+      ctx.shadowColor = cols[1]; ctx.shadowBlur = 18;
+      ctx.lineWidth = 9; ctx.strokeStyle = ink; ctx.strokeText(b.text, 0, 0);
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = g; ctx.fillText(b.text, 0, 0);
+      ctx.font = '900 24px Fredoka, sans-serif';
+      ctx.lineWidth = 6; ctx.strokeText(b.sub, 0, 38); ctx.fillStyle = '#fff'; ctx.fillText(b.sub, 0, 38);
+      ctx.restore();
+    });
+    ctx.textBaseline = 'alphabetic';
+    // 上方的狀態:分數(跳動)、層數、加乘、時間、愛心
+    const ps = 1 + ptsPulse * 0.28;
+    ctx.save();
+    ctx.translate(12, 36); ctx.scale(ps, ps);
+    ctx.font = '900 28px Fredoka, "Noto Sans TC", sans-serif';
+    ctx.lineWidth = 6; ctx.strokeStyle = ink; ctx.fillStyle = ptsPulse > 0.5 ? '#ffe066' : '#fff'; ctx.textAlign = 'left'; ctx.lineJoin = 'round';
+    const ptxt = Math.round(shownPts) + ' 分';
+    ctx.strokeText(ptxt, 0, 0); ctx.fillText(ptxt, 0, 0);
+    ctx.restore();
+    ctx.font = '900 16px Fredoka, "Noto Sans TC", sans-serif';
+    ctx.lineWidth = 4; ctx.strokeStyle = ink; ctx.fillStyle = '#dfe9ff'; ctx.textAlign = 'left';
+    ctx.strokeText(fl + ' 層', 13, 58); ctx.fillText(fl + ' 層', 13, 58);
+    if (combo > 0) { // 下一層完美會拿到的加乘
+      const nm = towerMult(combo + 1), bx0 = 13 + ctx.measureText(fl + ' 層').width + 8, pulse = 1 + 0.08 * Math.sin(now * 10);
+      ctx.save();
+      ctx.translate(bx0 + 34, 52); ctx.scale(pulse, pulse);
+      ctx.fillStyle = combo >= 3 ? '#ff6a3d' : '#ffb400'; ctx.strokeStyle = ink; ctx.lineWidth = 2.5;
+      ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(-34, -11, 68, 22, 11); else ctx.rect(-34, -11, 68, 22); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = '900 13px Fredoka, "Noto Sans TC", sans-serif';
+      ctx.fillText(`下一層 ×${nm}`, 0, 5);
+      ctx.restore();
+    }
     ctx.font = '900 26px Fredoka, "Noto Sans TC", sans-serif';
-    ctx.lineWidth = 6; ctx.strokeStyle = ink; ctx.fillStyle = '#fff'; ctx.textAlign = 'left';
-    ctx.strokeText(fl + ' 層', 12, 34); ctx.fillText(fl + ' 層', 12, 34);
+    ctx.lineWidth = 6; ctx.strokeStyle = ink; ctx.fillStyle = '#fff';
     if (endAt) {
       const left = Math.max(0, Math.ceil((endAt - performance.now()) / 1000));
       ctx.textAlign = 'center'; ctx.font = '900 20px Fredoka, sans-serif';
@@ -7875,7 +7969,7 @@ function vTower(V) {
   V.on = m => {
     if (m.e === 'prep') {
       order = m.order;
-      C.overlay('<div class="big">🏗️</div><div><b>高樓疊疊樂</b></div><div class="small">吊車擺到大樓正上方時,點一下畫面放下去!<br>對得剛剛好是「完美」,連續 3 次完美回一顆 ❤️<br>歪太多會掉下去扣 ❤️,越高擺得越快</div>');
+      C.overlay('<div class="big">🏗️</div><div><b>高樓疊疊樂</b></div><div class="small">吊車擺到大樓正上方時,點一下畫面放下去!<br>每層 10 分,「完美」有加乘:連續完美 ×2、×3…最多 ×5<br>連續 3 次完美回一顆 ❤️;歪太多會掉下去扣 ❤️</div>');
     } else if (m.e === 'go') {
       order = m.order;
       const r = towerRng(m.seed);
@@ -7888,11 +7982,11 @@ function vTower(V) {
       if (!live) C.overlay('<div class="small">👀 觀戰中</div>', 1500);
     } else if (m.e === 'over') {
       live = false; hang = null;
-      const rk = Object.keys(m.fl).map(Number).sort((a, b) => m.fl[b] - m.fl[a]);
-      const nb = order.includes(me) && recBest('tower', m.fl[me], true);
+      const P = m.pts || m.fl, rk = Object.keys(m.fl).map(Number).sort((a, b) => P[b] - P[a] || m.fl[b] - m.fl[a]);
+      const nb = order.includes(me) && recBest('tower', m.fl[me], true), nbP = order.includes(me) && recBest('towerPts', P[me], true);
       C.overlay(`<div class="big">${m.reason === 'time' ? '⏰' : '🏁'}</div><div>${m.reason === 'time' ? '時間到!' : '大家都蓋完了!'}</div>
-        <div class="ffinal">${rk.map((s, k) => `<span>${['🥇', '🥈', '🥉', '🎀'][k] || ''} ${pinfo(s).emoji} ${who(s)} <b>${m.fl[s]} 層</b></span>`).join('')}</div>
-        ${nb ? `<div class="small">🏆 你的新紀錄:${m.fl[me]} 層</div>` : ''}`);
+        <div class="ffinal">${rk.map((s, k) => `<span>${['🥇', '🥈', '🥉', '🎀'][k] || ''} ${pinfo(s).emoji} ${who(s)} <b>${P[s]} 分</b> · ${m.fl[s]} 層</span>`).join('')}</div>
+        ${nbP || nb ? `<div class="small">🏆 你的新紀錄:${nbP ? P[me] + ' 分' : ''}${nbP && nb ? '、' : ''}${nb ? m.fl[me] + ' 層' : ''}</div>` : ''}`);
     }
   };
 }
@@ -9049,15 +9143,15 @@ BOTS.schulte = (H, s, m, k) => {
 
 BOTS.tower = (H, s, m, k) => { // 每隔一段時間「蓋好一層」或「掉一層」,越高越容易失手
   if (m.t !== 'g' || m.e !== 'go' || !m.order.includes(s)) return;
-  const st = H.bs[s] = { fl: 0, lv: TOWER.LIVES, combo: 0 }, end = Date.now() + m.T * 1000;
+  const st = H.bs[s] = { fl: 0, pts: 0, lv: TOWER.LIVES, combo: 0 }, end = Date.now() + m.T * 1000;
   const step = () => {
     if (H.bs[s] !== st || st.lv <= 0 || Date.now() > end) return;
     if (Math.random() < Math.min(0.5, (1 - k.sk) * 0.25 + st.fl * 0.007)) { st.lv--; st.combo = 0; }
     else {
       st.fl++;
-      if (Math.random() < 0.1 + k.sk * 0.35) { if (++st.combo % 3 === 0 && st.lv < TOWER.LIVES) st.lv++; } else st.combo = 0;
+      if (Math.random() < 0.1 + k.sk * 0.35) { if (++st.combo % 3 === 0 && st.lv < TOWER.LIVES) st.lv++; st.pts += TOWER.PTS * towerMult(st.combo); } else { st.combo = 0; st.pts += TOWER.PTS; }
     }
-    botSend(H, s, { e: 'p', fl: st.fl, lv: st.lv });
+    botSend(H, s, { e: 'p', fl: st.fl, pts: st.pts, lv: st.lv });
     H.s.after(Math.round(towerPeriod(st.fl) * 1000 * (0.5 + Math.random() * 0.5) * k.spd + 450), step);
   };
   H.s.after(rand(1200, 2200), step);
