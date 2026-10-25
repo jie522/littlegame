@@ -69,7 +69,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.44';
+const APP_VERSION = '2026.11.45';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -482,7 +482,7 @@ const GAMES = [
   },
   {
     id: 'morris', emoji: '⭕', name: '九子棋', tag: '益智', color: '#a0703f', desc: '連成三顆就能吃子',
-    rules: ['2 人對戰,每人 9 顆棋;房間超過 2 人時抽籤上場、其他人觀戰', '棋子顏色可以自己選(點自己卡片上的「換色」),先輪流把棋子放到交叉點上', '同一條線連成三顆(成三)就能吃掉對方一顆棋;已經成三的棋受保護,不能吃', '棋子都放完後,沿著線把棋子移到旁邊的空點;只剩 3 顆時可以飛到任何空點!', '對方剩 2 顆或被困住沒路走,你就贏了!'],
+    rules: ['2 人對戰,每人 9 顆棋;房間超過 2 人時抽籤上場、其他人觀戰', '棋子顏色可以自己選(點自己卡片上的「換色」),先輪流把棋子放到交叉點上', '同一條線連成三顆(成三)就能吃掉對方一顆棋;已經成三的棋受保護,不能吃', '棋子都放完後,沿著線把棋子移到旁邊的空點;只剩 3 顆時可以飛到任何空點!', '對方剩 2 顆或被困住沒路走,你就贏了!', '雙方連續走 20 步都沒有人吃子,或同一個局面出現 3 次,就是平手(飛行階段很容易僵持)'],
     host: hMorris, view: vMorris, noCountdown: true,
   },
   {
@@ -2459,12 +2459,13 @@ function hMorris(H) {
   const hand = {}, lost = {}, colors = {};
   fighters.forEach((s, k) => { hand[s] = 9; lost[s] = 0; colors[s] = k; }); // 預設:先紅後藍,之後各自可以改
   let live = false;
-  let turnI = 0, rm = false, last = null, over = false, idle = 0;
+  let turnI = 0, rm = false, last = null, over = false, idle = 0, rep = 1;
+  const seen = new Map(); // 走子階段的局面(棋盤 + 輪到誰)出現過幾次:同一局面第 3 次出現就平手
   const cnt = s => b.filter(x => x === s).length;
   const fly = s => hand[s] === 0 && cnt(s) === 3;
   const state = () => ({
     t: 'g', e: 'board', b, turn: fighters[turnI], fighters, hand, lost, colors,
-    cnt: Object.fromEntries(fighters.map(s => [s, cnt(s)])), rm, last, idle,
+    cnt: Object.fromEntries(fighters.map(s => [s, cnt(s)])), rm, last, idle, rep,
   });
   let wd = 0;
   const bc = () => {
@@ -2480,14 +2481,20 @@ function hMorris(H) {
     H.bc({ t: 'g', e: 'over', winner, reason });
     H.s.after(3000, H.finish);
   }
+  const MORRIS_IDLE = 20; // 雙方連續走 20 步都沒有吃子,平手
   function nextTurn() {
     const prev = fighters[turnI];
     turnI = 1 - turnI;
     const s = fighters[turnI];
+    if (idle === 0) seen.clear(); // 剛吃過子,以前的局面不可能再出現
+    const key = b.map(x => (x == null ? '.' : x)).join('') + turnI + hand[fighters[0]] + hand[fighters[1]];
+    rep = (seen.get(key) || 0) + 1;
+    seen.set(key, rep);
     bc();
     if (hand[s] === 0 && cnt(s) < 3) return end(prev, '對方只剩 2 顆棋了!');
     if (hand[s] === 0 && !fly(s) && !nmmMoves(b, s, false).length) return end(prev, '對方被困住,沒有棋可以走了!');
-    if (idle >= 60) end(null, '連續 60 步沒有吃子,平手!');
+    if (rep >= 3) end(null, '同一個局面出現 3 次,平手!');
+    else if (idle >= MORRIS_IDLE) end(null, `雙方連續走了 ${MORRIS_IDLE} 步都沒有吃子,平手!`);
   }
   function afterAction(i) {
     const o = fighters[1 - turnI];
@@ -2622,7 +2629,8 @@ function vMorris(V) {
     } else {
       msg = (fighting() ? '' : '👀 觀戰 · ') + (st.rm ? `${who(st.turn)} 成三了,正在選要吃哪顆…` : `輪到 ${pinfo(st.turn).emoji} ${who(st.turn)}…`);
     }
-    if (!over && st.idle >= 50) msg += ` · 再 ${60 - st.idle} 步平手`;
+    if (!over && st.rep === 2) msg += ' · 同局面再出現 1 次就平手';
+    else if (!over && st.idle >= 14) msg += ` · 再 ${20 - st.idle} 步沒吃子就平手`;
     chipsEl.innerHTML = `<span class="cs${myTurn() ? ' on' : ''}">${msg}</span>`;
   }
 
