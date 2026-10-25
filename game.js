@@ -73,7 +73,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.51';
+const APP_VERSION = '2026.11.52';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -536,7 +536,7 @@ const GAMES = [
   },
   {
     id: 'xqmj', emoji: '🀄', name: '象棋麻將', tag: '麻將+策略', color: '#c0392b', desc: '象棋牌打麻將,可吃可碰,一局接一局累積',
-    rules: ['2~4 人,32 張象棋牌(紅:帥 仕仕 相相 俥俥 傌傌 炮炮 兵x5;黑同理),每人 4 張,莊家 5 張;一局接一局打,分數累積,打到大家按「結算」為止,總分最高的人贏', '輪到你:摸一張牌,再打出一張;手上 5 張湊成「一組 + 一對」就能按「胡」', '一組 = 同色的 帥仕相、俥傌炮(黑:將士象、車馬砲),或同色的三張兵(卒);一對 = 兩張一模一樣的牌,或「帥 + 將」', '別人打出來的牌:湊成胡牌就能「胡」(放槍);手上有兩張同色的兵(卒)就能「碰」(誰打的都行);能和手上兩張湊成順子就能「吃」(只能吃上家打的)。優先順序:胡 > 碰 > 吃', '吃 / 碰之後那一組亮在桌上,手上剩 2 張,打出一張後剩 1 張,等著湊成一對', '想聽牌可以在打牌時按「聽牌」,之後電腦自動幫你摸打、遇到就胡;第一手就聽叫「現聽」', '台數:自摸 2、將帥聽令 2、紅一色 1、黑一色 1、兵卒一家 2、五兵合縱 5、五卒連橫 5、螞蟻雄兵(2 馬 + 3 兵)2、天胡 6、地胡 6、人胡 2、海底 1、聽牌 1、現聽 2', '胡牌得「底 1 + 台數」分;莊家胡牌連莊,否則換下一位當莊;牌山摸完沒人胡就流局(莊家連莊)。每局結束時可以按「結算」投票,過半數的真人同意就結束遊戲'],
+    rules: ['2~4 人,32 張象棋牌(紅:帥 仕仕 相相 俥俥 傌傌 炮炮 兵x5;黑同理),每人 4 張,莊家 5 張;一局接一局打,分數累積,打到大家按「結算」為止,總分最高的人贏', '輪到你:摸一張牌,再打出一張;手上 5 張湊成「一組 + 一對」就能按「胡」', '一組 = 同色的 帥仕相、俥傌炮(黑:將士象、車馬砲),或同色的三張兵(卒);一對 = 兩張一模一樣的牌,或「帥 + 將」', '別人打出來的牌:湊成胡牌就能「胡」(放槍);手上有兩張同色的兵(卒)就能「碰」(誰打的都行);能和手上兩張湊成順子就能「吃」(誰打的都能吃)。優先順序:胡 > 碰 > 吃', '吃 / 碰之後那一組亮在桌上,手上剩 2 張,打出一張後剩 1 張,等著湊成一對', '想聽牌可以在打牌時按「聽牌」,之後電腦自動幫你摸打、遇到就胡;第一手就聽叫「現聽」', '台數:自摸 2、將帥聽令 2、紅一色 1、黑一色 1、兵卒一家 2、五兵合縱 5、五卒連橫 5、螞蟻雄兵(2 馬 + 3 兵)2、天胡 6、地胡 6、人胡 2、海底 1、聽牌 1、現聽 2', '胡牌得「底 1 + 台數」分;莊家胡牌連莊,否則換下一位當莊;牌山摸完沒人胡就流局(莊家連莊)。每局結束時可以按「結算」投票,過半數的真人同意就結束遊戲'],
     host: hXqmj, view: vXqmj, noCountdown: true,
   },
   {
@@ -8154,7 +8154,7 @@ function vG2048(V) {
    牌:紅(帥 仕x2 相x2 俥x2 傌x2 炮x2 兵x5)和黑(將 士x2 象x2 車x2 馬x2 砲x2 卒x5),共 32 張
    每人 4 張(莊家 5 張);輪到你:摸一張、打一張;手上湊成「一組 + 一對」就胡牌
    組:同色的 帥仕相 / 俥傌炮(黑:將士象 / 車馬砲),或同色的三張兵(卒);對:兩張一模一樣的牌,或「帥 + 將」
-   別人打出的牌:可以胡(放槍);兵(卒)可以「碰」(任何人打的都行);順子可以「吃」(只能吃上家打的)
+   別人打出的牌:可以胡(放槍);兵(卒)可以「碰」(任何人打的都行);順子可以「吃」(誰打的都能吃)
    吃 / 碰 之後那一組亮在桌上,手上只剩 2 張,打一張後剩 1 張,等著湊成一對;優先順序 胡 > 碰 > 吃
    台數照「一副牌」的台數表,胡牌得 1 + 台數 分;莊家胡牌連莊,否則換下一位當莊
    ========================================================= */
@@ -8209,12 +8209,12 @@ function xqWaits(h, melds) { // 還差哪幾種牌就能胡(牌的種類編號)
     return id >= 0 && !!xqWin(h.concat(id), melds);
   });
 }
-function xqClaims(h, c, canChi) { // 別人打出 c,手上 h(4 張、還沒吃碰過)能不能碰 / 吃:回傳 { peng: [id, id] | null, chi: [id, id] | null }
+function xqClaims(h, c) { // 別人打出 c,手上 h(4 張、還沒吃碰過)能不能碰 / 吃:回傳 { peng: [id, id] | null, chi: [id, id] | null }
   const out = { peng: null, chi: null };
   if (h.length !== 4) return out;
   const k = xqK(c), col = xqC(c);
   if (k === 6) { const same = h.filter(i => xqC(i) === col && xqK(i) === 6); if (same.length >= 2) out.peng = same.slice(0, 2); }
-  if (canChi && k !== 6) {
+  if (k !== 6) {
     const fam = k <= 2 ? [0, 1, 2] : [3, 4, 5], need = fam.filter(x => x !== k), got = need.map(x => h.find(i => xqC(i) === col && xqK(i) === x));
     if (got.every(i => i != null)) out.chi = got;
   }
@@ -8275,7 +8275,8 @@ function hXqmj(H) {
     autoFn = () => {
       if (my !== tok || over || phase !== 'act') return;
       if (xqWin(hands[s], melds[s])) return doWin(s, null);
-      discardTile(s, xqPick(hands[s], 0, melds[s]), false);
+      // 聽牌之後不能換牌:沒胡就把剛摸進來的那張打掉(不能動手上聽牌的牌);沒聽牌的(逾時、離線)才挑最不要的打
+      discardTile(s, ready[s] && drewId != null && hands[s].includes(drewId) ? drewId : xqPick(hands[s], 0, melds[s]), false);
     };
     if (ready[s] || !H.online(s)) H.s.after(1300, autoFn); else H.s.after(TURN_MS, autoFn);
   }
@@ -8298,12 +8299,11 @@ function hXqmj(H) {
     last = { s, c };
     drewId = null;
     tok++;
-    const next = P[(P.indexOf(s) + 1) % n];
     claims = {};
     P.forEach(o => {
       if (o === s || !H.online(o)) return;
       const win = !!xqWin(hands[o].concat(c), melds[o]);
-      const cl = ready[o] || melds[o].length ? { peng: null, chi: null } : xqClaims(hands[o], c, o === next); // 聽牌之後不能換牌;已經吃碰過一組就不能再吃碰
+      const cl = ready[o] || melds[o].length ? { peng: null, chi: null } : xqClaims(hands[o], c); // 聽牌之後不能換牌;已經吃碰過一組就不能再吃碰
       if (win || cl.peng || cl.chi) claims[o] = { win, peng: cl.peng, chi: cl.chi };
     });
     elig = Object.keys(claims).map(Number);
