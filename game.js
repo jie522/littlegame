@@ -73,7 +73,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.55';
+const APP_VERSION = '2026.11.56';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -3169,6 +3169,10 @@ const BOMB_ITEMS = [
 const BOMB_CURSE = { slow: '🐢 變超慢', fast: '⚡ 停不下來', rev: '🔄 方向顛倒', auto: '💣 一直放炸彈', nob: '🚫 不能放炸彈' };
 const BOMB_DX = [0, 0, 1, 0, -1], BOMB_DY = [0, -1, 0, 1, 0]; // 方向:0 停 1 上 2 右 3 下 4 左
 const BOMB_SPAWN = [[1, 1], [13, 9], [13, 1], [1, 9]];
+/* Blender 算圖(tools/bomb_scene.py):斜俯視,每張小圖 1 格寬 x 1.5 格高(上面多 0.5 格給牆、木箱的頂),畫在 (格子左, 中心 y - 1)
+   assets/bomb_sprites.webp 4 x 3 格(128 x 192):0 石牆、1 外圍石牆、2 木箱、3 炸彈、4 紅炸彈、5~11 道具底座;assets/bomb_floor.webp 整片草地 */
+const BOMB_IMG = loadImg('assets/bomb_sprites.webp'), BOMB_FLOOR = loadImg('assets/bomb_floor.webp');
+const bombImgOk = () => BOMB_IMG.complete && BOMB_IMG.naturalWidth > 0;
 
 function hBomb(H) {
   const GW = BOMB.W, GH = BOMB.H, dt = BOMB.TICK / 1000;
@@ -3559,7 +3563,23 @@ function vBomb(V) {
   const fxs = [], crumbs = [];
   const deadAt = new Map();
 
+  const bspr = (i, x, y, k) => { // 第 i 張小圖,(x, y) 是這一格的中心,k 是縮放
+    k = k || 1;
+    ctx.drawImage(BOMB_IMG, (i % 4) * 128, Math.floor(i / 4) * 192, 128, 192, x - 0.5 * k, y - 1 * k, k, 1.5 * k);
+  };
   function drawCell(c, r, g, now) {
+    if (bombImgOk() && (g === '1' || g === '2')) {
+      bspr(g === '2' ? 2 : c === 0 || r === 0 || c === GW - 1 || r === GH - 1 ? 1 : 0, c + 0.5, r + 0.5);
+      return;
+    }
+    if (bombImgOk() && g >= 'a') {
+      const k = g.charCodeAt(0) - 97, it = BOMB_ITEMS[k], bob = Math.sin(now / 220 + c + r) * 0.04;
+      ctx.fillStyle = 'rgba(0,0,0,.2)';
+      ctx.beginPath(); ctx.ellipse(c + 0.5, r + 0.82, 0.3, 0.08, 0, 0, Math.PI * 2); ctx.fill();
+      bspr(5 + k, c + 0.5, r + 0.5 + bob);
+      C.emoji(it.e, c + 0.5, r + 0.33 + bob, 0.44);
+      return;
+    }
     if (g === '1') {
       const edge = c === 0 || r === 0 || c === GW - 1 || r === GH - 1;
       ctx.fillStyle = edge ? '#4a5470' : '#5d6984';
@@ -3594,6 +3614,18 @@ function vBomb(V) {
   }
   function drawBomb(x, y, fuse, now) {
     const hurry = fuse < 0.8, pul = 1 + Math.sin(now / (hurry ? 50 : 130)) * (hurry ? 0.1 : 0.05);
+    if (bombImgOk()) {
+      ctx.fillStyle = 'rgba(0,0,0,.25)';
+      ctx.beginPath(); ctx.ellipse(x, y + 0.3, 0.3 * pul, 0.08, 0, 0, Math.PI * 2); ctx.fill();
+      bspr(hurry && Math.floor(now / 90) % 2 ? 4 : 3, x, y + 0.08, pul);
+      const sp = 0.06 + Math.random() * 0.06, fx = x + 0.2 * pul, fy = y + 0.08 - 0.43 * pul; // 引信的火花
+      ctx.save();
+      ctx.shadowColor = '#ffb52e'; ctx.shadowBlur = 10;
+      ctx.fillStyle = Math.random() < 0.5 ? '#ffd23f' : '#ff7a1a';
+      ctx.beginPath(); ctx.arc(fx, fy, sp, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      return;
+    }
     const rad = 0.36 * pul;
     ctx.fillStyle = 'rgba(0,0,0,.25)';
     ctx.beginPath(); ctx.ellipse(x, y + 0.34, 0.3, 0.08, 0, 0, Math.PI * 2); ctx.fill();
@@ -3656,20 +3688,28 @@ function vBomb(V) {
   function draw() {
     C.size(GW);
     const now = performance.now();
-    for (let r = 0; r < GH; r++) for (let c = 0; c < GW; c++) {
+    if (BOMB_FLOOR.complete && BOMB_FLOOR.naturalWidth) ctx.drawImage(BOMB_FLOOR, 0, 0, GW, GH);
+    else for (let r = 0; r < GH; r++) for (let c = 0; c < GW; c++) {
       ctx.fillStyle = (r + c) % 2 ? '#86d36f' : '#7bc964';
       ctx.fillRect(c, r, 1.01, 1.01);
     }
     if (!st || !grid) return;
     const a = Math.min(1, (now - curAt) / BOMB.TICK);
+    const img = bombImgOk();
     for (let i = 0; i < grid.length; i++) {
       const g = grid[i];
       if (g === '1' || g === '2') {
         ctx.fillStyle = 'rgba(0,0,0,.16)';
-        ctx.fillRect(i % GW + 0.06, Math.floor(i / GW) + 0.9, 0.94, 0.14);
+        if (img) ctx.fillRect(i % GW + 0.08, Math.floor(i / GW) + 0.96, 0.96, 0.12);
+        else ctx.fillRect(i % GW + 0.06, Math.floor(i / GW) + 0.9, 0.94, 0.14);
       }
     }
-    for (let i = 0; i < grid.length; i++) if (grid[i] !== '0') drawCell(i % GW, Math.floor(i / GW), grid[i], now);
+    const later = []; // 有 Blender 圖時:牆、木箱、道具、炸彈、火、角色全部依 y 排好再畫
+    for (let i = 0; i < grid.length; i++) if (grid[i] !== '0') {
+      const c = i % GW, r = Math.floor(i / GW);
+      if (img) later.push([r + 0.5, () => drawCell(c, r, grid[i], now)]);
+      else drawCell(c, r, grid[i], now);
+    }
     for (let i = crumbs.length - 1; i >= 0; i--) { // 木箱被炸碎的碎片
       const k = crumbs[i], age = (now - k.t) / 450;
       if (age >= 1) { crumbs.splice(i, 1); continue; }
@@ -3681,19 +3721,21 @@ function vBomb(V) {
       }
       ctx.globalAlpha = 1;
     }
+    const put = (y, fn) => { if (img) later.push([y, fn]); else fn(); };
     st.bm.forEach(b => {
       const p = prevB.get(b[0]);
       const x = p ? p[1] + (b[1] - p[1]) * a : b[1], y = p ? p[2] + (b[2] - p[2]) * a : b[2];
-      drawBomb(x, y, b[3] / 10, now);
+      put(y, () => drawBomb(x, y, b[3] / 10, now));
     });
-    st.fl.forEach(([i, k]) => drawFlame(i, k, now));
+    st.fl.forEach(([i, k]) => put(Math.floor(i / GW) + 0.49, () => drawFlame(i, k, now)));
     st.ps.slice().sort((p, q) => p[2] - q[2]).forEach(q => {
       if (!q[3]) return;
       const p = prevP.get(q[0]);
       let x = q[1], y = q[2];
       if (p && Math.abs(p[1] - x) + Math.abs(p[2] - y) < 1.5) { x = p[1] + (x - p[1]) * a; y = p[2] + (y - p[2]) * a; }
-      drawPlayer(q, x, y, now);
+      put(y + 0.01, () => drawPlayer(q, x, y, now));
     });
+    later.sort((u, v) => u[0] - v[0]).forEach(d => d[1]());
     for (let i = fxs.length - 1; i >= 0; i--) {
       const f = fxs[i], age = now - f.t;
       if (age > f.life) { fxs.splice(i, 1); continue; }
