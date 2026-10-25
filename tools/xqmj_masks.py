@@ -6,20 +6,20 @@ from PIL import Image, ImageDraw, ImageFont, ImageFilter
 OUT = sys.argv[1]
 FONT = sys.argv[2] if len(sys.argv) > 2 else '/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc'
 NAMES = '帥仕相俥傌炮兵將士象車馬砲卒'
-W, H = 512, 676  # 牌面 1.0 x 1.32 的比例
+W, H = 1024, 1352  # 牌面 1.0 x 1.32 的比例
 os.makedirs(OUT, exist_ok=True)
-font = ImageFont.truetype(FONT, 310, index=0)
+font = ImageFont.truetype(FONT, 620, index=0)
 for i, ch in enumerate(NAMES):
     im = Image.new('L', (W, H), 0)
     d = ImageDraw.Draw(im)
     cx, cy = W / 2, H / 2
-    d.ellipse([cx - 222, cy - 222, cx + 222, cy + 222], outline=255, width=26)
-    d.text((cx, cy), ch, font=font, fill=255, anchor='mm', stroke_width=5, stroke_fill=255)
-    im.filter(ImageFilter.GaussianBlur(1.2)).save(os.path.join(OUT, f'mask_{i}.png'))
+    d.ellipse([cx - 444, cy - 444, cx + 444, cy + 444], outline=255, width=50)
+    d.text((cx, cy), ch, font=font, fill=255, anchor='mm', stroke_width=10, stroke_fill=255)
+    im.filter(ImageFilter.GaussianBlur(2.2)).save(os.path.join(OUT, f'mask_{i}.png'))
 im = Image.new('L', (W, H), 0)
 d = ImageDraw.Draw(im)
-d.rounded_rectangle([46, 66, W - 46, H - 66], radius=34, outline=255, width=22)
-d.ellipse([W / 2 - 74, H / 2 - 74, W / 2 + 74, H / 2 + 74], outline=255, width=18)
-d.ellipse([W / 2 - 28, H / 2 - 28, W / 2 + 28, H / 2 + 28], fill=255)
-im.filter(ImageFilter.GaussianBlur(1.2)).save(os.path.join(OUT, 'mask_back.png'))
+d.rounded_rectangle([92, 132, W - 92, H - 132], radius=68, outline=255, width=40)
+d.ellipse([W / 2 - 148, H / 2 - 148, W / 2 + 148, H / 2 + 148], outline=255, width=32)
+d.ellipse([W / 2 - 56, H / 2 - 56, W / 2 + 56, H / 2 + 56], fill=255)
+im.filter(ImageFilter.GaussianBlur(2.2)).save(os.path.join(OUT, 'mask_back.png'))
 print('ok')

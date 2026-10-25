@@ -2214,10 +2214,10 @@ button:disabled { cursor: not-allowed; }
 .xqt {
   --w: var(--tw, 60px);
   display: inline-block; flex: none; position: relative;
-  width: var(--w); height: calc(var(--w) * 1.437);
+  width: var(--w); height: calc(var(--w) * 1.4231);
   background: url(assets/xqmj_tiles.webp) no-repeat;
-  background-size: calc(var(--w) * 4.971) calc(var(--w) * 6.331);
-  background-position: calc(var(--w) * (var(--tx) * -1.2427 - .1214)) calc(var(--w) * (var(--ty) * -1.5827 - .0582));
+  background-size: calc(var(--w) * 4.9231) calc(var(--w) * 6.2769);
+  background-position: calc(var(--w) * (var(--tx) * -1.2308 - .1154)) calc(var(--w) * (var(--ty) * -1.5692 - .0615));
   filter: drop-shadow(0 3px 3px rgba(0,0,0,.5));
   transition: transform .15s, filter .15s;
 }
@@ -2227,7 +2227,7 @@ button:disabled { cursor: not-allowed; }
 .xqt.xs { --tw: 21px; filter: drop-shadow(0 1px 1px rgba(0,0,0,.5)); }
 .xqt.md { --tw: 48px; }
 .xqt.hit { filter: drop-shadow(0 0 7px #ffd23f) drop-shadow(0 0 3px #ffd23f); transform: translateY(-4px); }
-.xqhand { display: flex; justify-content: center; align-items: flex-end; gap: 5px; min-height: calc(var(--tw, 62px) * 1.437 + 18px); padding-top: 16px; touch-action: none; }
+.xqhand { display: flex; justify-content: center; align-items: flex-end; gap: 5px; min-height: calc(var(--tw, 62px) * 1.4231 + 18px); padding-top: 16px; touch-action: none; }
 .xqhand .xqt.tap { cursor: pointer; }
 .xqhand .xqt.sel { transform: translateY(-14px); filter: drop-shadow(0 0 7px #ffd23f) drop-shadow(0 6px 4px rgba(0,0,0,.45)); }
 .xqhand .xqt.drew { margin-left: 8px; }
@@ -2238,7 +2238,7 @@ button:disabled { cursor: not-allowed; }
 .xqempty { align-self: center; color: rgba(255,255,255,.5); font-size: .85rem; font-weight: 700; }
 .play-xqmj .cdop { flex-wrap: wrap; row-gap: 3px; }
 .play-xqmj .cdbacks { width: 64px; height: 24px; }
-.play-xqmj .cdbacks i { width: 14px; height: 21px; border: none; border-radius: 0; box-shadow: none; left: calc(var(--k) * 11px); background: url(assets/xqmj_tiles.webp) no-repeat; background-size: calc(14px * 4.971) calc(14px * 6.331); background-position: calc(14px * -2.6068) calc(14px * -4.8063); filter: drop-shadow(0 1px 1px rgba(0,0,0,.5)); }
+.play-xqmj .cdbacks i { width: 14px; height: 20px; border: none; border-radius: 0; box-shadow: none; left: calc(var(--k) * 11px); background: url(assets/xqmj_tiles.webp) no-repeat; background-size: calc(14px * 4.9231) calc(14px * 6.2769); background-position: calc(14px * -2.577) calc(14px * -4.7691); filter: drop-shadow(0 1px 1px rgba(0,0,0,.5)); }
 .xqmeta, .xqme { display: flex; align-items: center; justify-content: center; gap: 4px; flex: 0 0 100%; font-size: .75rem; font-weight: 800; }
 .xqmeta i, .xqme i { font-style: normal; font-family: "Fredoka", var(--font); color: #ffe066; font-size: .9rem; }
 .xqme { margin-bottom: 2px; }
@@ -2269,3 +2269,14 @@ button:disabled { cursor: not-allowed; }
 .xqhands > div { display: flex; align-items: center; gap: 8px; padding: 2px 6px; background: rgba(255,255,255,.05); border-radius: 8px; }
 .xqhands small { flex: 1; text-align: left; opacity: .85; font-size: .78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .xqhands span { display: flex; gap: 2px; }
+
+/* 象棋麻將:吃 / 碰、結算 */
+.xqt.flat { filter: drop-shadow(0 2px 2px rgba(0,0,0,.5)); }
+.xqmeld { display: inline-flex; gap: 1px; padding: 2px; margin-right: 6px; border-radius: 6px; background: rgba(255,214,90,.22); box-shadow: 0 0 0 1.5px rgba(255,214,90,.7); align-self: flex-end; }
+.xqmeld.on-seat { margin: 2px 0 0; padding: 1px; flex: 0 0 auto; }
+.xqcall { color: #3a1c00; }
+.xqnext { position: sticky; bottom: -12px; z-index: 2; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 5px; margin-top: 4px; padding: 8px 0 10px; background: rgba(8,20,13,.97); border-top: 2px dashed rgba(255,255,255,.2); }
+.xqnext small { font-size: .85rem; opacity: .9; }
+.play-xqmj .cdbtns .btn.xqchi, .play-xqmj .cdbtns .btn.xqpeng { padding: 8px 14px; }
+.xqmeta { flex-wrap: wrap; row-gap: 2px; }
+.play-xqmj .cdop { padding-left: 2px; padding-right: 2px; }
