@@ -8098,14 +8098,14 @@ function vG2048(V) {
   }
 
   // ---------- 操作:滑動手勢 + 鍵盤 ----------
-  let sx = 0, sy = 0, down = false;
+  let sx = 0, sy = 0, down = false; // 一次滑動只算一步:手指放開、再滑一次才會再推一格
   V.root.addEventListener('pointerdown', e => { if (e.target.closest('.exit')) return; e.preventDefault(); down = true; sx = e.clientX; sy = e.clientY; });
   V.root.addEventListener('pointermove', e => {
     if (!down) return;
     const dx = e.clientX - sx, dy = e.clientY - sy;
     if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+    down = false;
     move(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : 3) : (dy > 0 ? 2 : 0));
-    sx = e.clientX; sy = e.clientY;
   });
   const up = () => { down = false; };
   V.root.addEventListener('pointerup', up);
