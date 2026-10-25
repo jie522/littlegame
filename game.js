@@ -1029,7 +1029,7 @@ function statsView() {
 /* ---------- 雲端戰績(選用):把每位玩家的戰績存到 Firebase Realtime Database,任何人都能反查 ----------
    用法:建立一個 Realtime Database,把網址貼到 CLOUD_URL(例如 'https://xxx-default-rtdb.firebaseio.com'),
    規則設成 players 底下可讀寫。CLOUD_URL 空白時整個功能隱藏,遊戲照常運作。 */
-const CLOUD_URL = '';
+const CLOUD_URL = 'https://little-game-d8f72-default-rtdb.asia-southeast1.firebasedatabase.app';
 const myPid = () => { let id = store.get('pid', ''); if (!id) { id = Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4); store.set('pid', id); } return id; };
 function cloudSync() {
   if (!CLOUD_URL) return;
