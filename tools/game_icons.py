@@ -74,14 +74,27 @@ def tower_card(icon):
     return im.convert('RGB').resize((IW, IH), Image.LANCZOS)
 
 
-def xqmj_card(tiles):  # tiles:xqmj_tiles.png(4 x 4 格,每格 256 x 326;牌的範圍 x 25..231、y 12..308)
+def xqmj_bbox(tiles):  # 牌在每一格裡的範圍(所有格子取聯集)和格子大小;game.js 旁邊的 CSS 也要用同一組數字
+    cw, ch = tiles.width // 4, tiles.height // 4
+    a = np.array(tiles)[:, :, 3] > 60
+    x0 = y0 = 10 ** 9; x1 = y1 = 0
+    for i in range(16):
+        c, r = i % 4, i // 4
+        yy, xx = np.where(a[r * ch:(r + 1) * ch, c * cw:(c + 1) * cw])
+        x0, x1, y0, y1 = min(x0, xx.min()), max(x1, xx.max() + 1), min(y0, yy.min()), max(y1, yy.max() + 1)
+    return cw, ch, x0, x1, y0, y1
+
+
+def xqmj_card(tiles):  # tiles:xqmj_tiles.png(4 x 4 格)
     im, S = card_bg([255, 232, 150], [255, 188, 84],
                     [(.1, .2, 20, '#ffffffee'), (.9, .26, 24, '#ffffffff'), (.86, .82, 14, '#fff6c8ff'), (.14, .78, 16, '#ffffffcc'), (.5, .07, 10, '#ffffffbb')],
                     [(.2, .4, .26, .45), (.74, .5, .8, .45)])
     w, h = im.size
+    cw, ch, x0, x1, y0, y1 = xqmj_bbox(tiles)
+    print('xqmj tiles bbox', cw, ch, x0, x1, y0, y1)
     def tile(i):
         c, r = i % 4, i // 4
-        return tiles.crop((c * 256 + 25, r * 326 + 12, c * 256 + 231, r * 326 + 308))
+        return tiles.crop((c * cw + x0, r * ch + y0, c * cw + x1, r * ch + y1))
     # 三張牌排成扇形:黑將(左)、兵(右)在後面,紅帥在正中間最大
     for i, ang, th, cx, cy in [(7, 14, 0.62, 0.30, 0.52), (6, -14, 0.62, 0.70, 0.52), (0, 0, 0.8, 0.5, 0.5)]:
         t = tile(i)
