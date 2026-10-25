@@ -69,7 +69,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.46';
+const APP_VERSION = '2026.11.47';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -346,7 +346,7 @@ function hostSendTo(slot, m) { // 只傳給一位玩家(例如手牌,別人看�
   const c = NET.conns.get(slot);
   if (c && c.open) { try { c.send(m); } catch (e) { /* ignore */ } }
 }
-const TURN_GAMES = ['chess', 'morris', 'checkers', 'big2', 'seven', 'heart', 'memory'];
+const TURN_GAMES = ['chess', 'morris', 'checkers', 'big2', 'seven', 'heart', 'memory', 'xqmj'];
 function sendInput(m) {
   if (!navigator.vibrate && TURN_GAMES.includes(NET.curG)) iosHaptic(); // iPhone:自己出手的當下震一下(這時候 iOS 才讓網頁觸發觸覺回饋)
   if (NET.role === 'host') queueMicrotask(() => hostInput(0, m));
@@ -530,6 +530,11 @@ const GAMES = [
     rules: ['大家同時開始,各自在自己的手機上蓋大樓', '吊車會左右擺動,擺到大樓正上方時點一下畫面,把這一層放下去', '對得剛剛好是「完美」!連續 3 次完美可以回一顆 ❤️', '歪太多會整層掉下去扣一顆 ❤️;3 顆愛心用完就停在那裡', '越高吊車擺得越快、大樓也會晃,100 秒內蓋最多層的人獲勝!'],
     host: hTower, view: vTower, noCountdown: true,
   },
+  {
+    id: 'xqmj', emoji: '🀄', name: '象棋麻將', tag: '麻將+策略', color: '#c0392b', desc: '象棋牌打麻將,打 4 局累積分數',
+    rules: ['2~4 人,32 張象棋牌(紅:帥 仕仕 相相 俥俥 傌傌 炮炮 兵x5;黑同理),每人 4 張,莊家 5 張,打 4 局,分數累積,總分最高的人贏', '輪到你:摸一張牌,再打出一張;手上 5 張湊成「一組 + 一對」就能按「胡」', '一組 = 同色的 帥仕相、俥傌炮(黑:將士象、車馬砲),或同色的三張兵(卒);一對 = 兩張一模一樣的牌,或「帥 + 將」', '別人打出來的牌如果剛好讓你胡牌,也可以胡(放槍);多人同時胡,離放槍的人最近的先胡', '想聽牌可以在打牌時按「聽牌」,之後電腦自動幫你摸打、遇到就胡;第一手就聽叫「現聽」', '台數:自摸 2、將帥聽令 2、紅一色 1、黑一色 1、兵卒一家 2、五兵合縱 5、五卒連橫 5、螞蟻雄兵(2 馬 + 3 兵)2、天胡 6、地胡 6、人胡 2、海底 1、聽牌 1、現聽 2', '胡牌得「底 1 + 台數」分;牌山摸完沒人胡就流局'],
+    host: hXqmj, view: vXqmj, noCountdown: true,
+  },
 ];
 const GAME = Object.fromEntries(GAMES.map(g => [g.id, g]));
 
@@ -673,10 +678,10 @@ const GAME_CATS = { // 一個遊戲可以在好幾個分類裡
   math: ['puzzle'], memory: ['puzzle'], flood: ['puzzle'],
   chess: ['board'], morris: ['board'], checkers: ['board'],
   big2: ['card'], seven: ['card'],
-  bomb: ['action'], parking: ['action'], tower: ['reaction', 'action'],
+  bomb: ['action'], parking: ['action'], tower: ['reaction', 'action'], xqmj: ['card', 'board'],
 };
 /* 遊戲卡片的圖示:assets/game_icons.webp 是 4 x 4 的素材圖(tools/game_icons.py),順序要和這裡一樣 */
-const GAME_ICON = ['reaction', 'math', 'color', 'memory', 'chess', 'shaft', 'morris', 'heart', 'bomb', 'checkers', 'flood', 'parking', 'big2', 'seven', 'schulte', 'tower'];
+const GAME_ICON = ['reaction', 'math', 'color', 'memory', 'chess', 'shaft', 'morris', 'heart', 'bomb', 'checkers', 'flood', 'parking', 'big2', 'seven', 'schulte', 'tower', 'xqmj'];
 const inCat = (g, c) => c === 'all' || (GAME_CATS[g.id] || []).includes(c);
 
 /* ---------- 個人最佳紀錄(存在這支手機裡):反應類遊戲要記「最快幾秒」 ---------- */
@@ -7765,6 +7770,319 @@ function vTower(V) {
 }
 
 /* =========================================================
+   象棋麻將 🀄(2~4 人,32 張象棋牌,打 4 局累積分數)
+   牌:紅(帥 仕x2 相x2 俥x2 傌x2 炮x2 兵x5)和黑(將 士x2 象x2 車x2 馬x2 砲x2 卒x5),共 32 張
+   每人 4 張(莊家 5 張);輪到你:摸一張、打一張;湊成「一組 + 一對」就胡牌
+   組:同色的 帥仕相 / 俥傌炮(黑:將士象 / 車馬砲),或同色的三張兵(卒);對:兩張一模一樣的牌,或「帥 + 將」
+   別人打出的牌也可以胡(放槍);台數照「一副牌」的台數表,胡牌得 1 + 台數 分
+   ========================================================= */
+const XQ_NAMES = [['帥', '仕', '相', '俥', '傌', '炮', '兵'], ['將', '士', '象', '車', '馬', '砲', '卒']];
+const XQ_CNT = [1, 2, 2, 2, 2, 2, 5];
+const XQ_TILES = []; // id 0..31:先紅後黑,每種依序排
+[0, 1].forEach(c => XQ_CNT.forEach((n, k) => { for (let i = 0; i < n; i++) XQ_TILES.push({ c, k }); }));
+const XQ_KEYS = Array.from({ length: 14 }, (_, i) => i); // 牌的種類 = 顏色 * 7 + 種類
+const xqC = id => XQ_TILES[id].c, xqK = id => XQ_TILES[id].k;
+const xqFace = id => xqC(id) * 7 + xqK(id); // 也是 assets/xqmj_tiles.webp 裡的格子編號(14 是牌背)
+const xqName = id => XQ_NAMES[xqC(id)][xqK(id)];
+const xqTile = (id, cls, css) => { // 一張牌(id 是 null 就是牌背)
+  const f = id == null ? 14 : xqFace(id);
+  return `<span class="xqt${cls ? ' ' + cls : ''}"${id != null ? ` data-c="${id}"` : ''} style="--tx:${f % 4};--ty:${Math.floor(f / 4)}${css ? ';' + css : ''}"></span>`;
+};
+function xqIsSet(a, b, c) { // 一組:同色的 帥仕相 / 俥傌炮,或同色的三張兵(卒)
+  if (xqC(a) !== xqC(b) || xqC(b) !== xqC(c)) return false;
+  const k = [xqK(a), xqK(b), xqK(c)].sort((x, y) => x - y).join('');
+  return k === '012' || k === '345' || k === '666';
+}
+const xqIsPair = (a, b) => xqK(a) === xqK(b) && (xqC(a) === xqC(b) || xqK(a) === 0); // 一對:一模一樣的兩張,或「帥 + 將」
+function xqFans(set, pair) { // 牌型本身的台數(不含自摸、天胡這些要看情況的)
+  const all = set.concat(pair), f = [], reds = all.filter(i => xqC(i) === 0).length;
+  if (all.every(i => xqK(i) === 6 && xqC(i) === 0)) f.push(['五兵合縱', 5]);
+  else if (all.every(i => xqK(i) === 6 && xqC(i) === 1)) f.push(['五卒連橫', 5]);
+  else if (all.every(i => xqK(i) === 6)) f.push(['兵卒一家', 2]);
+  if (xqK(pair[0]) === 0) f.push(['將帥聽令', 2]);
+  if (xqK(pair[0]) === 4 && xqK(set[0]) === 6) f.push(['螞蟻雄兵', 2]);
+  if (reds === 5) f.push(['紅一色', 1]); else if (reds === 0) f.push(['黑一色', 1]);
+  return f;
+}
+function xqWin(h) { // 5 張牌能不能胡;能的話回傳台數最高的拆法 { set, pair, fans, tai }
+  if (h.length !== 5) return null;
+  let best = null;
+  for (let i = 0; i < 5; i++) for (let j = i + 1; j < 5; j++) for (let k = j + 1; k < 5; k++) {
+    if (!xqIsSet(h[i], h[j], h[k])) continue;
+    const rest = h.filter((_, x) => x !== i && x !== j && x !== k);
+    if (!xqIsPair(rest[0], rest[1])) continue;
+    const set = [h[i], h[j], h[k]], fans = xqFans(set, rest), tai = fans.reduce((t, f) => t + f[1], 0);
+    if (!best || tai > best.tai) best = { set, pair: rest, fans, tai };
+  }
+  return best;
+}
+function xqWaits(h) { // 4 張牌還差哪幾種牌就能胡(牌的種類編號)
+  return XQ_KEYS.filter(key => {
+    const id = XQ_TILES.findIndex((t, i) => t.c * 7 + t.k === key && !h.includes(i));
+    return id >= 0 && !!xqWin(h.concat(id));
+  });
+}
+function xqShape(h) { // 還沒聽牌時,手上的牌「搭」得好不好:對子、同一組的兩張都加分
+  let sc = 0;
+  for (let i = 0; i < h.length; i++) for (let j = i + 1; j < h.length; j++) {
+    const a = h[i], b = h[j];
+    if (xqIsPair(a, b)) sc += 3;
+    else if (xqC(a) === xqC(b) && xqK(a) !== xqK(b) && ((xqK(a) <= 2 && xqK(b) <= 2) || (xqK(a) >= 3 && xqK(a) <= 5 && xqK(b) >= 3 && xqK(b) <= 5))) sc += 2;
+    else if (xqC(a) === xqC(b) && xqK(a) === 6 && xqK(b) === 6) sc += 2;
+  }
+  return sc;
+}
+function xqPick(h, noise) { // 5 張牌要打哪一張:打完聽得越多越好;還沒聽就留搭得好的
+  if (noise && Math.random() < noise * 0.6) return pick(h);
+  let best = null;
+  h.forEach((c, i) => {
+    const r = h.filter((_, x) => x !== i), sc = xqWaits(r).length * 10 + xqShape(r) + Math.random() * 0.5;
+    if (!best || sc > best.sc) best = { sc, c };
+  });
+  return best.c;
+}
+
+function hXqmj(H) {
+  const P = H.players.slice(), n = P.length, R = 4, TURN_MS = 25000, CLAIM_MS = 7000;
+  const tot = {}, hands = {}, drawn = {}, ready = {}, discN = {};
+  P.forEach(s => { tot[s] = 0; hands[s] = []; });
+  let rd = 0, dealerI = -1, wall = [], disc = [], turnI = 0, phase = 'idle', last = null, tok = 0, ctok = 0, elig = [], resp = {}, drewId = null, over = false, autoFn = null;
+  const syncScores = () => { P.forEach(s => { H.scores[s] = tot[s]; }); H.bc({ t: 'score', scores: H.scores }); };
+  const priv = s => H.to(s, { t: 'g', e: 'hand', hand: hands[s].slice(), drew: s === P[turnI] && phase === 'act' ? drewId : null });
+  const pub = () => H.bc({
+    t: 'g', e: 'st', rd, R, dealer: P[dealerI], order: P, counts: Object.fromEntries(P.map(s => [s, hands[s].length])), wall: wall.length,
+    turn: P[turnI], phase, disc, last, elig, ready: { ...ready }, dn: { ...discN }, tot: { ...tot },
+  });
+
+  function startRound() {
+    rd++;
+    dealerI = (rd - 1) % n;
+    wall = shuffle([...Array(32).keys()]);
+    disc = []; last = null; elig = []; resp = {}; drewId = null; phase = 'deal';
+    P.forEach(s => { hands[s] = []; drawn[s] = 0; ready[s] = 0; discN[s] = 0; for (let i = 0; i < 4; i++) hands[s].push(wall.pop()); });
+    hands[P[dealerI]].push(wall.pop()); // 莊家多一張,第一手直接打(或直接天胡)
+    turnI = dealerI;
+    H.bc({ t: 'g', e: 'deal', rd, R, dealer: P[dealerI], order: P });
+    P.forEach(priv);
+    const my = ++tok;
+    H.s.after(1900, () => { if (my === tok && !over) beginAct(); });
+  }
+  function beginAct() {
+    const s = P[turnI], my = ++tok;
+    phase = 'act';
+    pub();
+    P.forEach(priv);
+    autoFn = () => {
+      if (my !== tok || over || phase !== 'act') return;
+      if (xqWin(hands[s])) return doWin(s, null);
+      discardTile(s, xqPick(hands[s], 0), false);
+    };
+    if (ready[s] || !H.online(s)) H.s.after(1300, autoFn); else H.s.after(TURN_MS, autoFn);
+  }
+  function nextTurn() {
+    turnI = (turnI + 1) % n;
+    const s = P[turnI];
+    if (!wall.length) return drawRound();
+    drewId = wall.pop();
+    hands[s].push(drewId);
+    drawn[s]++;
+    beginAct();
+  }
+  function discardTile(s, c, wantReady) {
+    const h = hands[s], i = h.indexOf(c);
+    if (i < 0) return;
+    h.splice(i, 1);
+    if (wantReady && !ready[s] && xqWaits(h).length) ready[s] = discN[s] === 0 ? 2 : 1; // 第一手就聽 = 現聽(2 台),之後才聽 = 聽牌(1 台)
+    discN[s]++;
+    disc.push([s, c]);
+    last = { s, c };
+    drewId = null;
+    tok++;
+    elig = P.filter(o => o !== s && H.online(o) && !!xqWin(hands[o].concat(c)));
+    resp = {};
+    phase = 'claim';
+    pub();
+    P.forEach(priv);
+    if (!elig.length) { const my = ++ctok; return H.s.after(700, () => { if (my === ctok && phase === 'claim') nextTurn(); }); }
+    const my = ++ctok;
+    elig.filter(o => ready[o]).forEach(o => claimResp(o, true)); // 聽牌之後自動胡
+    if (phase === 'claim') H.s.after(CLAIM_MS, () => { if (my === ctok) resolveClaim(); });
+  }
+  function claimResp(o, yes) {
+    if (phase !== 'claim' || !elig.includes(o) || o in resp) return;
+    resp[o] = !!yes;
+    if (elig.every(x => x in resp)) H.s.after(300, resolveClaim);
+  }
+  function resolveClaim() {
+    if (phase !== 'claim' || over) return;
+    ctok++;
+    const from = P.indexOf(last.s);
+    for (let k = 1; k < n; k++) { const o = P[(from + k) % n]; if (resp[o] && elig.includes(o)) return doWin(o, last.s); } // 同時有人胡,離放槍的人最近的先胡
+    nextTurn();
+  }
+  function reveal() { return Object.fromEntries(P.map(s => [s, hands[s].slice()])); }
+  function doWin(w, from) {
+    phase = 'end'; tok++; ctok++;
+    const tsumo = from == null, hand = tsumo ? hands[w].slice() : hands[w].concat(last.c), res = xqWin(hand), fans = res.fans.slice();
+    const dealer = P[dealerI], isDealer = w === dealer;
+    if (tsumo) {
+      if (isDealer && drawn[w] === 0) fans.push(['天胡', 6]);
+      else if (!isDealer && drawn[w] === 1) fans.push(['地胡', 6]);
+      else fans.push(['自摸', 2]);
+      if (wall.length === 0) fans.push(['海底', 1]);
+    } else if (!isDealer && drawn[w] === 0) fans.push(['人胡', 2]);
+    if (ready[w] === 2) fans.push(['現聽', 2]); else if (ready[w] === 1) fans.push(['聽牌', 1]);
+    const tai = fans.reduce((t, f) => t + f[1], 0), pts = 1 + tai;
+    tot[w] += pts;
+    syncScores();
+    const hs = reveal();
+    hs[w] = hand;
+    H.bc({ t: 'g', e: 'win', rd, R, w, from, tsumo, tile: tsumo ? null : last.c, hand, set: res.set, pair: res.pair, fans, tai, pts, tot: { ...tot }, hands: hs, order: P, dealer, last: rd >= R });
+    H.s.after(8000, endRound);
+  }
+  function drawRound() {
+    phase = 'end'; tok++; ctok++;
+    H.bc({ t: 'g', e: 'draw', rd, R, tot: { ...tot }, hands: reveal(), order: P, last: rd >= R });
+    H.s.after(5000, endRound);
+  }
+  function endRound() { if (over) return; if (rd >= R) { over = true; H.finish(); } else startRound(); }
+
+  return {
+    start() { startRound(); },
+    input(slot, m) {
+      if (over || !m) return;
+      if (phase === 'act' && slot === P[turnI]) {
+        if (m.e === 'win') { if (xqWin(hands[slot])) doWin(slot, null); return; }
+        if (m.e === 'discard' && !ready[slot]) { const c = +m.c; if (hands[slot].includes(c)) discardTile(slot, c, !!m.ready); }
+      } else if (phase === 'claim') {
+        if (m.e === 'ron') claimResp(slot, true); else if (m.e === 'pass') claimResp(slot, false);
+      }
+    },
+    presence() {
+      if (over) return;
+      if (P.filter(H.online).length < 2) { over = true; tok++; ctok++; H.bc({ t: 'g', e: 'abort' }); H.s.after(1500, H.finish); return; }
+      if (phase === 'claim') elig.filter(o => !H.online(o)).forEach(o => claimResp(o, false));
+      else if (phase === 'act' && !H.online(P[turnI]) && autoFn) H.s.after(800, autoFn);
+    },
+  };
+}
+
+function vXqmj(V) {
+  const me = V.me, T = cdTable(V);
+  let st = null, hand = [], drew = null, sel = null, replied = false, claimKey = '';
+  T.btns.innerHTML = `<button class="btn white sm xqpass">過</button><button class="btn blue sm xqready">聽牌</button><button class="btn green sm xqdiscard">打出這張</button><button class="btn red sm xqwin">胡!</button>`;
+  const passB = $('.xqpass', T.btns), readyB = $('.xqready', T.btns), discB = $('.xqdiscard', T.btns), winB = $('.xqwin', T.btns);
+  const who = s => (s === me ? '你' : esc(pinfo(s).name));
+  const myAct = () => st && st.phase === 'act' && st.turn === me;
+  const claimMe = () => st && st.phase === 'claim' && st.elig.includes(me) && !replied;
+  const idle = () => { [passB, readyB, discB, winB].forEach(b => { b.style.display = 'none'; }); T.info.innerHTML = ''; V.root.classList.remove('myturn'); }; // 局與局之間:按鈕收起來
+
+  function render() {
+    if (!st) return;
+    const act = myAct(), claim = claimMe(), amReady = st.ready[me] > 0, win = act ? xqWin(hand) : null;
+    const w = T.hand.clientWidth || 340, cnt = Math.max(hand.length, 4);
+    const tw = Math.max(50, Math.min(76, Math.floor((w - 12 - (cnt - 1) * 5) / cnt)));
+    const base = hand.filter(c => c !== drew).sort((a, b) => xqFace(a) - xqFace(b));
+    const list = drew != null && hand.includes(drew) ? [...base, drew] : base;
+    T.hand.innerHTML = `<div class="xqhand">${list.map(c => xqTile(c, (sel === c ? 'sel ' : '') + (c === drew ? 'drew ' : '') + (act && !amReady ? 'tap' : ''), `--tw:${tw}px`)).join('')}</div>`;
+    discB.style.display = act && !amReady ? '' : 'none';
+    discB.disabled = sel == null;
+    const canReady = act && !amReady && sel != null && xqWaits(hand.filter(c => c !== sel)).length > 0;
+    readyB.style.display = canReady ? '' : 'none';
+    readyB.textContent = st.dn[me] === 0 ? '現聽 +2台' : '聽牌 +1台';
+    winB.style.display = win || claim ? '' : 'none';
+    winB.classList.toggle('pulse', !!(win || claim));
+    passB.style.display = claim ? '' : 'none';
+    const dealer = st.dealer === me ? '<em class="xqdlr">莊</em>' : '', rdy = amReady ? `<em class="xqrdy">${st.ready[me] === 2 ? '現聽' : '聽牌'}</em>` : '';
+    let msg;
+    if (claim) msg = `<b class="cdyou">${who(st.last.s)} 打出 ${xqName(st.last.c)},你可以胡!</b>`;
+    else if (act) msg = win ? `<b class="cdyou">胡牌了!${win.fans.map(f => f[0]).join('、') || '平胡'}</b>` : amReady ? '聽牌中:自動摸打…' : `<b class="cdyou">輪到你!</b>選一張打出去${sel != null && canReady ? '(這樣打就能聽牌)' : ''}`;
+    else if (st.phase === 'claim') msg = `${who(st.last.s)} 打出 <b>${xqName(st.last.c)}</b>…`;
+    else msg = `等 ${esc(pinfo(st.turn).name)} 出牌…`;
+    T.info.innerHTML = `<span class="xqme">${dealer}${rdy}<i>${st.tot[me]} 分</i></span>${msg}`;
+    V.root.classList.toggle('myturn', !!(act || claim));
+  }
+  function renderBoard() {
+    T.seats(st.order, me, st.counts, st.phase === 'act' ? st.turn : null, s => `<span class="xqmeta"><i>${st.tot[s]} 分</i>${st.dealer === s ? '<em class="xqdlr">莊</em>' : ''}${st.ready[s] ? `<em class="xqrdy">${st.ready[s] === 2 ? '現聽' : '聽牌'}</em>` : ''}</span>`);
+    T.mid.innerHTML = `<div class="xqhead">第 <b>${st.rd}</b> / ${st.R} 局 · 牌山還有 <b>${st.wall}</b> 張</div>
+      <div class="xqpool">${st.disc.length ? st.disc.map(([s, c], i) => xqTile(c, 'sm' + (i === st.disc.length - 1 ? ' last' : ''), `--pc:${pinfo(s).color}`)).join('') : '<span class="xqempty">還沒有人打牌</span>'}</div>
+      ${st.last ? `<div class="cdwho">${pinfo(st.last.s).emoji} ${who(st.last.s)} 打出 <b>${xqName(st.last.c)}</b></div>` : ''}`;
+  }
+  T.hand.addEventListener('pointerdown', e => {
+    const k = e.target.closest('.xqt');
+    if (!k || !myAct() || st.ready[me]) return;
+    const c = +k.dataset.c;
+    sel = sel === c ? null : c;
+    SFX.tap(); render();
+  });
+  const sendDiscard = rdy => {
+    if (!myAct() || sel == null) return;
+    V.send({ e: 'discard', c: sel, ready: rdy });
+    sel = null;
+    st = { ...st, phase: 'wait' };
+    render();
+  };
+  discB.addEventListener('pointerdown', () => sendDiscard(false));
+  readyB.addEventListener('pointerdown', () => sendDiscard(true));
+  winB.addEventListener('pointerdown', () => {
+    if (myAct() && xqWin(hand)) { V.send({ e: 'win' }); st = { ...st, phase: 'wait' }; render(); }
+    else if (claimMe()) { V.send({ e: 'ron' }); replied = true; render(); }
+  });
+  passB.addEventListener('pointerdown', () => { if (claimMe()) { V.send({ e: 'pass' }); replied = true; render(); } });
+
+  const standings = (tot, order) => `<div class="xqrank">${order.slice().sort((a, b) => tot[b] - tot[a]).map((s, k) => `<span class="${s === me ? 'me' : ''}"><em>${k + 1}</em>${pinfo(s).emoji} ${who(s)}<b>${tot[s]}</b></span>`).join('')}</div>`;
+  const miniHands = (m, skip) => `<div class="xqhands">${m.order.filter(s => s !== skip).map(s => `<div><small>${pinfo(s).emoji} ${who(s)}</small><span>${m.hands[s].map(c => xqTile(c, 'xs')).join('')}</span></div>`).join('')}</div>`;
+  V.on = m => {
+    if (m.e === 'hand') {
+      hand = m.hand; drew = m.drew;
+      if (sel != null && !hand.includes(sel)) sel = null;
+      if (st && st.turn === me && st.phase === 'act' && sel == null && drew != null) sel = drew;
+      render();
+      return;
+    }
+    if (m.e === 'deal') {
+      st = null; sel = null; drew = null; idle();
+      T.say(`<div class="big">🀄</div><b class="xqtitle">第 ${m.rd} / ${m.R} 局</b><small>莊家:${pinfo(m.dealer).emoji} ${who(m.dealer)}</small>`, 1800);
+      SFX.join();
+      return;
+    }
+    if (m.e === 'st') {
+      const prev = st;
+      st = m;
+      const key = m.rd + ':' + m.disc.length;
+      if (key !== claimKey) { claimKey = key; replied = false; }
+      T.msg.classList.remove('on');
+      if (m.last && (!prev || !prev.last || prev.last.c !== m.last.c || prev.disc.length !== m.disc.length)) beep(m.last.s === me ? 420 : 520, 0.07, 'triangle', 0.09);
+      if (m.phase === 'act' && m.turn === me && (!prev || prev.turn !== me || prev.phase !== 'act')) { buzzTurn(); if (sel == null && drew != null) sel = drew; }
+      else if (m.phase === 'claim' && m.elig.includes(me) && (!prev || prev.phase !== 'claim')) { buzzTurn(); }
+      else if (m.phase === 'act' && m.turn !== me && prev && prev.turn !== m.turn && m.order.includes(me)) buzzOther();
+      renderBoard(); render();
+      return;
+    }
+    if (m.e === 'win') {
+      st = null; idle();
+      const tiles = [...m.set, ...m.pair];
+      T.say(`<div class="big">${m.w === me ? '🏆' : '🀄'}</div><b class="xqtitle">${m.w === me ? '你胡牌了!' : `${esc(pinfo(m.w).name)} 胡牌!`}</b>
+        <small>${m.tsumo ? '自摸' : `${who(m.from)} 放槍`} · 第 ${m.rd} / ${m.R} 局</small>
+        <div class="xqwinhand">${m.set.map(c => xqTile(c, 'md' + (c === m.tile ? ' hit' : ''))).join('')}<i></i>${m.pair.map(c => xqTile(c, 'md' + (c === m.tile ? ' hit' : ''))).join('')}</div>
+        <div class="xqfans">${m.fans.length ? m.fans.map(([n, t]) => `<span><b>${n}</b><i>${t} 台</i></span>`).join('') : '<span><b>平胡</b><i>0 台</i></span>'}</div>
+        <div class="xqpts">底 1 + ${m.tai} 台 = <b>+${m.pts}</b> 分</div>
+        ${standings(m.tot, m.order)}${miniHands(m, m.w)}<small>${m.last ? '最後一局結束了!' : '下一局馬上開始…'}</small>`);
+      if (m.w === me) { SFX.win(); confetti(); buzz([40, 40, 80]); } else SFX.bad();
+      return;
+    }
+    if (m.e === 'draw') {
+      st = null; idle();
+      T.say(`<div class="big">🌫️</div><b class="xqtitle">流局</b><small>牌山摸完了,沒有人胡牌(第 ${m.rd} / ${m.R} 局)</small>${standings(m.tot, m.order)}${miniHands(m, null)}<small>${m.last ? '最後一局結束了!' : '下一局馬上開始…'}</small>`);
+      SFX.tick();
+      return;
+    }
+    if (m.e === 'abort') T.say('<div class="big">👋</div><b class="xqtitle">對手都離開了</b>');
+  };
+  new ResizeObserver(() => { if (st && T.hand.isConnected) render(); }).observe(T.hand);
+}
+
+/* =========================================================
    電腦玩家的行為:聽到房主的廣播,就像真人一樣送出操作
    ========================================================= */
 function botsHear(H, m) {
@@ -8206,6 +8524,25 @@ BOTS.tower = (H, s, m, k) => { // 每隔一段時間「蓋好一層」或「掉�
     H.s.after(Math.round(towerPeriod(st.fl) * 1000 * (0.5 + Math.random() * 0.5) * k.spd + 450), step);
   };
   H.s.after(rand(1200, 2200), step);
+};
+
+BOTS.xqmj = (H, s, m, k) => { // 電腦:能胡就胡;不能胡就打「打完聽得最多」的那張,聽牌了有機會宣告聽牌;別人放槍能胡就胡
+  const st = H.bs[s] || (H.bs[s] = { hand: [], tok: 0 });
+  if (m.t !== 'g') return;
+  if (m.e === 'hand') { st.hand = m.hand; return; }
+  if (m.e === 'deal') { st.tok++; return; }
+  if (m.e !== 'st') return;
+  const id = ++st.tok;
+  if (m.phase === 'act' && m.turn === s) {
+    H.s.after(Math.round(rand(1000, 1900) * k.spd), () => {
+      if (st.tok !== id || st.hand.length !== 5) return;
+      if (xqWin(st.hand)) return botSend(H, s, { e: 'win' });
+      const c = xqPick(st.hand, 1 - k.sk), rest = st.hand.filter(x => x !== c);
+      botSend(H, s, { e: 'discard', c, ready: !m.ready[s] && Math.random() < 0.55 && xqWaits(rest).length > 0 });
+    });
+  } else if (m.phase === 'claim' && m.elig.includes(s)) {
+    H.s.after(Math.round(rand(500, 1100) * k.spd), () => { if (st.tok === id) botSend(H, s, { e: 'ron' }); });
+  }
 };
 
 /* ---------- 防止雙指縮放 / 長按選單 ---------- */
