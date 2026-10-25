@@ -73,7 +73,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.41';
+const APP_VERSION = '2026.11.48';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -131,7 +131,7 @@ function buzz(ms) {
     else if (ms) iosHaptic();
   } catch (e) { /* ignore */ }
 }
-const buzzTurn = () => buzz(22); // 輪到你了:微震一下
+const buzzTurn = () => { buzz(22); SFX.tick(); }; // 輪到你了:微震一下 + 叮一聲(iPhone 的網頁這時候不能震,只能靠聲音提醒)
 const buzzOther = () => buzz(10); // 換成對方了:更輕的一下(只是提醒換人,手機不用一直盯著畫面)
 
 function toast(msg) {
@@ -350,7 +350,7 @@ function hostSendTo(slot, m) { // 只傳給一位玩家(例如手牌,別人看�
   const c = NET.conns.get(slot);
   if (c && c.open) { try { c.send(m); } catch (e) { /* ignore */ } }
 }
-const TURN_GAMES = ['chess', 'morris', 'checkers', 'big2', 'seven', 'heart', 'memory'];
+const TURN_GAMES = ['chess', 'morris', 'checkers', 'big2', 'seven', 'heart', 'memory', 'xqmj'];
 function sendInput(m) {
   if (!navigator.vibrate && TURN_GAMES.includes(NET.curG)) iosHaptic(); // iPhone:自己出手的當下震一下(這時候 iOS 才讓網頁觸發觸覺回饋)
   if (NET.role === 'host') queueMicrotask(() => hostInput(0, m));
@@ -486,7 +486,7 @@ const GAMES = [
   },
   {
     id: 'morris', emoji: '⭕', name: '九子棋', tag: '益智', color: '#a0703f', desc: '連成三顆就能吃子',
-    rules: ['2 人對戰,每人 9 顆棋;房間超過 2 人時抽籤上場、其他人觀戰', '棋子顏色可以自己選(點自己卡片上的「換色」),先輪流把棋子放到交叉點上', '同一條線連成三顆(成三)就能吃掉對方一顆棋;已經成三的棋受保護,不能吃', '棋子都放完後,沿著線把棋子移到旁邊的空點;只剩 3 顆時可以飛到任何空點!', '對方剩 2 顆或被困住沒路走,你就贏了!'],
+    rules: ['2 人對戰,每人 9 顆棋;房間超過 2 人時抽籤上場、其他人觀戰', '棋子顏色可以自己選(點自己卡片上的「換色」),先輪流把棋子放到交叉點上', '同一條線連成三顆(成三)就能吃掉對方一顆棋;已經成三的棋受保護,不能吃', '棋子都放完後,沿著線把棋子移到旁邊的空點;只剩 3 顆時可以飛到任何空點!', '對方剩 2 顆或被困住沒路走,你就贏了!', '雙方連續走 20 步都沒有人吃子,或同一個局面出現 3 次,就是平手(飛行階段很容易僵持)'],
     host: hMorris, view: vMorris, noCountdown: true,
   },
   {
@@ -528,6 +528,16 @@ const GAMES = [
     id: 'schulte', emoji: '🔢', name: '專注力方格', tag: '專注+競速', color: '#7c5cff', desc: '依序點 1、2、3…,比誰最快!',
     rules: ['大家拿到同一張方格,裡面有 1 到最後一個數字,位置全部打亂', '倒數完一起開始,依序從 1 點到最後一個,越快越好', '點錯一次罰 0.5 秒,所以不要亂點!', '3 局,方格大小由房主在開始前選(3×3 到 7×7,三局可以一樣也可以不一樣),每局看你的速度還有等級(S 最厲害)', '每局第 1 名 5 分、第 2 名 3 分…,3 局總分最高的人贏,最後也會列出 3 局的總時間'],
     host: hSchulte, view: vSchulte, opts: schOpts, noCountdown: true,
+  },
+  {
+    id: 'tower', emoji: '🏗️', name: '高樓疊疊樂', tag: '反應+競速', color: '#2f8fe8', desc: '吊車放樓層,比誰蓋得最高!',
+    rules: ['大家同時開始,各自在自己的手機上蓋大樓', '吊車會左右擺動,擺到大樓正上方時點一下畫面,把這一層放下去', '對得剛剛好是「完美」!連續 3 次完美可以回一顆 ❤️', '歪太多會整層掉下去扣一顆 ❤️;3 顆愛心用完就停在那裡', '越高吊車擺得越快、大樓也會晃,100 秒內蓋最多層的人獲勝!'],
+    host: hTower, view: vTower, noCountdown: true,
+  },
+  {
+    id: 'xqmj', emoji: '🀄', name: '象棋麻將', tag: '麻將+策略', color: '#c0392b', desc: '象棋牌打麻將,打 4 局累積分數',
+    rules: ['2~4 人,32 張象棋牌(紅:帥 仕仕 相相 俥俥 傌傌 炮炮 兵x5;黑同理),每人 4 張,莊家 5 張,打 4 局,分數累積,總分最高的人贏', '輪到你:摸一張牌,再打出一張;手上 5 張湊成「一組 + 一對」就能按「胡」', '一組 = 同色的 帥仕相、俥傌炮(黑:將士象、車馬砲),或同色的三張兵(卒);一對 = 兩張一模一樣的牌,或「帥 + 將」', '別人打出來的牌如果剛好讓你胡牌,也可以胡(放槍);多人同時胡,離放槍的人最近的先胡', '想聽牌可以在打牌時按「聽牌」,之後電腦自動幫你摸打、遇到就胡;第一手就聽叫「現聽」', '台數:自摸 2、將帥聽令 2、紅一色 1、黑一色 1、兵卒一家 2、五兵合縱 5、五卒連橫 5、螞蟻雄兵(2 馬 + 3 兵)2、天胡 6、地胡 6、人胡 2、海底 1、聽牌 1、現聽 2', '胡牌得「底 1 + 台數」分;牌山摸完沒人胡就流局'],
+    host: hXqmj, view: vXqmj, noCountdown: true,
   },
 ];
 const GAME = Object.fromEntries(GAMES.map(g => [g.id, g]));
@@ -673,8 +683,10 @@ const GAME_CATS = { // 一個遊戲可以在好幾個分類裡
   math: ['puzzle'], memory: ['puzzle'], flood: ['puzzle'],
   chess: ['board'], morris: ['board'], checkers: ['board'],
   big2: ['card'], seven: ['card'],
-  bomb: ['action'], parking: ['action'],
+  bomb: ['action'], parking: ['action'], tower: ['reaction', 'action'], xqmj: ['card', 'board'],
 };
+/* 遊戲卡片的圖示:assets/game_icons.webp 是 4 x 4 的素材圖(tools/game_icons.py),順序要和這裡一樣 */
+const GAME_ICON = ['reaction', 'math', 'color', 'memory', 'chess', 'shaft', 'morris', 'heart', 'bomb', 'checkers', 'flood', 'parking', 'big2', 'seven', 'schulte', 'tower', 'xqmj'];
 const inCat = (g, c) => c === 'all' || (GAME_CATS[g.id] || []).includes(c);
 
 /* ---------- 個人最佳紀錄(存在這支手機裡):反應類遊戲要記「最快幾秒」 ---------- */
@@ -695,6 +707,7 @@ function recList() { // [{g, label, text}]:有紀錄的遊戲
   one('color', '最快拍對', f('color', recSec));
   one('heart', '最快拍牌', f('heart', recSec));
   one('shaft', '最深', f('shaft', v => 'B' + v + ' 層'));
+  one('tower', '最高', f('tower', v => v + ' 層'));
   const sch = [3, 4, 5, 6, 7].map(n => [n, recGet('schulte', n)]).filter(x => x[1] != null);
   if (sch.length) one('schulte', '最快完成', sch.map(([n, v]) => n + '×' + n + ' ' + recSec(v)).join(' · '));
   return out;
@@ -726,7 +739,7 @@ function lobbyView() {
       ${NET.cat ? `<button class="cback">◀ 全部分類</button>
       <section class="games">${GAMES.filter(g => inCat(g, NET.cat)).map(g => `
         <button class="gcard" data-g="${g.id}" style="--g:${g.color}" ${enough ? '' : 'disabled'}>
-          <span class="gico">${g.emoji}</span><b>${g.name}</b><span class="tag">${g.tag}</span>${recChip(g)}
+          <span class="gico" style="--ix:${GAME_ICON.indexOf(g.id) % 4};--iy:${Math.floor(GAME_ICON.indexOf(g.id) / 4)}"></span><b>${g.name}</b><span class="tag">${g.tag}</span>${recChip(g)}
         </button>`).join('')}
       </section>` : `<section class="cats">${CATS.map(c => `
         <button class="ccard" data-c="${c.id}" style="--g:${c.color};--bg:${c.bg};--bd:${c.bd};--tc:${c.tc};--sc:${c.sc};${c.art}" ${enough ? '' : 'disabled'}>
@@ -1601,7 +1614,7 @@ function vMemory(V) {
       const p = pinfo(m.turn);
       V.stage(`<div class="turn">輪到 ${p.emoji} ${esc(p.name)}…</div>`);
     }
-    if (myTurn && lastTurn !== V.me) { SFX.tick(); buzzTurn(); } else if (!myTurn && lastTurn != null && m.turn !== lastTurn) buzzOther();
+    if (myTurn && lastTurn !== V.me) buzzTurn(); else if (!myTurn && lastTurn != null && m.turn !== lastTurn) buzzOther();
     lastTurn = m.turn;
   };
 }
@@ -2050,7 +2063,7 @@ function vChess(V) {
           if (m.last.slot === V.me) SFX.good(); else if (fighting()) { SFX.bad(); buzz(80); } else SFX.tap();
         } else SFX.tap();
       }
-      if (myTurn() && lastTurn !== V.me) { buzzTurn(); if (m.turn !== lastTurn) SFX.tick(); } else if (fighting() && !myTurn() && lastTurn != null && m.turn !== lastTurn) buzzOther();
+      if (myTurn() && lastTurn !== V.me) buzzTurn(); else if (fighting() && !myTurn() && lastTurn != null && m.turn !== lastTurn) buzzOther();
       if (m.idle >= 40 && m.idle % 3 === 1 && m.last && m.last.type === 'move') toast(`再 ${50 - m.idle} 步沒有翻棋或吃子就平手`);
       lastTurn = m.turn;
     } else if (m.e === 'over') {
@@ -2512,12 +2525,13 @@ function hMorris(H) {
   const hand = {}, lost = {}, colors = {};
   fighters.forEach((s, k) => { hand[s] = 9; lost[s] = 0; colors[s] = k; }); // 預設:先紅後藍,之後各自可以改
   let live = false;
-  let turnI = 0, rm = false, last = null, over = false, idle = 0;
+  let turnI = 0, rm = false, last = null, over = false, idle = 0, rep = 1;
+  const seen = new Map(); // 走子階段的局面(棋盤 + 輪到誰)出現過幾次:同一局面第 3 次出現就平手
   const cnt = s => b.filter(x => x === s).length;
   const fly = s => hand[s] === 0 && cnt(s) === 3;
   const state = () => ({
     t: 'g', e: 'board', b, turn: fighters[turnI], fighters, hand, lost, colors,
-    cnt: Object.fromEntries(fighters.map(s => [s, cnt(s)])), rm, last, idle,
+    cnt: Object.fromEntries(fighters.map(s => [s, cnt(s)])), rm, last, idle, rep,
   });
   let wd = 0;
   const bc = () => {
@@ -2533,14 +2547,20 @@ function hMorris(H) {
     H.bc({ t: 'g', e: 'over', winner, reason });
     H.s.after(3000, H.finish);
   }
+  const MORRIS_IDLE = 20; // 雙方連續走 20 步都沒有吃子,平手
   function nextTurn() {
     const prev = fighters[turnI];
     turnI = 1 - turnI;
     const s = fighters[turnI];
+    if (idle === 0) seen.clear(); // 剛吃過子,以前的局面不可能再出現
+    const key = b.map(x => (x == null ? '.' : x)).join('') + turnI + hand[fighters[0]] + hand[fighters[1]];
+    rep = (seen.get(key) || 0) + 1;
+    seen.set(key, rep);
     bc();
     if (hand[s] === 0 && cnt(s) < 3) return end(prev, '對方只剩 2 顆棋了!');
     if (hand[s] === 0 && !fly(s) && !nmmMoves(b, s, false).length) return end(prev, '對方被困住,沒有棋可以走了!');
-    if (idle >= 60) end(null, '連續 60 步沒有吃子,平手!');
+    if (rep >= 3) end(null, '同一個局面出現 3 次,平手!');
+    else if (idle >= MORRIS_IDLE) end(null, `雙方連續走了 ${MORRIS_IDLE} 步都沒有吃子,平手!`);
   }
   function afterAction(i) {
     const o = fighters[1 - turnI];
@@ -2675,7 +2695,8 @@ function vMorris(V) {
     } else {
       msg = (fighting() ? '' : '👀 觀戰 · ') + (st.rm ? `${who(st.turn)} 成三了,正在選要吃哪顆…` : `輪到 ${pinfo(st.turn).emoji} ${who(st.turn)}…`);
     }
-    if (!over && st.idle >= 50) msg += ` · 再 ${60 - st.idle} 步平手`;
+    if (!over && st.rep === 2) msg += ' · 同局面再出現 1 次就平手';
+    else if (!over && st.idle >= 14) msg += ` · 再 ${20 - st.idle} 步沒吃子就平手`;
     chipsEl.innerHTML = `<span class="cs${myTurn() ? ' on' : ''}">${msg}</span>`;
   }
 
@@ -4256,7 +4277,7 @@ function vCheckers(V) {
       if (balls.size !== st.occ.filter(o => o >= 0).length || [...balls].some(([i, b]) => st.occ[i] !== +b.dataset.s)) rebuild();
       drawTrail(st.last && st.last.path);
       renderSeats(); showDests(); renderStatus();
-      if (st.turn === me && !over && (!prev || prev.turn !== me)) { buzzTurn(); SFX.join(); } else if (st.turn !== me && !over && prev && prev.turn !== st.turn && st.order.includes(me)) buzzOther();
+      if (st.turn === me && !over && (!prev || prev.turn !== me)) buzzTurn(); else if (st.turn !== me && !over && prev && prev.turn !== st.turn && st.order.includes(me)) buzzOther();
     };
     if (m.last && m.last.id !== lastId) {
       lastId = m.last.id;
@@ -7087,7 +7108,7 @@ function vBig2(V) {
       if (m.last.type === 'pass') beep(330, 0.08, 'triangle', 0.06);
       else { beep(520, 0.07, 'triangle', 0.08); if (m.last.name === '鐵支' || m.last.name === '同花順') { T.say(`<b class="boom">${m.last.name}!!</b>`, 1400); buzz([60, 40, 60]); } }
     }
-    if (myTurn() && (!prev || prev.turn !== me)) { buzzTurn(); SFX.tick(); }
+    if (myTurn() && (!prev || prev.turn !== me)) buzzTurn();
     else if (!st.done && !st.rend && !myTurn() && prev && prev.turn !== m.turn && m.order.includes(me)) buzzOther();
     renderTable(); render();
     clearInterval(timerT);
@@ -7181,7 +7202,7 @@ function hSeven(H) {
 function vSeven(V) {
   const me = V.me, T = cdTable(V);
   let st = null, hand = [], covered = [], sel = null;
-  T.btns.innerHTML = `<span class="cdcov">蓋牌 <b>0</b> 張 · <b>0</b> 點</span><button class="btn orange sm cdcover">蓋這張</button><button class="btn green sm cdplay">出這張</button>`;
+  T.btns.innerHTML = `<span class="cdcov">🙈 蓋牌 <b>0</b> 張 · <b>0</b> 點</span><button class="btn orange sm cdcover">蓋這張</button><button class="btn green sm cdplay">出這張</button>`;
   const playB = $('.cdplay', T.btns), coverB = $('.cdcover', T.btns), covEl = $('.cdcov', T.btns);
   const myTurn = () => st && !st.done && st.turn === me;
   const can = c => (st.first ? c === SEV_START : sevOk(st.board, c));
@@ -7196,17 +7217,18 @@ function vSeven(V) {
     playB.style.display = mustCover ? 'none' : '';
     $$('b', covEl)[0].textContent = covered.length;
     $$('b', covEl)[1].textContent = covered.reduce((t, c) => t + cdRank(c), 0);
+    covEl.classList.toggle('has', covered.length > 0);
     T.info.innerHTML = st.done ? '' : myTurn() ? `<b class="cdyou">輪到你!</b>${st.first ? '先出 ♠7' : mustCover ? '<i>一張都接不上,選一張蓋起來(點數越小越好)</i>' : '選一張亮起來的牌出'}` : `等 ${esc(pinfo(st.turn).name)} 出牌…`;
     V.root.classList.toggle('myturn', myTurn());
   }
   function renderBoard() {
-    T.seats(st.order, me, st.counts, st.done ? null : st.turn, s => (st.cov[s] ? `<span class="cdpassed">蓋 ${st.cov[s]}</span>` : ''));
+    T.seats(st.order, me, st.counts, st.done ? null : st.turn, s => (st.cov[s] ? `<span class="svcov${st.last && st.last.s === s && st.last.type === 'cover' ? ' new' : ''}">🙈 蓋了 ${st.cov[s]} 張</span>` : ''));
     const oldBd = $('.svboard', T.mid), oldSl = oldBd ? oldBd.scrollLeft : null;
     T.mid.innerHTML = `<div class="svboard"><div class="svin">${[0, 1, 2, 3].map(su => {
       const b = st.board[su];
       return `<div class="svrow">${Array.from({ length: 13 }, (_, i) => { const r = i + 1, c = su * 13 + i, on = b && r >= b.lo && r <= b.hi, isNew = st.last && st.last.type === 'play' && st.last.c === c;
         return `<span class="svslot${r === 7 ? ' seven' : ''}${isNew ? ' new' : ''}">${on ? cdMini(c) : `<i class="${su === 1 || su === 2 ? 'red' : ''}">${r === 7 ? HEART_SUIT[su] : ''}</i>`}</span>`; }).join('')}</div>`;
-    }).join('')}</div></div>${st.last ? `<div class="cdwho">${pinfo(st.last.s).emoji} ${st.last.s === me ? '你' : esc(pinfo(st.last.s).name)} ${st.last.type === 'play' ? `出了 <b>${cdLabel(st.last.c)}</b>` : '<b>蓋了一張牌</b> 🙈'}</div>` : ''}`;
+    }).join('')}</div></div>${st.last ? `<div class="cdwho${st.last.type === 'cover' ? ' cov' : ''}">${pinfo(st.last.s).emoji} ${st.last.s === me ? '你' : esc(pinfo(st.last.s).name)} ${st.last.type === 'play' ? `出了 <b>${cdLabel(st.last.c)}</b>` : '<b>蓋了一張牌</b> 🙈'}</div>` : ''}`;
     // 牌放大後排不下 13 欄,可以左右滑:一開始對準中間的 7,有人出牌就捲到那張牌
     const bd = $('.svboard', T.mid), sv = $$('.svslot', bd)[6], nw = $('.svslot.new', bd);
     bd.scrollLeft = oldSl ? oldSl : sv.offsetLeft - (bd.clientWidth - sv.offsetWidth) / 2;
@@ -7228,7 +7250,7 @@ function vSeven(V) {
     st = m;
     if (m.intro) T.say(`<div class="big">7️⃣</div><b>排七</b><small>${pinfo(m.turn).emoji} ${m.turn === me ? '你' : esc(pinfo(m.turn).name)} 拿到 ♠7,先出!</small>`, 2200);
     if (m.last && (!prev || JSON.stringify(prev.last) !== JSON.stringify(m.last))) { if (m.last.type === 'cover') beep(220, 0.1, 'sine', 0.06); else beep(520, 0.07, 'triangle', 0.08); }
-    if (myTurn() && (!prev || prev.turn !== me)) { buzzTurn(); SFX.tick(); }
+    if (myTurn() && (!prev || prev.turn !== me)) buzzTurn();
     else if (!st.done && !st.rend && !myTurn() && prev && prev.turn !== m.turn && m.order.includes(me)) buzzOther();
     if (myTurn()) { // 只有一張可以出的時候,幫忙先選好
       const ok = hand.filter(c => (m.first ? c === SEV_START : sevOk(m.board, c)));
@@ -7236,9 +7258,12 @@ function vSeven(V) {
     }
     renderBoard(); render();
     if (m.done) {
-      const rows = m.order.slice().sort((a, b) => m.pts[a] - m.pts[b]).map((s, k) => `<span>${['🥇', '🥈', '🥉', '🎀'][k]} ${pinfo(s).emoji} ${s === me ? '你' : esc(pinfo(s).name)} <i>蓋 ${m.covered[s].length} 張 · ${m.pts[s]} 點</i></span>`).join('');
-      const w = m.order.slice().sort((a, b) => m.pts[a] - m.pts[b])[0];
-      T.say(`<div class="big">${w === me ? '🏆' : '7️⃣'}</div><b>點數最少的人贏!</b><div class="ffinal">${rows}</div>`);
+      const rk = m.order.slice().sort((a, b) => m.pts[a] - m.pts[b]);
+      const rows = rk.map((s, k) => `<div class="svres${s === me ? ' me' : ''}${k === 0 ? ' win' : ''}">
+        <div class="svr1"><em>${['🥇', '🥈', '🥉', '🎀'][k]}</em><span class="svn">${pinfo(s).emoji} ${s === me ? '你' : esc(pinfo(s).name)}</span><b class="svp">${m.pts[s]}<small>點</small></b></div>
+        <div class="svr2">${m.covered[s].length ? `<small>蓋了 ${m.covered[s].length} 張:</small>${m.covered[s].slice().sort((a, b) => cdRank(a) - cdRank(b)).map(cdMini).join('')}` : '<small>一張都沒蓋 👏</small>'}</div></div>`).join('');
+      const w = rk[0];
+      T.say(`<div class="big">${w === me ? '🏆' : '7️⃣'}</div><b class="svtitle">${w === me ? '你贏了!' : `${esc(pinfo(w).name)} 贏了!`}</b><small>蓋牌點數最少的人贏</small><div class="svresl">${rows}</div>`);
       if (w === me) SFX.win(); else SFX.bad();
     }
   };
@@ -7437,6 +7462,690 @@ function vSchulte(V) {
       cover.classList.add('on');
     }
   };
+}
+
+/* =========================================================
+   高樓疊疊樂 🏗️(大家同時開始,各自在手機上蓋大樓,比誰蓋得最高)
+   吊車左右擺動,點一下放下一層樓;對得越準越好,歪太多會掉下去扣一顆愛心
+   每支手機自己算物理(網路慢也公平),只把「蓋到幾層、剩幾顆愛心」傳給房主
+   座標:寬 360;地面 y = 0,往上是負的;第 k 層(0 是一樓大廳)佔 y = -(k+1)*BH ~ -k*BH
+   ========================================================= */
+const TOWER = { T: 100, LIVES: 3, W: 360, BW: 104, BH: 50, PERF: 6, OK: 0.62, R: 330, AMP: 118, HOOK: 112 };
+const TOWER_COLORS = ['#ef4b4b', '#33b864', '#3b82f6', '#f5b301', '#8b5cf6', '#fb8c3a', '#14b8a6', '#ec5c9b'];
+const towerPeriod = fl => Math.max(1.15, 2.5 - fl * 0.045); // 吊車擺一趟(來回)的秒數,越高越快
+function towerRng(a) { // 有種子的亂數:大家拿到一樣的樓層顏色順序
+  return () => {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function hTower(H) {
+  let phase = 'idle';
+  const ps = {};
+  H.players.forEach(s => { ps[s] = { fl: 0, lv: TOWER.LIVES, out: false }; });
+  const allOut = () => H.active().every(s => ps[s].out);
+  function end(reason) {
+    if (phase === 'end') return;
+    phase = 'end';
+    H.players.forEach(s => { H.scores[s] = ps[s].fl; });
+    H.bc({ t: 'score', scores: H.scores });
+    H.bc({ t: 'g', e: 'over', reason, fl: Object.fromEntries(H.players.map(s => [s, ps[s].fl])) });
+    H.s.after(4200, H.finish);
+  }
+  return {
+    start() {
+      H.bc({ t: 'g', e: 'prep', order: H.players });
+      H.s.after(2600, () => H.countdown(() => {
+        phase = 'play';
+        H.bc({ t: 'g', e: 'go', seed: rand(1, 1e9), T: TOWER.T, order: H.players });
+        H.s.after(TOWER.T * 1000 + 400, () => end('time'));
+      }));
+    },
+    input(slot, m) {
+      const p = ps[slot];
+      if (phase !== 'play' || !p || p.out || m.e !== 'p') return;
+      const fl = Math.max(0, Math.min(999, Math.floor(+m.fl) || 0));
+      if (fl > p.fl + 1) return; // 一次最多多一層
+      p.fl = Math.max(p.fl, fl);
+      p.lv = Math.max(0, Math.min(TOWER.LIVES, Math.floor(+m.lv) || 0));
+      p.out = p.lv <= 0;
+      H.scores[slot] = p.fl;
+      H.bc({ t: 'score', scores: H.scores });
+      H.bc({ t: 'g', e: 'p', s: slot, fl: p.fl, lv: p.lv, out: p.out });
+      if (allOut()) H.s.after(1500, () => end('all'));
+    },
+    presence() { if (phase === 'play' && allOut()) end('all'); },
+  };
+}
+
+function vTower(V) {
+  const { W, BW, BH, R, HOOK } = TOWER, me = V.me;
+  const C = canvasStage(V, 9 / 16, true), ctx = C.ctx;
+  V.pad.innerHTML = '';
+  const ink = '#1f2a44';
+  let live = false, out = false, order = [], endAt = 0, colors = [];
+  let blocks = [], hang = null, nextAt = 0, falls = [], parts = [], pops = [];
+  let fl = 0, lives = TOWER.LIVES, combo = 0, ph = 0, swT = 0, kickA = 0, kickT = 9, shake = 0, flash = 0;
+  let WH = 640, camTop = -(640 - 90), camX = 0, lastSec = -1, now = 0;
+  const who = s => (s === me ? '你' : esc(pinfo(s).name));
+
+  // 遠方的城市剪影和雲(固定的,每次畫一樣)
+  const far = [];
+  for (let x = -40; x < W + 40;) { const w = rand(26, 52); far.push([x, w, rand(50, 150)]); x += w + rand(2, 8); }
+  const hash = i => { const v = Math.sin(i * 127.1 + 31.7) * 43758.5453; return v - Math.floor(v); };
+
+  // 大樓往左右擺:越高擺越大(擺幅只跟樓層高度有關,蓋新的一層時不會跳一下)
+  const swayAmp = k => 30 * Math.pow(k / 40, 1.5);
+  const sway = k => swayAmp(k) * Math.sin(swT * 1.6) + kickA * Math.sin(kickT * 9) * Math.exp(-kickT * 2.6) * (blocks.length > 1 ? k / (blocks.length - 1) : 0);
+  const bx = k => blocks[k].x + sway(k);
+
+  function reset() {
+    blocks = [{ x: W / 2, c: -1 }];
+    fl = 0; lives = TOWER.LIVES; combo = 0; ph = 0; swT = 0; kickA = 0; kickT = 9;
+    hang = null; nextAt = 0; falls = []; parts = []; pops = []; out = false;
+    camX = 0;
+  }
+  reset();
+  const spawn = () => { hang = { c: colors[blocks.length % colors.length], st: 'in', a: 0, x: 0, y: 0, vy: 0, rot: 0 }; };
+  const pop = (text, x, y, col) => pops.push({ text, x, y, t: 0, col });
+  function burst(x, y, n, col, spd) {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, v = spd * (0.4 + Math.random() * 0.8);
+      parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - spd * 0.3, t: 0, life: 0.5 + Math.random() * 0.4, col, r: 2 + Math.random() * 3 });
+    }
+  }
+  const report = () => V.send({ e: 'p', fl, lv: lives });
+
+  function drop() {
+    if (!live || !hang || hang.st !== 'swing') return;
+    hang.st = 'fall';
+    hang.vy = 0;
+    beep(520, 0.05, 'triangle', 0.08);
+  }
+  function land() {
+    const n = blocks.length, topX = bx(n - 1), dx = hang.x - topX, ad = Math.abs(dx), topY = -n * BH;
+    if (ad < BW * TOWER.OK) {
+      const perfect = ad <= TOWER.PERF, X = perfect ? topX : hang.x;
+      blocks.push({ x: 0, c: hang.c });
+      blocks[n].x = X - swayAmp(n) * Math.sin(swT * 1.6);
+      kickA = perfect ? 0 : Math.max(-14, Math.min(14, dx * 0.3)); kickT = 0;
+      fl++;
+      burst(X - BW / 2, topY, 5, '#ffffffcc', 70);
+      burst(X + BW / 2, topY, 5, '#ffffffcc', 70);
+      if (perfect) {
+        combo++;
+        flash = 1;
+        burst(X, topY - BH / 2, 16, '#ffd84a', 190);
+        [784, 988, 1175].forEach((f, i) => beep(f, 0.1, 'triangle', 0.1, i * 0.05));
+        if (combo >= 3 && combo % 3 === 0 && lives < TOWER.LIVES) { lives++; pop('+❤️', X, topY - BH - 26, '#ff5d73'); }
+        pop(combo > 1 ? `完美 x${combo}!` : '完美!', X, topY - BH, '#ffd84a');
+      } else {
+        combo = 0;
+        beep(170, 0.09, 'square', 0.09);
+        if (ad < BW * 0.25) pop('好!', X, topY - BH, '#ffffff');
+      }
+      buzz(perfect ? 25 : 15);
+    } else { // 歪太多:翻下去
+      combo = 0;
+      lives--;
+      const edge = ad < BW;
+      falls.push({ x: hang.x, y: hang.y, vx: edge ? Math.sign(dx) * (90 + ad) : 0, vy: edge ? -60 : hang.vy, rot: hang.rot, vr: Math.sign(dx) * (edge ? 4.5 : 1.2), c: hang.c });
+      shake = 0.4;
+      SFX.bad(); buzz(120);
+      pop('-❤️', hang.x, hang.y - 10, '#ff5d73');
+      if (lives <= 0) {
+        out = true; live = false;
+        setTimeout(() => { if (out) C.overlay(`<div class="big">🏚️</div><div>愛心用完了!</div><div class="small">你蓋了 <b>${fl}</b> 層,等其他人蓋完…</div>`); }, 900);
+      }
+    }
+    hang = null;
+    nextAt = now + 0.35;
+    report();
+  }
+
+  function update(dt) {
+    swT += dt; kickT += dt;
+    shake = Math.max(0, shake - dt); flash = Math.max(0, flash - dt * 3);
+    const n = blocks.length;
+    const camT = Math.min(-n * BH - WH * 0.56, -(WH - 90));
+    camTop += (camT - camTop) * Math.min(1, dt * 4);
+    camX += ((bx(n - 1) - W / 2) * 0.8 - camX) * Math.min(1, dt * 3);
+    if (live && !hang && now >= nextAt) spawn();
+    if (hang) {
+      if (hang.st === 'in' || hang.st === 'swing') {
+        ph += dt * Math.PI * 2 / towerPeriod(fl);
+        const th = Math.asin(TOWER.AMP / R) * Math.sin(ph), px = W / 2 + camX, py = camTop + HOOK - R;
+        if (hang.st === 'in') { hang.a = Math.min(1, hang.a + dt * 3.5); if (hang.a >= 1) hang.st = 'swing'; }
+        const lift = (1 - hang.a) * (1 - hang.a) * 220;
+        hang.x = px + R * Math.sin(th);
+        hang.y = py + R * Math.cos(th) - lift;
+        hang.rot = th;
+      } else {
+        hang.vy += 1900 * dt;
+        hang.y += hang.vy * dt;
+        hang.rot *= Math.exp(-10 * dt);
+        if (hang.y + BH / 2 >= -n * BH) { hang.y = -n * BH - BH / 2; land(); }
+      }
+    }
+    falls.forEach(f => { f.vy += 1500 * dt; f.x += f.vx * dt; f.y += f.vy * dt; f.rot += f.vr * dt; });
+    falls = falls.filter(f => f.y - camTop < WH + 200);
+    parts.forEach(p => { p.t += dt; p.vy += 300 * dt; p.x += p.vx * dt; p.y += p.vy * dt; });
+    parts = parts.filter(p => p.t < p.life);
+    pops.forEach(p => { p.t += dt; });
+    pops = pops.filter(p => p.t < 1.1);
+    if (live && endAt) {
+      const left = Math.ceil((endAt - performance.now()) / 1000);
+      if (left !== lastSec) { lastSec = left; if (left <= 5 && left > 0) beep(880, 0.06, 'sine', 0.08); }
+      if (left <= 0) { live = false; hang = null; C.overlay(`<div class="big">⏰</div><div>時間到!</div><div class="small">你蓋了 <b>${fl}</b> 層</div>`); }
+    }
+  }
+
+  // ---------- 畫圖 ----------
+  const mix = (a, b, t) => {
+    const p = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+    const A = p(a), B = p(b);
+    return `rgb(${A.map((v, i) => Math.round(v + (B[i] - v) * t)).join(',')})`;
+  };
+  function drawBlock(cx, cy, c, rot, glow) { // (cx, cy) 是中心
+    ctx.save();
+    ctx.translate(cx, cy);
+    if (rot) ctx.rotate(rot);
+    const x = -BW / 2, y = -BH / 2;
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = ink;
+    if (c < 0) { // 一樓大廳:灰色石頭 + 門
+      ctx.fillStyle = '#b7bfcc';
+      C.rr(x - 8, y, BW + 16, BH, 4); ctx.stroke();
+      ctx.fillStyle = '#d5dbe4'; ctx.fillRect(x - 6, y + 2, BW + 12, 7);
+      ctx.fillStyle = '#5a6578'; C.rr(-13, y + 18, 26, BH - 18, 3);
+      ctx.fillStyle = '#9fd2f5'; C.rr(-10, y + 21, 9, BH - 22, 2); C.rr(1, y + 21, 9, BH - 22, 2);
+      [-40, 28].forEach(wx => { ctx.fillStyle = '#9fd2f5'; C.rr(wx, y + 16, 14, 16, 2); ctx.lineWidth = 1.5; ctx.stroke(); });
+      ctx.restore();
+      return;
+    }
+    ctx.fillStyle = TOWER_COLORS[c];
+    C.rr(x, y, BW, BH, 5);
+    ctx.fillStyle = 'rgba(0,0,0,.16)'; ctx.fillRect(x + BW - 13, y + 9, 11, BH - 11); // 右邊側面陰影
+    ctx.fillStyle = 'rgba(255,255,255,.38)'; ctx.fillRect(x + 2, y + 2, BW - 4, 6); // 屋頂邊
+    ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.fillRect(x + 2, y + 8, BW - 4, 2);
+    ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, BW, BH, 5); else ctx.rect(x, y, BW, BH); ctx.stroke();
+    ctx.lineWidth = 1.5;
+    for (let r = 0; r < 2; r++) {
+      for (let k = 0; k < 4; k++) {
+        const wx = x + 9 + k * 23, wy = y + 14 + r * 17;
+        ctx.fillStyle = '#d9f1ff'; ctx.fillRect(wx, wy, 16, 12);
+        ctx.fillStyle = '#9fd2f5'; ctx.fillRect(wx, wy + 6, 16, 6);
+        ctx.fillStyle = 'rgba(255,255,255,.85)';
+        ctx.beginPath(); ctx.moveTo(wx + 2, wy + 9); ctx.lineTo(wx + 8, wy + 2); ctx.lineTo(wx + 11, wy + 2); ctx.lineTo(wx + 4, wy + 10); ctx.fill();
+        ctx.strokeRect(wx, wy, 16, 12);
+      }
+    }
+    if (glow) { ctx.fillStyle = `rgba(255,255,255,${glow * 0.75})`; C.rr(x, y, BW, BH, 5); }
+    ctx.restore();
+  }
+  function drawCrane(h) { // 吊在空中的那一層:黃黑相間的吊架、鋼索、吊鉤,繩子一路往上
+    ctx.save();
+    ctx.translate(h.x, h.y);
+    ctx.rotate(h.rot);
+    const top = -BH / 2;
+    ctx.strokeStyle = '#3a3f4f'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(0, top - 30); ctx.lineTo(0, top - 30 - R - 300); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-BW * 0.34, top - 7); ctx.lineTo(0, top - 30); ctx.lineTo(BW * 0.34, top - 7); ctx.stroke();
+    ctx.fillStyle = '#ffc53d'; ctx.strokeStyle = ink; ctx.lineWidth = 2;
+    C.rr(-BW * 0.4, top - 9, BW * 0.8, 9, 2);
+    ctx.save(); ctx.beginPath(); ctx.rect(-BW * 0.4, top - 9, BW * 0.8, 9); ctx.clip();
+    ctx.fillStyle = '#26262e';
+    for (let i = -6; i < 6; i++) { ctx.beginPath(); ctx.moveTo(i * 12, top); ctx.lineTo(i * 12 + 6, top); ctx.lineTo(i * 12 + 15, top - 9); ctx.lineTo(i * 12 + 9, top - 9); ctx.fill(); }
+    ctx.restore();
+    ctx.strokeRect(-BW * 0.4, top - 9, BW * 0.8, 9);
+    ctx.fillStyle = '#ffc53d'; ctx.beginPath(); ctx.arc(0, top - 32, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.restore();
+    drawBlock(h.x, h.y, h.c, h.rot);
+  }
+
+  function draw() {
+    C.size(W);
+    WH = C.cv.height / C.sc;
+    const alt = Math.max(0, Math.min(1, (-camTop - (WH - 90)) / 3200));
+    const g = ctx.createLinearGradient(0, 0, 0, WH);
+    g.addColorStop(0, alt < 0.5 ? mix('#4fb0ff', '#3a63d8', alt * 2) : mix('#3a63d8', '#1a1747', alt * 2 - 1));
+    g.addColorStop(1, alt < 0.5 ? mix('#cdeeff', '#ffb58a', alt * 2) : mix('#ffb58a', '#6a4bc2', alt * 2 - 1));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, WH);
+    if (alt > 0.45) { // 很高的地方看得到星星
+      ctx.fillStyle = `rgba(255,255,255,${Math.min(1, (alt - 0.45) * 2.5)})`;
+      for (let i = 0; i < 40; i++) ctx.fillRect(hash(i) * W, hash(i + 99) * WH * 0.8, 1.6, 1.6);
+    }
+    const sh = shake > 0 ? (Math.random() - 0.5) * shake * 16 : 0;
+    ctx.save();
+    ctx.translate(sh, 0);
+    // 雲:跟著鏡頭慢慢移動(視差)
+    const cp = 0.6, c0 = Math.floor((camTop * cp - 80) / 230), c1 = Math.ceil((camTop * cp + WH + 80) / 230);
+    for (let i = c0; i <= c1; i++) {
+      if (i > 0) continue;
+      const cy = i * 230 - camTop * cp, cx = ((hash(i) * (W + 160) + swT * 8 * (0.5 + hash(i + 7))) % (W + 160)) - 80, s = 0.7 + hash(i + 3) * 0.6;
+      ctx.fillStyle = `rgba(255,255,255,${0.85 - alt * 0.5})`;
+      [[0, 0, 22], [20, -8, 18], [38, 2, 16], [-18, 4, 15]].forEach(([dx, dy, r]) => { ctx.beginPath(); ctx.arc(cx + dx * s, cy + dy * s, r * s, 0, Math.PI * 2); ctx.fill(); });
+    }
+    // 遠方城市剪影
+    const d = -(WH - 90) - camTop, fb = WH - 90 + d * 0.35 - camX * 0.2;
+    if (fb - 160 < WH) {
+      ctx.fillStyle = '#9cc5ea';
+      far.forEach(([x, w, h]) => ctx.fillRect(x - camX * 0.25, fb - h, w, h + 400));
+      ctx.fillStyle = 'rgba(255,255,255,.45)';
+      far.forEach(([x, w, h]) => { for (let yy = fb - h + 8; yy < fb - 6; yy += 12) for (let xx = x + 5; xx < x + w - 6; xx += 10) ctx.fillRect(xx - camX * 0.25, yy, 4, 5); });
+    }
+    ctx.translate(-camX, -camTop);
+    // 地面
+    const gx0 = camX - 40, gw = W + 80;
+    ctx.fillStyle = '#6cc04a'; ctx.fillRect(gx0, 0, gw, 14);
+    ctx.fillStyle = '#4f9a36'; ctx.fillRect(gx0, 12, gw, 4);
+    ctx.fillStyle = '#7a8496'; ctx.fillRect(gx0, 16, gw, 400);
+    ctx.fillStyle = '#f2f2f2';
+    for (let x = Math.floor(gx0 / 40) * 40; x < gx0 + gw; x += 40) ctx.fillRect(x, 44, 22, 4);
+    // 大樓
+    const vis0 = Math.max(0, Math.floor(-(camTop + WH) / BH) - 1), vis1 = Math.min(blocks.length - 1, Math.ceil(-camTop / BH) + 1);
+    for (let k = vis0; k <= vis1; k++) drawBlock(bx(k), -k * BH - BH / 2, blocks[k].c, 0, k === blocks.length - 1 ? flash : 0);
+    falls.forEach(f => drawBlock(f.x, f.y, f.c, f.rot));
+    if (hang) {
+      if (hang.st === 'fall') { // 掉落中:把鋼索留在原處
+        drawBlock(hang.x, hang.y, hang.c, hang.rot);
+      } else drawCrane(hang);
+    }
+    parts.forEach(p => { ctx.globalAlpha = 1 - p.t / p.life; ctx.fillStyle = p.col; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill(); });
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'center';
+    pops.forEach(p => {
+      ctx.globalAlpha = Math.min(1, (1.1 - p.t) * 3);
+      ctx.font = '900 24px Fredoka, "Noto Sans TC", sans-serif';
+      ctx.lineWidth = 5; ctx.strokeStyle = ink; ctx.fillStyle = p.col;
+      const y = p.y - p.t * 40;
+      ctx.strokeText(p.text, p.x, y); ctx.fillText(p.text, p.x, y);
+    });
+    ctx.globalAlpha = 1;
+    ctx.restore();
+    // 上方的狀態:層數、時間、愛心
+    ctx.font = '900 26px Fredoka, "Noto Sans TC", sans-serif';
+    ctx.lineWidth = 6; ctx.strokeStyle = ink; ctx.fillStyle = '#fff'; ctx.textAlign = 'left';
+    ctx.strokeText(fl + ' 層', 12, 34); ctx.fillText(fl + ' 層', 12, 34);
+    if (endAt) {
+      const left = Math.max(0, Math.ceil((endAt - performance.now()) / 1000));
+      ctx.textAlign = 'center'; ctx.font = '900 20px Fredoka, sans-serif';
+      ctx.fillStyle = left <= 10 ? '#ff6b6b' : '#fff';
+      const tt = Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0');
+      ctx.strokeText(tt, W / 2, 32); ctx.fillText(tt, W / 2, 32);
+    }
+    for (let i = 0; i < TOWER.LIVES; i++) { // 愛心用畫的(有些手機的 emoji 在畫布上會變黑白)
+      const hx = W - 24 - (TOWER.LIVES - 1 - i) * 30, hy = 18;
+      ctx.beginPath();
+      ctx.moveTo(hx, hy + 18);
+      ctx.bezierCurveTo(hx - 16, hy + 8, hx - 13, hy - 6, hx, hy + 2);
+      ctx.bezierCurveTo(hx + 13, hy - 6, hx + 16, hy + 8, hx, hy + 18);
+      ctx.fillStyle = i < lives ? '#ff4d6a' : 'rgba(30,40,70,.55)';
+      ctx.lineWidth = 3; ctx.strokeStyle = ink;
+      ctx.fill(); ctx.stroke();
+      if (i < lives) { ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.beginPath(); ctx.arc(hx - 6, hy + 4, 2.5, 0, Math.PI * 2); ctx.fill(); }
+    }
+  }
+
+  V.root.addEventListener('pointerdown', e => {
+    if (e.target.closest('.exit')) return;
+    e.preventDefault();
+    drop();
+  });
+  keyCtl(C.cv, { ' ': [drop], Enter: [drop], ArrowDown: [drop] });
+
+  let last = performance.now();
+  const loop = () => {
+    if (!C.alive()) return;
+    const t = performance.now();
+    const dt = Math.min(0.05, (t - last) / 1000);
+    last = t; now += dt;
+    update(dt);
+    draw();
+    requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
+
+  V.on = m => {
+    if (m.e === 'prep') {
+      order = m.order;
+      C.overlay('<div class="big">🏗️</div><div><b>高樓疊疊樂</b></div><div class="small">吊車擺到大樓正上方時,點一下畫面放下去!<br>對得剛剛好是「完美」,連續 3 次完美回一顆 ❤️<br>歪太多會掉下去扣 ❤️,越高擺得越快</div>');
+    } else if (m.e === 'go') {
+      order = m.order;
+      const r = towerRng(m.seed);
+      colors = [];
+      for (let i = 0; i < 600; i++) { let c; do c = Math.floor(r() * TOWER_COLORS.length); while (i && c === colors[i - 1]); colors.push(c); }
+      reset();
+      live = order.includes(me);
+      endAt = performance.now() + m.T * 1000;
+      nextAt = now + 0.2;
+      if (!live) C.overlay('<div class="small">👀 觀戰中</div>', 1500);
+    } else if (m.e === 'over') {
+      live = false; hang = null;
+      const rk = Object.keys(m.fl).map(Number).sort((a, b) => m.fl[b] - m.fl[a]);
+      const nb = order.includes(me) && recBest('tower', m.fl[me], true);
+      C.overlay(`<div class="big">${m.reason === 'time' ? '⏰' : '🏁'}</div><div>${m.reason === 'time' ? '時間到!' : '大家都蓋完了!'}</div>
+        <div class="ffinal">${rk.map((s, k) => `<span>${['🥇', '🥈', '🥉', '🎀'][k] || ''} ${pinfo(s).emoji} ${who(s)} <b>${m.fl[s]} 層</b></span>`).join('')}</div>
+        ${nb ? `<div class="small">🏆 你的新紀錄:${m.fl[me]} 層</div>` : ''}`);
+    }
+  };
+}
+
+/* =========================================================
+   象棋麻將 🀄(2~4 人,32 張象棋牌,打 4 局累積分數)
+   牌:紅(帥 仕x2 相x2 俥x2 傌x2 炮x2 兵x5)和黑(將 士x2 象x2 車x2 馬x2 砲x2 卒x5),共 32 張
+   每人 4 張(莊家 5 張);輪到你:摸一張、打一張;湊成「一組 + 一對」就胡牌
+   組:同色的 帥仕相 / 俥傌炮(黑:將士象 / 車馬砲),或同色的三張兵(卒);對:兩張一模一樣的牌,或「帥 + 將」
+   別人打出的牌也可以胡(放槍);台數照「一副牌」的台數表,胡牌得 1 + 台數 分
+   ========================================================= */
+const XQ_NAMES = [['帥', '仕', '相', '俥', '傌', '炮', '兵'], ['將', '士', '象', '車', '馬', '砲', '卒']];
+const XQ_CNT = [1, 2, 2, 2, 2, 2, 5];
+const XQ_TILES = []; // id 0..31:先紅後黑,每種依序排
+[0, 1].forEach(c => XQ_CNT.forEach((n, k) => { for (let i = 0; i < n; i++) XQ_TILES.push({ c, k }); }));
+const XQ_KEYS = Array.from({ length: 14 }, (_, i) => i); // 牌的種類 = 顏色 * 7 + 種類
+const xqC = id => XQ_TILES[id].c, xqK = id => XQ_TILES[id].k;
+const xqFace = id => xqC(id) * 7 + xqK(id); // 也是 assets/xqmj_tiles.webp 裡的格子編號(14 是牌背)
+const xqName = id => XQ_NAMES[xqC(id)][xqK(id)];
+const xqTile = (id, cls, css) => { // 一張牌(id 是 null 就是牌背)
+  const f = id == null ? 14 : xqFace(id);
+  return `<span class="xqt${cls ? ' ' + cls : ''}"${id != null ? ` data-c="${id}"` : ''} style="--tx:${f % 4};--ty:${Math.floor(f / 4)}${css ? ';' + css : ''}"></span>`;
+};
+function xqIsSet(a, b, c) { // 一組:同色的 帥仕相 / 俥傌炮,或同色的三張兵(卒)
+  if (xqC(a) !== xqC(b) || xqC(b) !== xqC(c)) return false;
+  const k = [xqK(a), xqK(b), xqK(c)].sort((x, y) => x - y).join('');
+  return k === '012' || k === '345' || k === '666';
+}
+const xqIsPair = (a, b) => xqK(a) === xqK(b) && (xqC(a) === xqC(b) || xqK(a) === 0); // 一對:一模一樣的兩張,或「帥 + 將」
+function xqFans(set, pair) { // 牌型本身的台數(不含自摸、天胡這些要看情況的)
+  const all = set.concat(pair), f = [], reds = all.filter(i => xqC(i) === 0).length;
+  if (all.every(i => xqK(i) === 6 && xqC(i) === 0)) f.push(['五兵合縱', 5]);
+  else if (all.every(i => xqK(i) === 6 && xqC(i) === 1)) f.push(['五卒連橫', 5]);
+  else if (all.every(i => xqK(i) === 6)) f.push(['兵卒一家', 2]);
+  if (xqK(pair[0]) === 0) f.push(['將帥聽令', 2]);
+  if (xqK(pair[0]) === 4 && xqK(set[0]) === 6) f.push(['螞蟻雄兵', 2]);
+  if (reds === 5) f.push(['紅一色', 1]); else if (reds === 0) f.push(['黑一色', 1]);
+  return f;
+}
+function xqWin(h) { // 5 張牌能不能胡;能的話回傳台數最高的拆法 { set, pair, fans, tai }
+  if (h.length !== 5) return null;
+  let best = null;
+  for (let i = 0; i < 5; i++) for (let j = i + 1; j < 5; j++) for (let k = j + 1; k < 5; k++) {
+    if (!xqIsSet(h[i], h[j], h[k])) continue;
+    const rest = h.filter((_, x) => x !== i && x !== j && x !== k);
+    if (!xqIsPair(rest[0], rest[1])) continue;
+    const set = [h[i], h[j], h[k]], fans = xqFans(set, rest), tai = fans.reduce((t, f) => t + f[1], 0);
+    if (!best || tai > best.tai) best = { set, pair: rest, fans, tai };
+  }
+  return best;
+}
+function xqWaits(h) { // 4 張牌還差哪幾種牌就能胡(牌的種類編號)
+  return XQ_KEYS.filter(key => {
+    const id = XQ_TILES.findIndex((t, i) => t.c * 7 + t.k === key && !h.includes(i));
+    return id >= 0 && !!xqWin(h.concat(id));
+  });
+}
+function xqShape(h) { // 還沒聽牌時,手上的牌「搭」得好不好:對子、同一組的兩張都加分
+  let sc = 0;
+  for (let i = 0; i < h.length; i++) for (let j = i + 1; j < h.length; j++) {
+    const a = h[i], b = h[j];
+    if (xqIsPair(a, b)) sc += 3;
+    else if (xqC(a) === xqC(b) && xqK(a) !== xqK(b) && ((xqK(a) <= 2 && xqK(b) <= 2) || (xqK(a) >= 3 && xqK(a) <= 5 && xqK(b) >= 3 && xqK(b) <= 5))) sc += 2;
+    else if (xqC(a) === xqC(b) && xqK(a) === 6 && xqK(b) === 6) sc += 2;
+  }
+  return sc;
+}
+function xqPick(h, noise) { // 5 張牌要打哪一張:打完聽得越多越好;還沒聽就留搭得好的
+  if (noise && Math.random() < noise * 0.6) return pick(h);
+  let best = null;
+  h.forEach((c, i) => {
+    const r = h.filter((_, x) => x !== i), sc = xqWaits(r).length * 10 + xqShape(r) + Math.random() * 0.5;
+    if (!best || sc > best.sc) best = { sc, c };
+  });
+  return best.c;
+}
+
+function hXqmj(H) {
+  const P = H.players.slice(), n = P.length, R = 4, TURN_MS = 25000, CLAIM_MS = 7000;
+  const tot = {}, hands = {}, drawn = {}, ready = {}, discN = {};
+  P.forEach(s => { tot[s] = 0; hands[s] = []; });
+  let rd = 0, dealerI = -1, wall = [], disc = [], turnI = 0, phase = 'idle', last = null, tok = 0, ctok = 0, elig = [], resp = {}, drewId = null, over = false, autoFn = null;
+  const syncScores = () => { P.forEach(s => { H.scores[s] = tot[s]; }); H.bc({ t: 'score', scores: H.scores }); };
+  const priv = s => H.to(s, { t: 'g', e: 'hand', hand: hands[s].slice(), drew: s === P[turnI] && phase === 'act' ? drewId : null });
+  const pub = () => H.bc({
+    t: 'g', e: 'st', rd, R, dealer: P[dealerI], order: P, counts: Object.fromEntries(P.map(s => [s, hands[s].length])), wall: wall.length,
+    turn: P[turnI], phase, disc, last, elig, ready: { ...ready }, dn: { ...discN }, tot: { ...tot },
+  });
+
+  function startRound() {
+    rd++;
+    dealerI = (rd - 1) % n;
+    wall = shuffle([...Array(32).keys()]);
+    disc = []; last = null; elig = []; resp = {}; drewId = null; phase = 'deal';
+    P.forEach(s => { hands[s] = []; drawn[s] = 0; ready[s] = 0; discN[s] = 0; for (let i = 0; i < 4; i++) hands[s].push(wall.pop()); });
+    hands[P[dealerI]].push(wall.pop()); // 莊家多一張,第一手直接打(或直接天胡)
+    turnI = dealerI;
+    H.bc({ t: 'g', e: 'deal', rd, R, dealer: P[dealerI], order: P });
+    P.forEach(priv);
+    const my = ++tok;
+    H.s.after(1900, () => { if (my === tok && !over) beginAct(); });
+  }
+  function beginAct() {
+    const s = P[turnI], my = ++tok;
+    phase = 'act';
+    pub();
+    P.forEach(priv);
+    autoFn = () => {
+      if (my !== tok || over || phase !== 'act') return;
+      if (xqWin(hands[s])) return doWin(s, null);
+      discardTile(s, xqPick(hands[s], 0), false);
+    };
+    if (ready[s] || !H.online(s)) H.s.after(1300, autoFn); else H.s.after(TURN_MS, autoFn);
+  }
+  function nextTurn() {
+    turnI = (turnI + 1) % n;
+    const s = P[turnI];
+    if (!wall.length) return drawRound();
+    drewId = wall.pop();
+    hands[s].push(drewId);
+    drawn[s]++;
+    beginAct();
+  }
+  function discardTile(s, c, wantReady) {
+    const h = hands[s], i = h.indexOf(c);
+    if (i < 0) return;
+    h.splice(i, 1);
+    if (wantReady && !ready[s] && xqWaits(h).length) ready[s] = discN[s] === 0 ? 2 : 1; // 第一手就聽 = 現聽(2 台),之後才聽 = 聽牌(1 台)
+    discN[s]++;
+    disc.push([s, c]);
+    last = { s, c };
+    drewId = null;
+    tok++;
+    elig = P.filter(o => o !== s && H.online(o) && !!xqWin(hands[o].concat(c)));
+    resp = {};
+    phase = 'claim';
+    pub();
+    P.forEach(priv);
+    if (!elig.length) { const my = ++ctok; return H.s.after(700, () => { if (my === ctok && phase === 'claim') nextTurn(); }); }
+    const my = ++ctok;
+    elig.filter(o => ready[o]).forEach(o => claimResp(o, true)); // 聽牌之後自動胡
+    if (phase === 'claim') H.s.after(CLAIM_MS, () => { if (my === ctok) resolveClaim(); });
+  }
+  function claimResp(o, yes) {
+    if (phase !== 'claim' || !elig.includes(o) || o in resp) return;
+    resp[o] = !!yes;
+    if (elig.every(x => x in resp)) H.s.after(300, resolveClaim);
+  }
+  function resolveClaim() {
+    if (phase !== 'claim' || over) return;
+    ctok++;
+    const from = P.indexOf(last.s);
+    for (let k = 1; k < n; k++) { const o = P[(from + k) % n]; if (resp[o] && elig.includes(o)) return doWin(o, last.s); } // 同時有人胡,離放槍的人最近的先胡
+    nextTurn();
+  }
+  function reveal() { return Object.fromEntries(P.map(s => [s, hands[s].slice()])); }
+  function doWin(w, from) {
+    phase = 'end'; tok++; ctok++;
+    const tsumo = from == null, hand = tsumo ? hands[w].slice() : hands[w].concat(last.c), res = xqWin(hand), fans = res.fans.slice();
+    const dealer = P[dealerI], isDealer = w === dealer;
+    if (tsumo) {
+      if (isDealer && drawn[w] === 0) fans.push(['天胡', 6]);
+      else if (!isDealer && drawn[w] === 1) fans.push(['地胡', 6]);
+      else fans.push(['自摸', 2]);
+      if (wall.length === 0) fans.push(['海底', 1]);
+    } else if (!isDealer && drawn[w] === 0) fans.push(['人胡', 2]);
+    if (ready[w] === 2) fans.push(['現聽', 2]); else if (ready[w] === 1) fans.push(['聽牌', 1]);
+    const tai = fans.reduce((t, f) => t + f[1], 0), pts = 1 + tai;
+    tot[w] += pts;
+    syncScores();
+    const hs = reveal();
+    hs[w] = hand;
+    H.bc({ t: 'g', e: 'win', rd, R, w, from, tsumo, tile: tsumo ? null : last.c, hand, set: res.set, pair: res.pair, fans, tai, pts, tot: { ...tot }, hands: hs, order: P, dealer, last: rd >= R });
+    H.s.after(8000, endRound);
+  }
+  function drawRound() {
+    phase = 'end'; tok++; ctok++;
+    H.bc({ t: 'g', e: 'draw', rd, R, tot: { ...tot }, hands: reveal(), order: P, last: rd >= R });
+    H.s.after(5000, endRound);
+  }
+  function endRound() { if (over) return; if (rd >= R) { over = true; H.finish(); } else startRound(); }
+
+  return {
+    start() { startRound(); },
+    input(slot, m) {
+      if (over || !m) return;
+      if (phase === 'act' && slot === P[turnI]) {
+        if (m.e === 'win') { if (xqWin(hands[slot])) doWin(slot, null); return; }
+        if (m.e === 'discard' && !ready[slot]) { const c = +m.c; if (hands[slot].includes(c)) discardTile(slot, c, !!m.ready); }
+      } else if (phase === 'claim') {
+        if (m.e === 'ron') claimResp(slot, true); else if (m.e === 'pass') claimResp(slot, false);
+      }
+    },
+    presence() {
+      if (over) return;
+      if (P.filter(H.online).length < 2) { over = true; tok++; ctok++; H.bc({ t: 'g', e: 'abort' }); H.s.after(1500, H.finish); return; }
+      if (phase === 'claim') elig.filter(o => !H.online(o)).forEach(o => claimResp(o, false));
+      else if (phase === 'act' && !H.online(P[turnI]) && autoFn) H.s.after(800, autoFn);
+    },
+  };
+}
+
+function vXqmj(V) {
+  const me = V.me, T = cdTable(V);
+  let st = null, hand = [], drew = null, sel = null, replied = false, claimKey = '';
+  T.btns.innerHTML = `<button class="btn white sm xqpass">過</button><button class="btn blue sm xqready">聽牌</button><button class="btn green sm xqdiscard">打出這張</button><button class="btn red sm xqwin">胡!</button>`;
+  const passB = $('.xqpass', T.btns), readyB = $('.xqready', T.btns), discB = $('.xqdiscard', T.btns), winB = $('.xqwin', T.btns);
+  const who = s => (s === me ? '你' : esc(pinfo(s).name));
+  const myAct = () => st && st.phase === 'act' && st.turn === me;
+  const claimMe = () => st && st.phase === 'claim' && st.elig.includes(me) && !replied;
+  const idle = () => { [passB, readyB, discB, winB].forEach(b => { b.style.display = 'none'; }); T.info.innerHTML = ''; V.root.classList.remove('myturn'); }; // 局與局之間:按鈕收起來
+
+  function render() {
+    if (!st) return;
+    const act = myAct(), claim = claimMe(), amReady = st.ready[me] > 0, win = act ? xqWin(hand) : null;
+    const w = T.hand.clientWidth || 340, cnt = Math.max(hand.length, 4);
+    const tw = Math.max(50, Math.min(76, Math.floor((w - 12 - (cnt - 1) * 5) / cnt)));
+    const base = hand.filter(c => c !== drew).sort((a, b) => xqFace(a) - xqFace(b));
+    const list = drew != null && hand.includes(drew) ? [...base, drew] : base;
+    T.hand.innerHTML = `<div class="xqhand">${list.map(c => xqTile(c, (sel === c ? 'sel ' : '') + (c === drew ? 'drew ' : '') + (act && !amReady ? 'tap' : ''), `--tw:${tw}px`)).join('')}</div>`;
+    discB.style.display = act && !amReady ? '' : 'none';
+    discB.disabled = sel == null;
+    const canReady = act && !amReady && sel != null && xqWaits(hand.filter(c => c !== sel)).length > 0;
+    readyB.style.display = canReady ? '' : 'none';
+    readyB.textContent = st.dn[me] === 0 ? '現聽 +2台' : '聽牌 +1台';
+    winB.style.display = win || claim ? '' : 'none';
+    winB.classList.toggle('pulse', !!(win || claim));
+    passB.style.display = claim ? '' : 'none';
+    const dealer = st.dealer === me ? '<em class="xqdlr">莊</em>' : '', rdy = amReady ? `<em class="xqrdy">${st.ready[me] === 2 ? '現聽' : '聽牌'}</em>` : '';
+    let msg;
+    if (claim) msg = `<b class="cdyou">${who(st.last.s)} 打出 ${xqName(st.last.c)},你可以胡!</b>`;
+    else if (act) msg = win ? `<b class="cdyou">胡牌了!${win.fans.map(f => f[0]).join('、') || '平胡'}</b>` : amReady ? '聽牌中:自動摸打…' : `<b class="cdyou">輪到你!</b>選一張打出去${sel != null && canReady ? '(這樣打就能聽牌)' : ''}`;
+    else if (st.phase === 'claim') msg = `${who(st.last.s)} 打出 <b>${xqName(st.last.c)}</b>…`;
+    else msg = `等 ${esc(pinfo(st.turn).name)} 出牌…`;
+    T.info.innerHTML = `<span class="xqme">${dealer}${rdy}<i>${st.tot[me]} 分</i></span>${msg}`;
+    V.root.classList.toggle('myturn', !!(act || claim));
+  }
+  function renderBoard() {
+    T.seats(st.order, me, st.counts, st.phase === 'act' ? st.turn : null, s => `<span class="xqmeta"><i>${st.tot[s]} 分</i>${st.dealer === s ? '<em class="xqdlr">莊</em>' : ''}${st.ready[s] ? `<em class="xqrdy">${st.ready[s] === 2 ? '現聽' : '聽牌'}</em>` : ''}</span>`);
+    T.mid.innerHTML = `<div class="xqhead">第 <b>${st.rd}</b> / ${st.R} 局 · 牌山還有 <b>${st.wall}</b> 張</div>
+      <div class="xqpool">${st.disc.length ? st.disc.map(([s, c], i) => xqTile(c, 'sm' + (i === st.disc.length - 1 ? ' last' : ''), `--pc:${pinfo(s).color}`)).join('') : '<span class="xqempty">還沒有人打牌</span>'}</div>
+      ${st.last ? `<div class="cdwho">${pinfo(st.last.s).emoji} ${who(st.last.s)} 打出 <b>${xqName(st.last.c)}</b></div>` : ''}`;
+  }
+  T.hand.addEventListener('pointerdown', e => {
+    const k = e.target.closest('.xqt');
+    if (!k || !myAct() || st.ready[me]) return;
+    const c = +k.dataset.c;
+    sel = sel === c ? null : c;
+    SFX.tap(); render();
+  });
+  const sendDiscard = rdy => {
+    if (!myAct() || sel == null) return;
+    V.send({ e: 'discard', c: sel, ready: rdy });
+    sel = null;
+    st = { ...st, phase: 'wait' };
+    render();
+  };
+  discB.addEventListener('pointerdown', () => sendDiscard(false));
+  readyB.addEventListener('pointerdown', () => sendDiscard(true));
+  winB.addEventListener('pointerdown', () => {
+    if (myAct() && xqWin(hand)) { V.send({ e: 'win' }); st = { ...st, phase: 'wait' }; render(); }
+    else if (claimMe()) { V.send({ e: 'ron' }); replied = true; render(); }
+  });
+  passB.addEventListener('pointerdown', () => { if (claimMe()) { V.send({ e: 'pass' }); replied = true; render(); } });
+
+  const standings = (tot, order) => `<div class="xqrank">${order.slice().sort((a, b) => tot[b] - tot[a]).map((s, k) => `<span class="${s === me ? 'me' : ''}"><em>${k + 1}</em>${pinfo(s).emoji} ${who(s)}<b>${tot[s]}</b></span>`).join('')}</div>`;
+  const miniHands = (m, skip) => `<div class="xqhands">${m.order.filter(s => s !== skip).map(s => `<div><small>${pinfo(s).emoji} ${who(s)}</small><span>${m.hands[s].map(c => xqTile(c, 'xs')).join('')}</span></div>`).join('')}</div>`;
+  V.on = m => {
+    if (m.e === 'hand') {
+      hand = m.hand; drew = m.drew;
+      if (sel != null && !hand.includes(sel)) sel = null;
+      if (st && st.turn === me && st.phase === 'act' && sel == null && drew != null) sel = drew;
+      render();
+      return;
+    }
+    if (m.e === 'deal') {
+      st = null; sel = null; drew = null; idle();
+      T.say(`<div class="big">🀄</div><b class="xqtitle">第 ${m.rd} / ${m.R} 局</b><small>莊家:${pinfo(m.dealer).emoji} ${who(m.dealer)}</small>`, 1800);
+      SFX.join();
+      return;
+    }
+    if (m.e === 'st') {
+      const prev = st;
+      st = m;
+      const key = m.rd + ':' + m.disc.length;
+      if (key !== claimKey) { claimKey = key; replied = false; }
+      T.msg.classList.remove('on');
+      if (m.last && (!prev || !prev.last || prev.last.c !== m.last.c || prev.disc.length !== m.disc.length)) beep(m.last.s === me ? 420 : 520, 0.07, 'triangle', 0.09);
+      if (m.phase === 'act' && m.turn === me && (!prev || prev.turn !== me || prev.phase !== 'act')) { buzzTurn(); if (sel == null && drew != null) sel = drew; }
+      else if (m.phase === 'claim' && m.elig.includes(me) && (!prev || prev.phase !== 'claim')) { buzzTurn(); }
+      else if (m.phase === 'act' && m.turn !== me && prev && prev.turn !== m.turn && m.order.includes(me)) buzzOther();
+      renderBoard(); render();
+      return;
+    }
+    if (m.e === 'win') {
+      st = null; idle();
+      const tiles = [...m.set, ...m.pair];
+      T.say(`<div class="big">${m.w === me ? '🏆' : '🀄'}</div><b class="xqtitle">${m.w === me ? '你胡牌了!' : `${esc(pinfo(m.w).name)} 胡牌!`}</b>
+        <small>${m.tsumo ? '自摸' : `${who(m.from)} 放槍`} · 第 ${m.rd} / ${m.R} 局</small>
+        <div class="xqwinhand">${m.set.map(c => xqTile(c, 'md' + (c === m.tile ? ' hit' : ''))).join('')}<i></i>${m.pair.map(c => xqTile(c, 'md' + (c === m.tile ? ' hit' : ''))).join('')}</div>
+        <div class="xqfans">${m.fans.length ? m.fans.map(([n, t]) => `<span><b>${n}</b><i>${t} 台</i></span>`).join('') : '<span><b>平胡</b><i>0 台</i></span>'}</div>
+        <div class="xqpts">底 1 + ${m.tai} 台 = <b>+${m.pts}</b> 分</div>
+        ${standings(m.tot, m.order)}${miniHands(m, m.w)}<small>${m.last ? '最後一局結束了!' : '下一局馬上開始…'}</small>`);
+      if (m.w === me) { SFX.win(); confetti(); buzz([40, 40, 80]); } else SFX.bad();
+      return;
+    }
+    if (m.e === 'draw') {
+      st = null; idle();
+      T.say(`<div class="big">🌫️</div><b class="xqtitle">流局</b><small>牌山摸完了,沒有人胡牌(第 ${m.rd} / ${m.R} 局)</small>${standings(m.tot, m.order)}${miniHands(m, null)}<small>${m.last ? '最後一局結束了!' : '下一局馬上開始…'}</small>`);
+      SFX.tick();
+      return;
+    }
+    if (m.e === 'abort') T.say('<div class="big">👋</div><b class="xqtitle">對手都離開了</b>');
+  };
+  new ResizeObserver(() => { if (st && T.hand.isConnected) render(); }).observe(T.hand);
 }
 
 /* =========================================================
@@ -7864,6 +8573,41 @@ BOTS.schulte = (H, s, m, k) => {
     if (Math.random() < (1 - k.sk) * 0.05) miss++;
     const mm = miss;
     H.s.after(Math.round(t), () => { if (H.bs[s] === st) botSend(H, s, { e: 'p', k: i, miss: mm }); });
+  }
+};
+
+BOTS.tower = (H, s, m, k) => { // 每隔一段時間「蓋好一層」或「掉一層」,越高越容易失手
+  if (m.t !== 'g' || m.e !== 'go' || !m.order.includes(s)) return;
+  const st = H.bs[s] = { fl: 0, lv: TOWER.LIVES, combo: 0 }, end = Date.now() + m.T * 1000;
+  const step = () => {
+    if (H.bs[s] !== st || st.lv <= 0 || Date.now() > end) return;
+    if (Math.random() < Math.min(0.5, (1 - k.sk) * 0.25 + st.fl * 0.007)) { st.lv--; st.combo = 0; }
+    else {
+      st.fl++;
+      if (Math.random() < 0.1 + k.sk * 0.35) { if (++st.combo % 3 === 0 && st.lv < TOWER.LIVES) st.lv++; } else st.combo = 0;
+    }
+    botSend(H, s, { e: 'p', fl: st.fl, lv: st.lv });
+    H.s.after(Math.round(towerPeriod(st.fl) * 1000 * (0.5 + Math.random() * 0.5) * k.spd + 450), step);
+  };
+  H.s.after(rand(1200, 2200), step);
+};
+
+BOTS.xqmj = (H, s, m, k) => { // 電腦:能胡就胡;不能胡就打「打完聽得最多」的那張,聽牌了有機會宣告聽牌;別人放槍能胡就胡
+  const st = H.bs[s] || (H.bs[s] = { hand: [], tok: 0 });
+  if (m.t !== 'g') return;
+  if (m.e === 'hand') { st.hand = m.hand; return; }
+  if (m.e === 'deal') { st.tok++; return; }
+  if (m.e !== 'st') return;
+  const id = ++st.tok;
+  if (m.phase === 'act' && m.turn === s) {
+    H.s.after(Math.round(rand(1000, 1900) * k.spd), () => {
+      if (st.tok !== id || st.hand.length !== 5) return;
+      if (xqWin(st.hand)) return botSend(H, s, { e: 'win' });
+      const c = xqPick(st.hand, 1 - k.sk), rest = st.hand.filter(x => x !== c);
+      botSend(H, s, { e: 'discard', c, ready: !m.ready[s] && Math.random() < 0.55 && xqWaits(rest).length > 0 });
+    });
+  } else if (m.phase === 'claim' && m.elig.includes(s)) {
+    H.s.after(Math.round(rand(500, 1100) * k.spd), () => { if (st.tok === id) botSend(H, s, { e: 'ron' }); });
   }
 };
 

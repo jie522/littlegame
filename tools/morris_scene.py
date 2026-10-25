@@ -7,6 +7,7 @@ import bpy, bmesh, math, sys, os
 
 argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
 OUT = argv[0] if argv else os.getcwd()
+ONLY = argv[1] if len(argv) > 1 else ''  # 'board' 或 'stones':只算其中一張
 COLORS = ['#e8444f', '#3f7de8', '#2fb36b', '#f2b800', '#8c5be8', '#ff8a3d', '#34344a', '#e2ddd0']
 XY = [(0, 0), (3, 0), (6, 0), (1, 1), (3, 1), (5, 1), (2, 2), (3, 2), (4, 2), (0, 3), (1, 3), (2, 3), (4, 3), (5, 3), (6, 3), (2, 4), (3, 4), (4, 4), (1, 5), (3, 5), (5, 5), (0, 6), (3, 6), (6, 6)]
 S = 10.0  # 棋盤邊長(單位),整張圖就是這個範圍
@@ -111,62 +112,70 @@ def cut(target, cutter):
 
 
 # ================= 1) 棋盤 =================
-sc = reset()
-world(0.25)
-frame_m = wood_mat('Frame', '#8a5326', '#5a3315', 6, 0.08, 0.38)
-field_m = wood_mat('Field', '#e9b970', '#c98f45', 5, 0.1, 0.45)
-# 外框(深色木頭,圓角)
-frame = rounded_box('Frame', S, S, 0.5, 0.45, 0, frame_m)
-# 棋盤面:比外框低一階,放在框裡面
-inset = 0.34
-field = rounded_box('Field', S - inset * 2, S - inset * 2, 0.2, 0.18, 0.42, field_m)
-bpy.context.view_layer.objects.active = field
-# 刻出來的線(寬 0.075、深 0.07):三個方框 + 四條中線
-G, GD = 0.075, 0.09
-top = 0.62
-def groove(x1, y1, x2, y2):
-    cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
-    w, h = abs(x2 - x1) + G, abs(y2 - y1) + G
-    bpy.ops.mesh.primitive_cube_add(size=1, location=(cx, cy, top))
-    o = bpy.context.object
-    o.scale = (w, h, GD * 2)
-    bpy.ops.object.transform_apply(scale=True)
-    return o
-segs = []
-for k in range(3):
-    a, b = P(k), P(6 - k)
-    segs += [(a, a, b, a), (a, b, b, b), (a, a, a, b), (b, a, b, b)]
-segs += [(P(3), P(0), P(3), P(2)), (P(3), P(4), P(3), P(6)), (P(0), P(3), P(2), P(3)), (P(4), P(3), P(6), P(3))]
-# 座標的 y 軸:圖片上方是 +y,所以三個方框用的 a/b 對稱,不用翻轉
-for s_ in segs:
-    cut(field, groove(s_[0], -s_[1], s_[2], -s_[3]))
-# 24 個圓孔(放棋子的位置,圓圓的小凹洞)
-for (xi, yi) in XY:
-    x, y = P(xi), -P(yi)
-    bpy.ops.mesh.primitive_cylinder_add(radius=0.2, depth=0.3, location=(x, y, top - 0.0), vertices=48)
-    cut(field, bpy.context.object)
-# 凹槽和孔洞內的顏色壓暗一點:多加一層很薄的深色膜在槽底(用第二個材質做 AO 感)
-field.data.materials.append(wood_mat('Groove', '#4a2a10', '#2a1507', 5, 0.1, 0.8))
-bpy.context.view_layer.update()
-# 把法線朝下很多的面(槽壁/孔底)指定為深色材質
-for poly in field.data.polygons:
-    poly.material_index = 0
-bm = bmesh.new(); bm.from_mesh(field.data)
-for f in bm.faces:
-    f.material_index = 0 if f.normal.z > 0.85 and f.calc_center_median().z > top - 0.001 else 1
-bm.to_mesh(field.data); bm.free()
-area((-4, 5, 9), (math.radians(25), math.radians(-20), 0), 7, 1000, '#fff0d8')
-area((6, -5, 6), (math.radians(-35), math.radians(40), 0), 6, 300, '#ffe0b0')
-ortho(S * 1.0)
-sc.cycles.samples = 160
-render(os.path.join(OUT, 'morris_board.png'), 1024, 1024)
+def make_board():
+    sc = reset()
+    world(0.25)
+    frame_m = wood_mat('Frame', '#8a5326', '#5a3315', 6, 0.08, 0.38)
+    field_m = wood_mat('Field', '#e9b970', '#c98f45', 5, 0.1, 0.45)
+    # 外框(深色木頭,圓角)
+    frame = rounded_box('Frame', S, S, 0.5, 0.45, 0, frame_m)
+    # 棋盤面:比外框低一階,放在框裡面
+    inset = 0.34
+    field = rounded_box('Field', S - inset * 2, S - inset * 2, 0.2, 0.18, 0.42, field_m)
+    bpy.context.view_layer.objects.active = field
+    # 刻出來的線(寬 0.075、深 0.07):三個方框 + 四條中線
+    G, GD = 0.075, 0.09
+    top = 0.62
+    def groove(x1, y1, x2, y2):
+        cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
+        w, h = abs(x2 - x1) + G, abs(y2 - y1) + G
+        bpy.ops.mesh.primitive_cube_add(size=1, location=(cx, cy, top))
+        o = bpy.context.object
+        o.scale = (w, h, GD * 2)
+        bpy.ops.object.transform_apply(scale=True)
+        return o
+    segs = []
+    for k in range(3):
+        a, b = P(k), P(6 - k)
+        segs += [(a, a, b, a), (a, b, b, b), (a, a, a, b), (b, a, b, b)]
+    segs += [(P(3), P(0), P(3), P(2)), (P(3), P(4), P(3), P(6)), (P(0), P(3), P(2), P(3)), (P(4), P(3), P(6), P(3))]
+    # 座標的 y 軸:圖片上方是 +y,所以三個方框用的 a/b 對稱,不用翻轉
+    for s_ in segs:
+        cut(field, groove(s_[0], -s_[1], s_[2], -s_[3]))
+    # 24 個圓孔(放棋子的位置,圓圓的小凹洞)
+    for (xi, yi) in XY:
+        x, y = P(xi), -P(yi)
+        bpy.ops.mesh.primitive_cylinder_add(radius=0.2, depth=0.3, location=(x, y, top - 0.0), vertices=48)
+        cut(field, bpy.context.object)
+    # 凹槽和孔洞內的顏色壓暗一點:多加一層很薄的深色膜在槽底(用第二個材質做 AO 感)
+    field.data.materials.append(wood_mat('Groove', '#4a2a10', '#2a1507', 5, 0.1, 0.8))
+    bpy.context.view_layer.update()
+    # 把法線朝下很多的面(槽壁/孔底)指定為深色材質
+    for poly in field.data.polygons:
+        poly.material_index = 0
+    bm = bmesh.new(); bm.from_mesh(field.data)
+    for f in bm.faces:
+        f.material_index = 0 if f.normal.z > 0.85 and f.calc_center_median().z > top - 0.001 else 1
+    bm.to_mesh(field.data); bm.free()
+    area((-4, 5, 9), (math.radians(25), math.radians(-20), 0), 7, 1000, '#fff0d8')
+    area((6, -5, 6), (math.radians(-35), math.radians(40), 0), 6, 300, '#ffe0b0')
+    ortho(S * 1.0)
+    sc.cycles.samples = 160
+    render(os.path.join(OUT, 'morris_board.png'), 1024, 1024)
+
+
+
+if ONLY != 'stones':
+    make_board()
 
 # ================= 2) 棋子(8 顆寶石棋子排成一列) =================
+if ONLY == 'board':
+    sys.exit(0)
 sc = reset()
-world(0.45, '#ffffff')
+world(0.3, '#ffffff')
 
 
-def lathe(name, prof, segs=96):
+def lathe(name, prof, segs=128):
     me = bpy.data.meshes.new(name)
     bm = bmesh.new()
     rings = [[bm.verts.new((r * math.cos(2 * math.pi * k / segs), r * math.sin(2 * math.pi * k / segs), z)) for k in range(segs)] for (r, z) in prof]
@@ -181,12 +190,15 @@ def lathe(name, prof, segs=96):
     bpy.context.collection.objects.link(ob)
     for f in me.polygons:
         f.use_smooth = True
+    sub = ob.modifiers.new('sub', 'SUBSURF'); sub.levels = sub.render_levels = 2
     return ob
 
 
-# 棋子的剖面:圓角的寶石圓餅(半徑 0.61,厚 0.3,頂面微微鼓起)
-R, T = 0.61, 0.32
-prof = [(0.0, 0.0), (R * 0.82, 0.0), (R * 0.95, 0.03), (R, 0.1), (R, T * 0.55), (R * 0.93, T * 0.8), (R * 0.75, T * 0.95), (R * 0.45, T * 1.1), (0.0, T * 1.16)]
+# 棋子的剖面:厚厚的圓餅,側面看得到;上緣圓角,頂面有一圈凹槽、中間鼓起來
+R, T = 0.58, 0.36
+prof = [(0.0, 0.0), (R * 0.86, 0.0), (R * 0.97, 0.025), (R, 0.08), (R, T * 0.62), (R * 0.985, T * 0.8), (R * 0.95, T * 0.92),
+        (R * 0.88, T * 0.98), (R * 0.8, T), (R * 0.74, T * 0.97), (R * 0.68, T * 0.9), (R * 0.62, T * 0.88), (R * 0.56, T * 0.93),
+        (R * 0.45, T * 1.02), (R * 0.3, T * 1.08), (R * 0.12, T * 1.11), (0.0, T * 1.12)]
 PITCH = 1.34
 for i, hexc in enumerate(COLORS):
     o = lathe('Stone%d' % i, prof)
@@ -195,17 +207,21 @@ for i, hexc in enumerate(COLORS):
     m.use_nodes = True
     p = m.node_tree.nodes.get('Principled BSDF')
     p.inputs['Base Color'].default_value = (*hexrgb(hexc), 1)
-    p.inputs['Roughness'].default_value = 0.34
-    p.inputs['Coat Weight'].default_value = 0.18
-    p.inputs['Coat Roughness'].default_value = 0.3
-    p.inputs['Subsurface Weight'].default_value = 0.15
-    p.inputs['Subsurface Radius'].default_value = (0.25, 0.25, 0.25)
-    p.inputs['Specular IOR Level'].default_value = 0.25
+    p.inputs['Roughness'].default_value = 0.3
+    p.inputs['Coat Weight'].default_value = 0.35
+    p.inputs['Coat Roughness'].default_value = 0.12
+    p.inputs['Subsurface Weight'].default_value = 0.1
+    p.inputs['Subsurface Radius'].default_value = (0.2, 0.2, 0.2)
+    p.inputs['Specular IOR Level'].default_value = 0.35
     o.data.materials.append(m)
-area((-3, 4, 8), (math.radians(20), math.radians(-15), 0), 10, 520, '#ffffff')
-area((5, -3, 4), (math.radians(-30), math.radians(35), 0), 8, 100, '#ffe8c8')
-# 8 顆排成一列:相機照整排,每顆佔 256 像素
-bpy.ops.object.camera_add(location=(0, 0, 20), rotation=(0, 0, 0))
+# 主光從左上方打下來、右下補一點暖光、後面一道輪廓光,明暗對比拉大比較有立體感
+area((-4, 3, 7), (math.radians(-25), math.radians(-30), 0), 6, 650, '#ffffff')
+area((5, -6, 3), (math.radians(60), math.radians(35), 0), 8, 90, '#ffe8c8')
+area((0, 8, 2), (math.radians(-75), 0, 0), 12, 260, '#ffffff')
+# 相機往前傾 TILT 度往下看,看得到棋子的側面;8 顆排成一列,每顆佔 256 像素
+TILT = math.radians(32)
+zc = T * 0.5
+bpy.ops.object.camera_add(location=(0, -20 * math.sin(TILT), zc + 20 * math.cos(TILT)), rotation=(TILT, 0, 0))
 cam = bpy.context.object
 cam.data.type = 'ORTHO'
 cam.data.ortho_scale = PITCH * 8

@@ -1958,7 +1958,7 @@ button:disabled { cursor: not-allowed; }
 @keyframes turnpulse { from { opacity: .45; } to { opacity: 1; } }
 
 /* ===== 撲克牌桌(大老二、排七):Blender 算圖的牌桌背景 ===== */
-.play-big2, .play-seven { gap: 6px; padding-top: max(8px, env(safe-area-inset-top)); background: #0e3b25 url(assets/cardtable.jpg) center / 108% 104% no-repeat; }
+.play-big2, .play-seven, .play-xqmj { gap: 6px; padding-top: max(8px, env(safe-area-inset-top)); background: #0e3b25 url(assets/cardtable.jpg) center / 108% 104% no-repeat; }
 .cdgame .topbar { background: rgba(0,0,0,.28); border-color: rgba(0,0,0,.45); }
 .cdgame .stage { flex: 1; min-height: 0; padding: 0; background: transparent; border: none; box-shadow: none; }
 .cdgame .sin { height: 100%; gap: 0; }
@@ -1999,7 +1999,7 @@ button:disabled { cursor: not-allowed; }
 .cdbtns { display: flex; align-items: center; justify-content: center; gap: 6px; }
 .cdbtns .btn { padding: 8px 14px; }
 .cdbtns .btn:disabled { opacity: .45; filter: grayscale(.4); }
-.play-big2.myturn .pad, .play-seven.myturn .pad { border-color: var(--c); box-shadow: 0 0 0 2px var(--c), 0 0 18px 4px var(--c); }
+.play-big2.myturn .pad, .play-seven.myturn .pad, .play-xqmj.myturn .pad { border-color: var(--c); box-shadow: 0 0 0 2px var(--c), 0 0 18px 4px var(--c); }
 .cdmsg { position: absolute; left: 0; right: 0; top: 28%; margin: 0 auto; z-index: 5; width: min(92%, 320px); display: none; flex-direction: column; align-items: center; gap: 6px; padding: 14px 16px; border-radius: 20px; background: rgba(10,24,16,.88); border: 3px solid #e9cd7f; color: #fff; text-align: center; pointer-events: none; }
 .cdmsg.on { display: flex; animation: popin .3s ease-out; }
 .cdmsg .big { font-size: 2.8rem; line-height: 1; }
@@ -2153,3 +2153,119 @@ button:disabled { cursor: not-allowed; }
 .mp.sel { transform: translateY(-5px) scale(1.14); box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--pc), 0 0 18px 6px var(--pc); }
 @keyframes rmpulse { from { box-shadow: 0 0 0 3px #ee4b4b, 0 0 6px 2px rgba(238,75,75,.5); } to { box-shadow: 0 0 0 5px #ee4b4b, 0 0 18px 7px rgba(238,75,75,.85); } }
 .hd { width: 16px; height: 16px; border: none; background: url(assets/morris_stones.png) calc(var(--ci, 0) * 100% / 7) 0 / 800% 100% no-repeat; filter: drop-shadow(0 1px 1px rgba(30,15,0,.4)); }
+/* 高樓疊疊樂 */
+.play-tower .stage { flex: 1; padding: 5px; background: transparent; border-color: transparent; box-shadow: none; }
+.play-tower .sin { height: 100%; justify-content: center; gap: 4px; }
+.play-tower .pad { display: none; }
+.play-tower { touch-action: none; user-select: none; -webkit-user-select: none; }
+.play-tower .tcv { border-color: #1f2a44; }
+.play-tower .hud { gap: 4px 6px; font-size: .78rem; font-weight: 800; }
+.play-tower .hud:empty { display: none; }
+.tws { display: inline-flex; align-items: center; gap: 3px; padding: 2px 9px; border-radius: 999px; background: #fff; border: 2px solid var(--pc); }
+.tws b { font-family: "Fredoka", var(--font); font-size: .95rem; }
+.tws i { font-style: normal; font-size: .62rem; }
+.tws .pe { height: 1.3em; }
+.tws.out { opacity: .55; }
+.tws.off { filter: grayscale(1); opacity: .5; }
+.play-tower .tov { background: rgba(20,30,60,.66); color: #fff; text-shadow: var(--ol-sm); text-align: center; gap: 6px; padding: 12px; }
+.play-tower .tov .small { font-size: .85rem; line-height: 1.6; }
+.play-tower .tov .ffinal { margin-top: 6px; min-width: 70%; }
+
+/* 遊戲卡片的圖示:設計稿裡的插圖(assets/game_icons.webp,4 x 5 拼圖,--ix / --iy 是第幾欄、第幾列) */
+.gico {
+  aspect-ratio: 1.4;
+  background: url(assets/game_icons.webp) calc(var(--ix, 0) * 100% / 3) calc(var(--iy, 0) * 100% / 4) / 400% 500% no-repeat, var(--g);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.35);
+  font-size: 0;
+}
+@media (max-height: 760px) { .gico { aspect-ratio: 1.4; } }
+
+/* 排七:蓋牌要看得清楚、結算面板要夠大 */
+.play-seven .cdop { flex-wrap: wrap; row-gap: 3px; }
+.svcov { flex: 0 0 100%; text-align: center; padding: 1px 8px; border-radius: 999px; background: linear-gradient(#ffb454, #ff8a1f); color: #3a1c00; border: 2px solid #fff; font-weight: 900; font-size: .8rem; box-shadow: 0 2px 0 rgba(0,0,0,.35); }
+.svcov.new { animation: svpop .5s ease-out; }
+@keyframes svpop { 0% { transform: scale(.4); } 55% { transform: scale(1.25); } 100% { transform: scale(1); } }
+.play-seven .cdcov { margin-right: auto; padding: 5px 12px; border-radius: 999px; background: rgba(0,0,0,.35); border: 2px solid rgba(255,255,255,.25); color: rgba(255,233,168,.75); font-size: .9rem; font-weight: 900; white-space: nowrap; }
+.play-seven .cdcov.has { background: linear-gradient(#ffb454, #ff8a1f); border-color: #fff; color: #3a1c00; box-shadow: 0 2px 0 rgba(0,0,0,.35); }
+.play-seven .cdcov b { font-size: 1.1rem; font-family: "Fredoka", var(--font); }
+.cdwho.cov { background: linear-gradient(#ffb454, #ff8a1f); border: 2px solid #fff; color: #3a1c00; font-size: .95rem; font-weight: 900; padding: 4px 16px; animation: svpop .5s ease-out; }
+.cdwho.cov b { color: #3a1c00; }
+.play-seven .cdmsg { top: 3%; max-height: 94%; overflow-y: auto; pointer-events: auto; width: min(96%, 380px); padding: 12px 12px 12px; gap: 5px; background: rgba(8,20,13,.97); border-width: 4px; box-shadow: 0 0 0 3px rgba(0,0,0,.4), 0 14px 40px rgba(0,0,0,.6); }
+.play-seven .cdmsg .big { font-size: 2.8rem; }
+.play-seven .cdmsg .svtitle { font-size: 1.6rem; color: #ffe066; text-shadow: var(--ol-sm); }
+.play-seven .cdmsg > small { font-size: .95rem; }
+.svresl { width: 100%; display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
+.svres { display: flex; flex-direction: column; gap: 3px; padding: 6px 10px; border-radius: 14px; background: rgba(255,255,255,.08); border: 2px solid rgba(255,255,255,.14); text-align: left; }
+.svres.win { background: rgba(255,214,90,.16); border-color: #ffd23f; }
+.svres.me { box-shadow: inset 0 0 0 2px rgba(125,255,176,.55); }
+.svr1 { display: flex; align-items: center; gap: 8px; }
+.svr1 em { font-style: normal; font-size: 1.5rem; line-height: 1; }
+.svr1 .svn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 1.2rem; font-weight: 900; }
+.svr1 .svn .pe { height: 1.5em; vertical-align: middle; }
+.svr1 .svp { font-family: "Fredoka", var(--font); font-size: 1.8rem; line-height: 1; color: #ffe066; }
+.svr1 .svp small { font-size: .85rem; margin-left: 2px; opacity: .85; }
+.svres.win .svp { color: #7dffb0; }
+.svr2 { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.svr2 small { font-size: .78rem; opacity: .8; margin-right: 2px; }
+.svr2 { gap: 3px; }
+.svr2 .cm { width: 27px; height: 34px; }
+
+/* ===== 象棋麻將 🀄(Blender 算的象牙白麻將牌:assets/xqmj_tiles.webp,4 x 4 格,最後兩格是牌背和空白牌) ===== */
+.xqt {
+  --w: var(--tw, 60px);
+  display: inline-block; flex: none; position: relative;
+  width: var(--w); height: calc(var(--w) * 1.437);
+  background: url(assets/xqmj_tiles.webp) no-repeat;
+  background-size: calc(var(--w) * 4.971) calc(var(--w) * 6.331);
+  background-position: calc(var(--w) * (var(--tx) * -1.2427 - .1214)) calc(var(--w) * (var(--ty) * -1.5827 - .0582));
+  filter: drop-shadow(0 3px 3px rgba(0,0,0,.5));
+  transition: transform .15s, filter .15s;
+}
+.xqt.sm { --tw: 31px; filter: drop-shadow(0 1px 1.5px rgba(0,0,0,.5)); }
+.xqt.sm::after { content: ""; position: absolute; left: 3px; bottom: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--pc, #fff); border: 1px solid rgba(0,0,0,.55); }
+.xqt.sm.last { filter: drop-shadow(0 0 5px #ffd23f) drop-shadow(0 0 2px #ffd23f); transform: translateY(-3px) scale(1.12); z-index: 1; }
+.xqt.xs { --tw: 21px; filter: drop-shadow(0 1px 1px rgba(0,0,0,.5)); }
+.xqt.md { --tw: 48px; }
+.xqt.hit { filter: drop-shadow(0 0 7px #ffd23f) drop-shadow(0 0 3px #ffd23f); transform: translateY(-4px); }
+.xqhand { display: flex; justify-content: center; align-items: flex-end; gap: 5px; min-height: calc(var(--tw, 62px) * 1.437 + 18px); padding-top: 16px; touch-action: none; }
+.xqhand .xqt.tap { cursor: pointer; }
+.xqhand .xqt.sel { transform: translateY(-14px); filter: drop-shadow(0 0 7px #ffd23f) drop-shadow(0 6px 4px rgba(0,0,0,.45)); }
+.xqhand .xqt.drew { margin-left: 8px; }
+.play-xqmj .cdhand { min-height: 0; }
+.xqhead { color: #ffe9a8; font-weight: 800; font-size: .9rem; text-shadow: var(--ol-sm); }
+.xqhead b { font-family: "Fredoka", var(--font); font-size: 1.1rem; color: #fff; }
+.xqpool { display: flex; flex-wrap: wrap; justify-content: center; align-content: flex-start; gap: 2px 3px; width: 100%; max-width: 330px; min-height: 60px; padding: 8px 6px; border-radius: 14px; background: rgba(0,0,0,.2); }
+.xqempty { align-self: center; color: rgba(255,255,255,.5); font-size: .85rem; font-weight: 700; }
+.play-xqmj .cdop { flex-wrap: wrap; row-gap: 3px; }
+.play-xqmj .cdbacks { width: 64px; height: 24px; }
+.play-xqmj .cdbacks i { width: 14px; height: 21px; border: none; border-radius: 0; box-shadow: none; left: calc(var(--k) * 11px); background: url(assets/xqmj_tiles.webp) no-repeat; background-size: calc(14px * 4.971) calc(14px * 6.331); background-position: calc(14px * -2.6068) calc(14px * -4.8063); filter: drop-shadow(0 1px 1px rgba(0,0,0,.5)); }
+.xqmeta, .xqme { display: flex; align-items: center; justify-content: center; gap: 4px; flex: 0 0 100%; font-size: .75rem; font-weight: 800; }
+.xqmeta i, .xqme i { font-style: normal; font-family: "Fredoka", var(--font); color: #ffe066; font-size: .9rem; }
+.xqme { margin-bottom: 2px; }
+.xqdlr, .xqrdy { font-style: normal; padding: 0 6px; border-radius: 999px; font-size: .68rem; font-weight: 900; border: 1.5px solid #fff; }
+.xqdlr { background: #d63a4a; color: #fff; }
+.xqrdy { background: linear-gradient(#7cc4ff, #2f86f0); color: #fff; }
+.xqwin.pulse, .btn.xqwin.pulse { animation: svpop .6s ease-out, hop 1s .6s ease-in-out infinite; }
+.play-xqmj .cdbtns { flex-wrap: wrap; }
+.play-xqmj .cdbtns .btn { padding: 8px 16px; font-size: 1rem; }
+.play-xqmj .cdmsg { top: 3%; max-height: 94%; overflow-y: auto; pointer-events: auto; width: min(96%, 380px); padding: 12px 12px 12px; gap: 6px; background: rgba(8,20,13,.97); border-width: 4px; box-shadow: 0 0 0 3px rgba(0,0,0,.4), 0 14px 40px rgba(0,0,0,.6); }
+.play-xqmj .cdmsg .big { font-size: 2.8rem; }
+.play-xqmj .cdmsg .xqtitle { font-size: 1.6rem; color: #ffe066; text-shadow: var(--ol-sm); }
+.xqwinhand { display: flex; justify-content: center; align-items: flex-end; gap: 4px; padding-top: 6px; }
+.xqwinhand i { width: 10px; }
+.xqfans { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; }
+.xqfans span { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px; background: rgba(255,255,255,.1); border: 2px solid rgba(255,214,90,.6); font-size: .95rem; }
+.xqfans b { font-weight: 900; }
+.xqfans i { font-style: normal; color: #ffe066; font-family: "Fredoka", var(--font); font-weight: 800; }
+.xqpts { font-size: 1.05rem; font-weight: 800; }
+.xqpts b { font-size: 1.6rem; color: #7dffb0; font-family: "Fredoka", var(--font); }
+.xqrank { width: 100%; display: flex; flex-direction: column; gap: 4px; margin-top: 2px; }
+.xqrank span { display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 12px; background: rgba(255,255,255,.08); text-align: left; font-weight: 800; font-size: .95rem; }
+.xqrank span.me { box-shadow: inset 0 0 0 2px rgba(125,255,176,.55); }
+.xqrank em { font-style: normal; width: 1.4em; color: #ffe066; font-family: "Fredoka", var(--font); }
+.xqrank b { margin-left: auto; font-size: 1.3rem; color: #ffe066; font-family: "Fredoka", var(--font); }
+.xqrank .pe { height: 1.4em; vertical-align: middle; }
+.xqhands { width: 100%; display: flex; flex-direction: column; gap: 3px; }
+.xqhands > div { display: flex; align-items: center; gap: 8px; padding: 2px 6px; background: rgba(255,255,255,.05); border-radius: 8px; }
+.xqhands small { flex: 1; text-align: left; opacity: .85; font-size: .78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.xqhands span { display: flex; gap: 2px; }
