@@ -7131,7 +7131,7 @@ function hSeven(H) {
 function vSeven(V) {
   const me = V.me, T = cdTable(V);
   let st = null, hand = [], covered = [], sel = null;
-  T.btns.innerHTML = `<span class="cdcov">蓋牌 <b>0</b> 張 · <b>0</b> 點</span><button class="btn orange sm cdcover">蓋這張</button><button class="btn green sm cdplay">出這張</button>`;
+  T.btns.innerHTML = `<span class="cdcov">🙈 蓋牌 <b>0</b> 張 · <b>0</b> 點</span><button class="btn orange sm cdcover">蓋這張</button><button class="btn green sm cdplay">出這張</button>`;
   const playB = $('.cdplay', T.btns), coverB = $('.cdcover', T.btns), covEl = $('.cdcov', T.btns);
   const myTurn = () => st && !st.done && st.turn === me;
   const can = c => (st.first ? c === SEV_START : sevOk(st.board, c));
@@ -7146,17 +7146,18 @@ function vSeven(V) {
     playB.style.display = mustCover ? 'none' : '';
     $$('b', covEl)[0].textContent = covered.length;
     $$('b', covEl)[1].textContent = covered.reduce((t, c) => t + cdRank(c), 0);
+    covEl.classList.toggle('has', covered.length > 0);
     T.info.innerHTML = st.done ? '' : myTurn() ? `<b class="cdyou">輪到你!</b>${st.first ? '先出 ♠7' : mustCover ? '<i>一張都接不上,選一張蓋起來(點數越小越好)</i>' : '選一張亮起來的牌出'}` : `等 ${esc(pinfo(st.turn).name)} 出牌…`;
     V.root.classList.toggle('myturn', myTurn());
   }
   function renderBoard() {
-    T.seats(st.order, me, st.counts, st.done ? null : st.turn, s => (st.cov[s] ? `<span class="cdpassed">蓋 ${st.cov[s]}</span>` : ''));
+    T.seats(st.order, me, st.counts, st.done ? null : st.turn, s => (st.cov[s] ? `<span class="svcov${st.last && st.last.s === s && st.last.type === 'cover' ? ' new' : ''}">🙈 蓋了 ${st.cov[s]} 張</span>` : ''));
     const oldBd = $('.svboard', T.mid), oldSl = oldBd ? oldBd.scrollLeft : null;
     T.mid.innerHTML = `<div class="svboard"><div class="svin">${[0, 1, 2, 3].map(su => {
       const b = st.board[su];
       return `<div class="svrow">${Array.from({ length: 13 }, (_, i) => { const r = i + 1, c = su * 13 + i, on = b && r >= b.lo && r <= b.hi, isNew = st.last && st.last.type === 'play' && st.last.c === c;
         return `<span class="svslot${r === 7 ? ' seven' : ''}${isNew ? ' new' : ''}">${on ? cdMini(c) : `<i class="${su === 1 || su === 2 ? 'red' : ''}">${r === 7 ? HEART_SUIT[su] : ''}</i>`}</span>`; }).join('')}</div>`;
-    }).join('')}</div></div>${st.last ? `<div class="cdwho">${pinfo(st.last.s).emoji} ${st.last.s === me ? '你' : esc(pinfo(st.last.s).name)} ${st.last.type === 'play' ? `出了 <b>${cdLabel(st.last.c)}</b>` : '<b>蓋了一張牌</b> 🙈'}</div>` : ''}`;
+    }).join('')}</div></div>${st.last ? `<div class="cdwho${st.last.type === 'cover' ? ' cov' : ''}">${pinfo(st.last.s).emoji} ${st.last.s === me ? '你' : esc(pinfo(st.last.s).name)} ${st.last.type === 'play' ? `出了 <b>${cdLabel(st.last.c)}</b>` : '<b>蓋了一張牌</b> 🙈'}</div>` : ''}`;
     // 牌放大後排不下 13 欄,可以左右滑:一開始對準中間的 7,有人出牌就捲到那張牌
     const bd = $('.svboard', T.mid), sv = $$('.svslot', bd)[6], nw = $('.svslot.new', bd);
     bd.scrollLeft = oldSl ? oldSl : sv.offsetLeft - (bd.clientWidth - sv.offsetWidth) / 2;
@@ -7186,9 +7187,12 @@ function vSeven(V) {
     }
     renderBoard(); render();
     if (m.done) {
-      const rows = m.order.slice().sort((a, b) => m.pts[a] - m.pts[b]).map((s, k) => `<span>${['🥇', '🥈', '🥉', '🎀'][k]} ${pinfo(s).emoji} ${s === me ? '你' : esc(pinfo(s).name)} <i>蓋 ${m.covered[s].length} 張 · ${m.pts[s]} 點</i></span>`).join('');
-      const w = m.order.slice().sort((a, b) => m.pts[a] - m.pts[b])[0];
-      T.say(`<div class="big">${w === me ? '🏆' : '7️⃣'}</div><b>點數最少的人贏!</b><div class="ffinal">${rows}</div>`);
+      const rk = m.order.slice().sort((a, b) => m.pts[a] - m.pts[b]);
+      const rows = rk.map((s, k) => `<div class="svres${s === me ? ' me' : ''}${k === 0 ? ' win' : ''}">
+        <div class="svr1"><em>${['🥇', '🥈', '🥉', '🎀'][k]}</em><span class="svn">${pinfo(s).emoji} ${s === me ? '你' : esc(pinfo(s).name)}</span><b class="svp">${m.pts[s]}<small>點</small></b></div>
+        <div class="svr2">${m.covered[s].length ? `<small>蓋了 ${m.covered[s].length} 張:</small>${m.covered[s].slice().sort((a, b) => cdRank(a) - cdRank(b)).map(cdMini).join('')}` : '<small>一張都沒蓋 👏</small>'}</div></div>`).join('');
+      const w = rk[0];
+      T.say(`<div class="big">${w === me ? '🏆' : '7️⃣'}</div><b class="svtitle">${w === me ? '你贏了!' : `${esc(pinfo(w).name)} 贏了!`}</b><small>蓋牌點數最少的人贏</small><div class="svresl">${rows}</div>`);
       if (w === me) SFX.win(); else SFX.bad();
     }
   };
