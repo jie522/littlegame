@@ -2170,6 +2170,8 @@ button:disabled { cursor: not-allowed; }
 .play-tower .tov, .play-g2048 .tov { background: rgba(20,30,60,.66); color: #fff; text-shadow: var(--ol-sm); text-align: center; gap: 6px; padding: 12px; }
 .play-tower .tov .small, .play-g2048 .tov .small { font-size: .85rem; line-height: 1.6; }
 .play-tower .tov .ffinal, .play-g2048 .tov .ffinal { margin-top: 6px; min-width: 70%; }
+.twbtns { margin-top: 10px; }
+.twbtns .btn.big { justify-content: center; }
 
 /* 遊戲卡片的圖示:設計稿裡的插圖(assets/game_icons.webp,4 x 5 拼圖,--ix / --iy 是第幾欄、第幾列) */
 .gico {

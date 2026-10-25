@@ -73,7 +73,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.52';
+const APP_VERSION = '2026.11.53';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -598,7 +598,7 @@ function home() {
         <input id="name" maxlength="8" placeholder="輸入你的暱稱" value="${esc(myName())}"></label>
       <div class="hrow2">
         <button class="btn big green" id="solo"><span class="bi">▶</span><span class="bt">單人遊戲<small>對戰電腦</small></span></button>
-        <button class="btn big blue" id="busg"><span class="bi">🚌</span><span class="bt">闖關模式<small>公車 · 停車</small></span></button>
+        <button class="btn big blue" id="busg"><span class="bi">🚌</span><span class="bt">闖關模式<small>公車 · 停車 · 高樓</small></span></button>
       </div>
       <button class="btn big orange" id="create"><span class="bi">🏠</span><span class="bt">建立房間<small>邀請朋友一起玩</small></span></button>
       <div class="joinbox">
@@ -619,10 +619,11 @@ function home() {
     const m = el('div', 'qmenu');
     m.innerHTML = `<div class="qcard"><button class="iconbtn qx" aria-label="關閉">✕</button><h2>🏁 闖關模式</h2>
       <button class="qopt" data-q="bus"><span class="qe">🚌</span><span><b>公車大塞車</b><small>點公車開出停車場、載乘客</small></span></button>
-      <button class="qopt" data-q="park"><span class="qe">🅿️</span><span><b>停車大師</b><small>3D 開車停進格子 · ${PK_PLAN.length} 關</small></span></button></div>`;
+      <button class="qopt" data-q="park"><span class="qe">🅿️</span><span><b>停車大師</b><small>3D 開車停進格子 · ${PK_PLAN.length} 關</small></span></button>
+      <button class="qopt" data-q="tower"><span class="qe">🏗️</span><span><b>無限高樓</b><small>一個人一直疊,沒有時間限制${recGet('tower') ? ` · 最高 ${recGet('tower')} 層` : ''}</small></span></button></div>`;
     m.addEventListener('click', e => {
       const o = e.target.closest('.qopt');
-      if (o) { m.remove(); if (o.dataset.q === 'bus') busGame(); else parkGame(); }
+      if (o) { m.remove(); if (o.dataset.q === 'bus') busGame(); else if (o.dataset.q === 'tower') towerEndless(); else parkGame(); }
       else if (e.target === m || e.target.closest('.qx')) m.remove();
     });
     app.appendChild(m);
@@ -7478,6 +7479,9 @@ function vSchulte(V) {
    ========================================================= */
 const TOWER = { T: 100, LIVES: 3, W: 360, BW: 104, BH: 50, PERF: 6, OK: 0.62, R: 330, AMP: 118, HOOK: 112 };
 const TOWER_COLORS = ['#ef4b4b', '#33b864', '#3b82f6', '#f5b301', '#8b5cf6', '#fb8c3a', '#14b8a6', '#ec5c9b'];
+/* Blender 算圖的樓層(tools/tower_scene.py):4 x 3 格,每格 384 x 168 像素 = 128 x 56 單位;0~7 樓層、8 一樓大廳、9 吊具
+   樓層本體(BW x BH)在格子正中間;吊具的底(碰到樓層頂的地方)在格子底往上 3 單位 */
+const TOWER_IMG = loadImg('assets/tower_floors.webp');
 const towerPeriod = fl => Math.max(1.15, 2.5 - fl * 0.045); // 吊車擺一趟(來回)的秒數,越高越快
 function towerRng(a) { // 有種子的亂數:大家拿到一樣的樓層顏色順序
   return () => {
@@ -7527,6 +7531,41 @@ function hTower(H) {
   };
 }
 
+/* 無限高樓(闖關模式):一個人一直疊,沒有時間限制,3 顆愛心用完就結束;最高紀錄跟多人的高樓疊疊樂共用 */
+function towerEndless() {
+  resetView();
+  app.innerHTML = '';
+  const root = el('div', 'play play-tower');
+  setTimeout(() => { root.style.animation = 'none'; root.style.opacity = 1; }, 450);
+  root.innerHTML = `
+    <div class="topbar"><button class="exit twback" aria-label="回首頁">✕</button><div class="chips"><div class="chip me"><span class="cn">🏆 最高</span><b class="twbest"></b></div></div></div>
+    <div class="stage"><div class="sin"></div></div>
+    <div class="pad"></div>`;
+  app.appendChild(root);
+  const best = () => recGet('tower') || 0;
+  const showBest = () => { $('.twbest', root).textContent = best() + ' 層'; };
+  showBest();
+  $('.twback', root).addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); home(); });
+  const V = { root, pad: $('.pad', root), me: 0, send() {}, on: () => {} };
+  V.endless = fl => {
+    const nb = recBest('tower', fl, true);
+    showBest();
+    if (nb) { SFX.win(); confetti(); }
+    const ov = $('.tov', root);
+    ov.innerHTML = `<div class="big">${nb ? '🏆' : '🏚️'}</div><div>愛心用完了!</div><div class="small">這次蓋了 <b>${fl}</b> 層${nb ? ' · 新紀錄!' : ` · 最高 ${best()} 層`}</div>
+      <div class="twbtns"><button class="btn big green twagain"><span class="bi">🔁</span><span class="bt">再蓋一次</span></button></div>`;
+    ov.classList.add('on');
+    $('.twagain', ov).addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); start(); });
+  };
+  vTower(V);
+  function start() {
+    $('.tov', root).classList.remove('on');
+    V.on({ e: 'go', seed: rand(1, 1e9), T: 0, order: [0] });
+  }
+  V.on({ e: 'prep', order: [0] });
+  setTimeout(() => { if (root.isConnected) start(); }, 2400);
+}
+
 function vTower(V) {
   const { W, BW, BH, R, HOOK } = TOWER, me = V.me;
   const C = canvasStage(V, 9 / 16, true), ctx = C.ctx;
@@ -7544,7 +7583,7 @@ function vTower(V) {
   const hash = i => { const v = Math.sin(i * 127.1 + 31.7) * 43758.5453; return v - Math.floor(v); };
 
   // 大樓往左右擺:越高擺越大(擺幅只跟樓層高度有關,蓋新的一層時不會跳一下)
-  const swayAmp = k => 30 * Math.pow(k / 40, 1.5);
+  const swayAmp = k => Math.min(55, 30 * Math.pow(k / 40, 1.5)); // 無限模式會蓋很高,擺幅最多 55
   const sway = k => swayAmp(k) * Math.sin(swT * 1.6) + kickA * Math.sin(kickT * 9) * Math.exp(-kickT * 2.6) * (blocks.length > 1 ? k / (blocks.length - 1) : 0);
   const bx = k => blocks[k].x + sway(k);
 
@@ -7604,7 +7643,8 @@ function vTower(V) {
       pop('-❤️', hang.x, hang.y - 10, '#ff5d73');
       if (lives <= 0) {
         out = true; live = false;
-        setTimeout(() => { if (out) C.overlay(`<div class="big">🏚️</div><div>愛心用完了!</div><div class="small">你蓋了 <b>${fl}</b> 層,等其他人蓋完…</div>`); }, 900);
+        if (V.endless) setTimeout(() => V.endless(fl), 900);
+        else setTimeout(() => { if (out) C.overlay(`<div class="big">🏚️</div><div>愛心用完了!</div><div class="small">你蓋了 <b>${fl}</b> 層,等其他人蓋完…</div>`); }, 900);
       }
     }
     hang = null;
@@ -7655,11 +7695,18 @@ function vTower(V) {
     const A = p(a), B = p(b);
     return `rgb(${A.map((v, i) => Math.round(v + (B[i] - v) * t)).join(',')})`;
   };
+  const sprite = (i, x, y) => ctx.drawImage(TOWER_IMG, (i % 4) * 384, Math.floor(i / 4) * 168, 384, 168, x, y, 128, 56);
   function drawBlock(cx, cy, c, rot, glow) { // (cx, cy) 是中心
     ctx.save();
     ctx.translate(cx, cy);
     if (rot) ctx.rotate(rot);
     const x = -BW / 2, y = -BH / 2;
+    if (TOWER_IMG.complete && TOWER_IMG.naturalWidth) { // Blender 算圖的樓層
+      sprite(c < 0 ? 8 : c, -64, y - 3);
+      if (glow) { ctx.fillStyle = `rgba(255,255,255,${glow * 0.75})`; C.rr(x, y, BW, BH, 5); }
+      ctx.restore();
+      return;
+    }
     ctx.lineWidth = 2.5;
     ctx.strokeStyle = ink;
     if (c < 0) { // 一樓大廳:灰色石頭 + 門
@@ -7697,6 +7744,14 @@ function vTower(V) {
     ctx.translate(h.x, h.y);
     ctx.rotate(h.rot);
     const top = -BH / 2;
+    if (TOWER_IMG.complete && TOWER_IMG.naturalWidth) {
+      ctx.strokeStyle = '#3a3f4f'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(0, top - 50); ctx.lineTo(0, top - 50 - R - 300); ctx.stroke();
+      sprite(9, -64, top - 53);
+      ctx.restore();
+      drawBlock(h.x, h.y, h.c, h.rot);
+      return;
+    }
     ctx.strokeStyle = '#3a3f4f'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(0, top - 30); ctx.lineTo(0, top - 30 - R - 300); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(-BW * 0.34, top - 7); ctx.lineTo(0, top - 30); ctx.lineTo(BW * 0.34, top - 7); ctx.stroke();
@@ -7827,7 +7882,7 @@ function vTower(V) {
       for (let i = 0; i < 600; i++) { let c; do c = Math.floor(r() * TOWER_COLORS.length); while (i && c === colors[i - 1]); colors.push(c); }
       reset();
       live = order.includes(me);
-      endAt = performance.now() + m.T * 1000;
+      endAt = m.T ? performance.now() + m.T * 1000 : 0; // 無限模式沒有時間限制
       nextAt = now + 0.2;
       if (!live) C.overlay('<div class="small">👀 觀戰中</div>', 1500);
     } else if (m.e === 'over') {
