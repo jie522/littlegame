@@ -541,7 +541,7 @@ const GAMES = [
   },
   {
     id: 'g2048', emoji: '🔶', name: '2048', tag: '益智+競速', color: '#f59b3b', desc: '滑動合併方塊,120 秒比誰分數高!',
-    rules: ['大家同時開始,各自在自己的手機上玩 2048', '在畫面上滑動(電腦用方向鍵),所有方塊會往那個方向移動', '兩個一樣的數字碰在一起會合成一個(2+2=4、4+4=8…),合成出來的數字就是你得到的分數', '每次移動後會多出一個新方塊;格子塞滿又不能合併就卡死了', '120 秒內分數最高的人獲勝!'],
+    rules: ['大家同時開始,各自在自己的手機上玩 2048', '在畫面上滑動(電腦用方向鍵),每個方塊只會往那個方向推一格', '推到一樣的數字會合成一個(2+2=4、4+4=8…),合成出來的數字就是你得到的分數;沒有被推到的不會自己合併', '每次移動後會多出一個新方塊;格子塞滿又不能合併就卡死了', '120 秒內分數最高的人獲勝!'],
     host: hG2048, view: vG2048, noCountdown: true,
   },
 ];
@@ -7950,12 +7950,19 @@ function vG2048(V) {
     for (let i = 0; i < N; i++) {
       const cells = [];
       for (let k = 0; k < N; k++) cells.push(d === 3 ? [i, k] : d === 1 ? [i, N - 1 - k] : d === 0 ? [k, i] : [N - 1 - k, i]);
-      const line = cells.map(([r, c]) => grid[r][c]).filter(Boolean), res = [], gh = [];
-      line.forEach(t => {
-        const last = res[res.length - 1];
-        if (last && !last.mg && last.v === t.v) { last.v *= 2; last.mg = true; gain += last.v; gh.push([t, last]); merges.push(last); } else res.push(t);
+      const nl = Array(N).fill(null), gh = []; // 每一格只推一步:前面是空的就走一格,前面是一樣的數字就合併,不然就留在原地
+      cells.forEach(([r, c], k) => {
+        const t = grid[r][c];
+        if (!t) return;
+        const p = k > 0 ? nl[k - 1] : null;
+        let to = k;
+        if (k > 0 && !p) to = k - 1;
+        else if (k > 0 && !p.mg && p.v === t.v) { p.v *= 2; p.mg = true; gain += p.v; gh.push([t, p]); merges.push(p); return; }
+        nl[to] = t;
+        const [nr, nc] = cells[to];
+        if (t.r !== nr || t.c !== nc) moved = true;
+        t.r = nr; t.c = nc;
       });
-      res.forEach((t, k) => { const [r, c] = cells[k]; if (t.r !== r || t.c !== c) moved = true; t.r = r; t.c = c; });
       gh.forEach(([t, into]) => { t.r = into.r; t.c = into.c; t.ghost = true; ghosts.push(t); moved = true; });
     }
     if (!moved) { tiles.forEach(t => { t.mg = false; }); return; }
@@ -8087,7 +8094,7 @@ function vG2048(V) {
     });
     ctx.globalAlpha = 1;
     const hy = by + B + 28; // 提示
-    if (live && hy < WH - 6) txt('滑動畫面移動方塊', W / 2, hy, 16, '#fff3d6', 'center');
+    if (live && hy < WH - 6) txt('滑動一次推一格', W / 2, hy, 16, '#fff3d6', 'center');
   }
 
   // ---------- 操作:滑動手勢 + 鍵盤 ----------
@@ -8120,7 +8127,7 @@ function vG2048(V) {
   V.on = m => {
     if (m.e === 'prep') {
       order = m.order;
-      C.overlay('<div class="big">🔶</div><div><b>2048</b></div><div class="small">滑動畫面,讓所有方塊往同一個方向移動<br>兩個一樣的數字碰在一起會合成一個,分數就是合成的數字<br>120 秒內分數最高的人獲勝!</div>');
+      C.overlay('<div class="big">🔶</div><div><b>2048</b></div><div class="small">滑動一次,每個方塊往那個方向推一格<br>推到一樣的數字會合成一個,分數就是合成的數字<br>120 秒內分數最高的人獲勝!</div>');
     } else if (m.e === 'go') {
       order = m.order;
       rng = towerRng(m.seed);
