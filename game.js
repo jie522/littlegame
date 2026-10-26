@@ -38,7 +38,7 @@ const store = {
   },
 };
 
-/* 8 個角色(每位玩家可以自己選):name 是預設名字、color 是隊伍色、soft 是淡色 */
+/* 13 個角色(每位玩家可以自己選):name 是預設名字、color 是隊伍色、soft 是淡色 */
 const CHARS = [
   { id: 'bunny', name: '兔兔', color: '#9b7bff', soft: '#ede6ff' },
   { id: 'bear', name: '熊熊', color: '#c9854a', soft: '#f6e8d8' },
@@ -50,8 +50,9 @@ const CHARS = [
   { id: 'otter', name: '水獺', color: '#e2b21f', soft: '#fbf0c9' },
   { id: 'spongebob', name: '海綿寶寶', color: '#e6b800', soft: '#fff6bf' },
   { id: 'patrick', name: '派大星', color: '#ec6f8d', soft: '#ffe0e8' },
-  { id: 'krabs', name: '蟹老闆', color: '#2fa56a', soft: '#d8f3e4' },
+  { id: 'fish', name: '惡魚', color: '#4f8fa8', soft: '#dcecf2' },
   { id: 'squidward', name: '章魚哥', color: '#7a62c9', soft: '#e6e0f8' },
+  { id: 'miffy', name: '米菲', color: '#ee7656', soft: '#fde3da' },
 ];
 const loadImg = src => { const i = new Image(); i.src = src; return i; };
 const CHAR_IMGS = CHARS.map(c => ({ full: loadImg('assets/chars/' + c.id + '.png'), head: loadImg('assets/chars/head_' + c.id + '.png') }));
@@ -73,7 +74,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.56';
+const APP_VERSION = '2026.11.57';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
