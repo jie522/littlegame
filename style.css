@@ -2312,3 +2312,10 @@ button:disabled { cursor: not-allowed; }
 .wintitle { font-size: 1.6rem; color: #ffe066; text-shadow: var(--ol); font-family: "Fredoka", var(--font); }
 @keyframes winpop { from { transform: scale(.2) translateY(40%); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes winhop { from { transform: translateY(0); } to { transform: translateY(-8px) rotate(-2deg); } }
+
+/* 象棋麻將:胡牌的時候,贏家的角色出現(自摸特效裡從下面跳上來;結算面板裡有大圖) */
+.zmchar { position: absolute; left: 0; right: 0; bottom: -2vmin; height: min(48vh, 76vmin); display: flex; justify-content: center; align-items: flex-end; animation: zmchar .7s cubic-bezier(.2, 1.5, .4, 1) .35s both; }
+.zmchar .pf { width: auto; height: 100%; object-fit: contain; object-position: 50% 100%; filter: drop-shadow(0 0 3vmin rgba(255,214,90,.95)) drop-shadow(0 1vmin 0 rgba(58,10,2,.5)); }
+.zmfx .zmword { margin-top: -24vh; }
+@keyframes zmchar { from { transform: translateY(70%) scale(.6); opacity: 0; } to { transform: none; opacity: 1; } }
+.play-xqmj .cdmsg .winart { height: 150px; flex: none; }
