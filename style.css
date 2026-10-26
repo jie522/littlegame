@@ -2305,3 +2305,26 @@ button:disabled { cursor: not-allowed; }
 @keyframes zmslam { 0% { transform: scale(3.2) rotate(-8deg); opacity: 0; filter: blur(8px); } 60% { opacity: 1; filter: blur(0); } 100% { transform: scale(1) rotate(-4deg); opacity: 1; } }
 @keyframes zmout { to { opacity: 0; } }
 @keyframes zmshake { 0%, 100% { transform: translate(0, 0); } 15% { transform: translate(-8px, 5px); } 30% { transform: translate(7px, -6px); } 45% { transform: translate(-6px, -4px); } 60% { transform: translate(5px, 6px); } 75% { transform: translate(-3px, 2px); } }
+
+/* 撲克牌類(大老二、排七、心臟病、象棋麻將)手機橫拿:用滿整個寬度,左邊牌桌、右邊自己的手牌和按鈕(放不下時右邊可以捲動,按鈕不會跑出畫面) */
+@media (orientation: landscape) and (max-height: 560px) {
+  #app:has(.cdgame) { width: 100%; }
+  .play.cdgame {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas: "top me" "table me";
+    gap: 6px 10px;
+    padding-left: max(10px, env(safe-area-inset-left)); padding-right: max(10px, env(safe-area-inset-right));
+  }
+  .cdgame .topbar { grid-area: top; padding: 3px; }
+  .cdgame .topbar .exit { width: 34px; height: 34px; }
+  .cdgame .stage { grid-area: table; }
+  .cdgame .pad { grid-area: me; display: flex; flex-direction: column; justify-content: center; overflow-y: auto; touch-action: pan-y; }
+  .cdgame .cdme { margin: auto 0; }
+}
+/* 矮螢幕(手機橫拿):「還有更多遊戲」提示縮小靠右,而且點了會穿過去,不會擋住下面的按鈕 */
+@media (max-height: 560px) {
+  .scrollhint { align-self: flex-end; margin-right: 2px; padding: 3px 10px; font-size: .72rem; }
+  .scrollhint.on { pointer-events: none; opacity: .85; }
+}

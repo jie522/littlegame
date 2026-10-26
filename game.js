@@ -74,7 +74,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.61';
+const APP_VERSION = '2026.11.62';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -6996,6 +6996,9 @@ function cdTable(V, title) {
   V.stage(`<div class="cdtab"><div class="cdops"></div><div class="cdmid"></div><div class="cdmsg"></div></div>`);
   V.pad.innerHTML = `<div class="cdme"><div class="cdmeinfo"></div><div class="cdhand"></div><div class="cdbtns"></div></div>`;
   const T = { ops: $('.cdops', V.root), mid: $('.cdmid', V.root), msg: $('.cdmsg', V.root), hand: $('.cdhand', V.pad), btns: $('.cdbtns', V.pad), info: $('.cdmeinfo', V.pad) };
+  // 手機橫拿(畫面很矮):手牌在右半邊,高度要扣掉上面的資訊和下面的按鈕,不然按鈕會被擠出畫面
+  T.short = () => innerWidth > innerHeight && innerHeight < 560;
+  T.budget = () => (T.short() ? Math.max(90, V.root.clientHeight - 130) : Infinity);
   T.say = (html, ms) => { T.msg.innerHTML = html; T.msg.classList.remove('on'); void T.msg.offsetWidth; T.msg.classList.add('on'); clearTimeout(T.mt); if (ms) T.mt = setTimeout(() => T.msg.classList.remove('on'), ms); };
   // 對手的座位:頭像、名字、剩幾張(小小的牌背)、狀態
   T.seats = (order, me, counts, turn, tag) => {
@@ -7012,7 +7015,7 @@ function cdTable(V, title) {
     const w = T.hand.clientWidth || 340, n = cards.length;
     if (bySuit) { // 排七:一種花色一排(牌已經依花色排好),每張牌都看得到完整的牌角,牌可以做大
       const groups = [0, 1, 2, 3].map(su => cards.filter(c => cdSuit(c) === su)).filter(g => g.length);
-      const cw = Math.min(88, Math.max(72, w * 0.24)), rowH = cw * 1.4 * 0.37;
+      const cw = Math.max(40, Math.min(88, Math.max(72, w * 0.24), (T.budget() - 24) / (1.4 + (groups.length - 1) * 0.518))), rowH = cw * 1.4 * 0.37;
       T.hand.style.setProperty('--cw', cw + 'px');
       T.hand.style.height = cw * 1.4 + (groups.length - 1) * rowH + 24 + 'px';
       T.hand.innerHTML = groups.map((g, r) => {
@@ -7023,7 +7026,7 @@ function cdTable(V, title) {
     }
     // 牌放大、疊多一點(看露出來的牌角);超過 8 張就排兩排(後排是小的、前排是大的),每張可以更大
     const rows = n > 8 ? 2 : 1, per = Math.ceil(n / rows);
-    const cw = rows === 2 ? Math.min(96, Math.max(64, w * 0.26)) : Math.min(88, Math.max(58, w * 0.21)), rowH = cw * 1.4 * 0.52;
+    const cw = Math.max(40, Math.min(rows === 2 ? Math.min(96, Math.max(64, w * 0.26)) : Math.min(88, Math.max(58, w * 0.21)), (T.budget() - 24) / (1.4 + (rows - 1) * 0.728))), rowH = cw * 1.4 * 0.52;
     T.hand.style.setProperty('--cw', cw + 'px');
     T.hand.style.height = cw * 1.4 + (rows - 1) * rowH + 24 + 'px';
     T.hand.innerHTML = cards.map((c, i) => {
@@ -8750,7 +8753,7 @@ function vXqmj(V) {
     if (!st) return;
     const act = myAct(), claim = claimMe(), amReady = st.ready[me] > 0, ms = myMelds(), win = act ? xqWin(hand, ms) : null;
     const w = T.hand.clientWidth || 340, cnt = Math.max(hand.length + (ms.length ? 3 : 0), 4);
-    const tw = Math.max(46, Math.min(76, Math.floor((w - 12 - (cnt - 1) * 5) / cnt)));
+    const tw = Math.max(36, Math.min(76, Math.floor((w - 12 - (cnt - 1) * 5) / cnt), Math.floor(T.budget() / 1.35)));
     const base = hand.filter(c => c !== drew).sort((a, b) => xqFace(a) - xqFace(b));
     const list = drew != null && hand.includes(drew) ? [...base, drew] : base;
     T.hand.innerHTML = `<div class="xqhand">${ms.map(m => `<span class="xqmeld">${m.tiles.map(c => xqTile(c, 'flat', `--tw:${tw}px`)).join('')}</span>`).join('')}${list.map(c => xqTile(c, (sel === c ? 'sel ' : '') + (c === drew ? 'drew ' : '') + (act && !amReady ? 'tap' : ''), `--tw:${tw}px`)).join('')}</div>`;
