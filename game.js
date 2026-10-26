@@ -74,7 +74,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.59';
+const APP_VERSION = '2026.11.60';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -537,7 +537,7 @@ const GAMES = [
   },
   {
     id: 'xqmj', emoji: '🀄', name: '象棋麻將', tag: '麻將+策略', color: '#c0392b', desc: '象棋牌打麻將,可吃可碰,一局接一局累積',
-    rules: ['2~4 人,32 張象棋牌(紅:帥 仕仕 相相 俥俥 傌傌 炮炮 兵x5;黑同理),每人 4 張,莊家 5 張;一局接一局打,分數累積,打到開局的房主按「結算」為止,總分最高的人贏', '輪到你:摸一張牌,再打出一張;自己摸到湊成「一組 + 一對」就能按「自摸」', '一組 = 同色的 帥仕相、俥傌炮(黑:將士象、車馬砲),或同色的三張兵(卒);一對 = 兩張一模一樣的牌,或「帥 + 將」', '別人打出來的牌:湊成胡牌就能「胡」(放槍);手上有兩張同色的兵(卒)就能「碰」(誰打的都行);能和手上兩張湊成順子就能「吃」(誰打的都能吃)。優先順序:胡 > 碰 > 吃', '吃 / 碰之後那一組亮在桌上,手上剩 2 張,打出一張後剩 1 張,等著湊成一對', '想聽牌可以在打牌時按「聽牌」,之後電腦自動幫你摸打、遇到就胡;第一手就聽叫「現聽」', '台數:自摸 2、將帥聽令 2、紅一色 1、黑一色 1、兵卒一家 2、五兵合縱 5、五卒連橫 5、螞蟻雄兵(2 馬 + 3 兵)2、天胡 6、地胡 6、人胡 2、海底 1、聽牌 1、現聽 2', '胡牌得「底 1 + 台數」分;莊家胡牌連莊,否則換下一位當莊;牌山摸完沒人胡就流局(莊家連莊)。每局結束時,開局的房主可以按「結算」結束遊戲'],
+    rules: ['2~4 人,32 張象棋牌(紅:帥 仕仕 相相 俥俥 傌傌 炮炮 兵x5;黑同理),每人 4 張,莊家 5 張;一局接一局打,分數累積,打到開局的房主按「結算」為止,總分最高的人贏', '輪到你:摸一張牌,再打出一張;自己摸到湊成「一組 + 一對」就能按「自摸」', '一組 = 同色的 帥仕相、俥傌炮(黑:將士象、車馬砲),或同色的三張兵(卒);一對 = 兩張一模一樣的牌,或「帥 + 將」', '別人打出來的牌:湊成胡牌就能「胡」(放槍);手上有兩張同色的兵(卒)就能「碰」(誰打的都行);能和手上兩張湊成順子就能「吃」(誰打的都能吃;上家打的牌不限時間,可以慢慢想要「吃」還是「摸牌」)。優先順序:胡 > 碰 > 吃', '吃 / 碰之後那一組亮在桌上,手上剩 2 張,打出一張後剩 1 張,等著湊成一對', '想聽牌可以在打牌時按「聽牌」,之後電腦自動幫你摸打、遇到就胡;第一手就聽叫「現聽」', '台數:自摸 2、將帥聽令 2、紅一色 1、黑一色 1、兵卒一家 2、五兵合縱 5、五卒連橫 5、螞蟻雄兵(2 馬 + 3 兵)2、天胡 6、地胡 6、人胡 2、海底 1、聽牌 1、現聽 2', '胡牌得「底 1 + 台數」分;莊家胡牌連莊,否則換下一位當莊;牌山摸完沒人胡就流局(莊家連莊)。每局結束時,開局的房主可以按「結算」結束遊戲'],
     host: hXqmj, view: vXqmj, noCountdown: true,
   },
   {
@@ -8530,7 +8530,13 @@ function hXqmj(H) {
     if (!elig.length) return H.s.after(700, () => { if (my === ctok && phase === 'claim') nextTurn(); });
     elig.forEach(o => H.to(o, { t: 'g', e: 'claim', cid, c, from: s, win: claims[o].win, peng: claims[o].peng, chi: claims[o].chi }));
     elig.filter(o => ready[o]).forEach(o => claimResp(o, 'win')); // 聽牌之後自動胡
-    if (phase === 'claim') H.s.after(CLAIM_MS, () => { if (my === ctok) resolveClaim(); });
+    const nx = P[(P.indexOf(s) + 1) % n], slow = claims[nx] && claims[nx].chi && !pinfo(nx).bot; // 下家吃上家的牌:不限 8 秒,等他選「吃」或「摸牌」(最多一個回合的時間)
+    if (phase === 'claim') H.s.after(CLAIM_MS, () => {
+      if (my !== ctok) return;
+      if (!slow || nx in resp || Object.values(resp).some(r => r === 'win' || r === 'peng')) return resolveClaim(); // 有人胡 / 碰就不用等吃
+      elig.filter(o => o !== nx && !(o in resp)).forEach(o => { resp[o] = 'pass'; }); // 別人的時間到了就當作過
+      H.s.after(TURN_MS - CLAIM_MS, () => { if (my === ctok) resolveClaim(); });
+    });
   }
   function claimResp(o, what) {
     if (phase !== 'claim' || !elig.includes(o) || o in resp) return;
@@ -8665,6 +8671,7 @@ function vXqmj(V) {
     if (claim && claim.chi) chiB.textContent = '吃 ' + xqName(claim.c) + claim.chi.map(xqName).join('');
     if (claim && claim.peng) pengB.textContent = '碰 ' + xqName(claim.c) + xqName(claim.c) + xqName(claim.c);
     passB.style.display = claim ? '' : 'none';
+    passB.textContent = claim && st.order[(st.order.indexOf(st.last.s) + 1) % st.order.length] === me ? '不吃,摸牌' : '過';
     const dealer = st.dealer === me ? `<em class="xqdlr">莊${st.lian ? ' 連' + st.lian : ''}</em>` : '', rdy = amReady ? `<em class="xqrdy">${st.ready[me] === 2 ? '現聽' : '聽牌'}</em>` : '';
     let msg;
     if (claim) msg = `<b class="cdyou">${who(st.last.s)} 打出 ${xqName(claim.c)},你可以${[claim.win && '胡', claim.peng && '碰', claim.chi && '吃'].filter(Boolean).join('、')}!</b>`;
