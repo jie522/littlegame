@@ -74,7 +74,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.62';
+const APP_VERSION = '2026.11.63';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -8648,6 +8648,7 @@ function zimoFx(root, mine, p) {
     return `<i style="--x:${(Math.cos(a) * d).toFixed(1)}vmin;--y:${(Math.sin(a) * d).toFixed(1)}vmin;--r:${Math.round(Math.random() * 720 - 360)}deg;--d:${(0.25 + Math.random() * 0.35).toFixed(2)}s;--c:${['#ffd23f', '#ffb400', '#fff3b0', '#ff7a3d', '#e83b3b'][i % 5]}"></i>`;
   }).join('');
   fx.innerHTML = `<div class="zmflash"></div><div class="zmrays"></div><div class="zmring"></div><div class="zmbits">${bits}</div>
+    <div class="zmchar">${p.full}</div>
     <div class="zmword"><span class="zmtxt"><em>自摸</em><b>自摸</b></span><small>${p.emoji} ${mine ? '你' : esc(p.name)}</small></div>`;
   root.appendChild(fx);
   root.classList.remove('zmshake'); void root.offsetWidth; root.classList.add('zmshake');
@@ -8776,7 +8777,7 @@ function vXqmj(V) {
     if (m.e === 'win') {
       st = null; idle();
       if (m.tsumo) zimoFx(V.root, m.w === me, pinfo(m.w));
-      T.say(`<div class="big">${m.w === me ? '🏆' : '🀄'}</div><b class="xqtitle">${m.tsumo ? (m.w === me ? '你自摸了!' : `${esc(pinfo(m.w).name)} 自摸!`) : m.w === me ? '你胡牌了!' : `${esc(pinfo(m.w).name)} 胡牌!`}</b>
+      T.say(`<div class="winart">${pinfo(m.w).full}</div><b class="xqtitle">${m.tsumo ? (m.w === me ? '你自摸了!' : `${esc(pinfo(m.w).name)} 自摸!`) : m.w === me ? '你胡牌了!' : `${esc(pinfo(m.w).name)} 胡牌!`}</b>
         <small>${m.tsumo ? '自摸' : `${who(m.from)} 放槍`} · 第 ${m.rd} 局</small>
         <div class="xqwinhand">${m.set.map(c => xqTile(c, 'md' + (c === m.tile ? ' hit' : ''))).join('')}<i></i>${m.pair.map(c => xqTile(c, 'md' + (c === m.tile ? ' hit' : ''))).join('')}</div>
         <div class="xqfans">${m.fans.length ? m.fans.map(([n, t]) => `<span><b>${n}</b><i>${t} 台</i></span>`).join('') : '<span><b>平胡</b><i>0 台</i></span>'}</div>
