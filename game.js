@@ -74,7 +74,22 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.64';
+/* 手機轉向(橫 ↔ 直)之後:瀏覽器有時會把整頁偷偷捲動或留下位移(iPhone 特別常見),畫面和手指的感應位置就會錯開。
+   每次轉向、視窗大小改變時把位移歸零,轉向動畫結束前後各再校正一次 */
+function fixViewport() {
+  if (window.scrollX || window.scrollY) window.scrollTo(0, 0);
+  document.documentElement.scrollTop = document.documentElement.scrollLeft = 0;
+  document.body.scrollTop = document.body.scrollLeft = 0;
+}
+function onViewportChange() {
+  fixViewport();
+  [120, 400, 900].forEach(ms => setTimeout(fixViewport, ms));
+}
+addEventListener('orientationchange', onViewportChange);
+addEventListener('resize', onViewportChange);
+if (window.visualViewport) visualViewport.addEventListener('resize', onViewportChange);
+
+const APP_VERSION = '2026.11.65';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */

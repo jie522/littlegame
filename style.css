@@ -27,12 +27,14 @@
 html, body {
   height: 100%;
   overflow: hidden;
+  touch-action: manipulation;
   overscroll-behavior: none;
   color: var(--ink);
   font-family: var(--font);
   font-weight: 700;
   background: #17294d;
 }
+body { position: fixed; inset: 0; width: 100%; } /* 頁面本身完全不能捲動:手機轉向後才不會偷偷捲一點、讓按鈕的感應位置跟畫面錯開 */
 
 /* ---------- 天空背景 + 飄動的雲 ---------- */
 .sky {
