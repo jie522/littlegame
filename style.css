@@ -2282,3 +2282,26 @@ button:disabled { cursor: not-allowed; }
 .play-xqmj .cdbtns .btn.xqchi, .play-xqmj .cdbtns .btn.xqpeng { padding: 8px 14px; }
 .xqmeta { flex-wrap: wrap; row-gap: 2px; }
 .play-xqmj .cdop { padding-left: 2px; padding-right: 2px; }
+
+/* 象棋麻將:自摸特效 */
+.zmfx { position: absolute; inset: 0; z-index: 90; pointer-events: none; display: flex; align-items: center; justify-content: center; overflow: hidden; animation: zmout .45s ease-in 2.05s forwards; }
+.zmflash { position: absolute; inset: 0; background: radial-gradient(circle, #fffbe0 0%, rgba(255,214,90,.85) 35%, rgba(120,40,0,.55) 100%); animation: zmflash .9s ease-out forwards; }
+.zmrays { position: absolute; width: 220vmax; height: 220vmax; background: repeating-conic-gradient(rgba(255,214,64,.55) 0 7deg, rgba(255,214,64,0) 7deg 18deg); -webkit-mask: radial-gradient(circle, #000 8%, transparent 55%); mask: radial-gradient(circle, #000 8%, transparent 55%); animation: zmspin 2.5s linear forwards, zmrayin .5s ease-out; }
+.zmring { position: absolute; width: 20vmin; height: 20vmin; border-radius: 50%; border: 1.6vmin solid #ffe066; box-shadow: 0 0 4vmin #ffb400, inset 0 0 3vmin #ffb400; animation: zmring .9s ease-out .18s both; }
+.zmbits i { position: absolute; left: 50%; top: 50%; width: 2.2vmin; height: 2.2vmin; margin: -1.1vmin; background: var(--c); clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%); animation: zmbit 1.5s cubic-bezier(.15,.7,.3,1) var(--d) both; }
+.zmword { position: relative; display: flex; flex-direction: column; align-items: center; animation: zmslam .55s cubic-bezier(.2,1.6,.4,1) .12s both; }
+.zmtxt { display: grid; white-space: nowrap; }
+.zmtxt em, .zmtxt b { grid-area: 1 / 1; font-family: "Noto Serif TC", "Noto Sans TC", serif; font-style: normal; font-weight: 900; font-size: min(26vw, 30vmin, 240px); line-height: 1.05; letter-spacing: .04em; }
+.zmtxt em { color: #5a1206; -webkit-text-stroke: max(10px, 2.2vmin) #5a1206; filter: drop-shadow(0 1.2vmin 0 #3a0a02) drop-shadow(0 0 4vmin rgba(255,190,40,.9)); } /* 底層:粗描邊 + 陰影 */
+.zmtxt b { position: relative; z-index: 1; background: linear-gradient(180deg, #fff8c8 0%, #ffd23f 40%, #ff9a1a 66%, #e8352a 100%); -webkit-background-clip: text; background-clip: text; color: transparent; } /* 上層:金色漸層字 */
+.zmword small { margin-top: 1vmin; padding: .4em 1.1em; border-radius: 999px; background: #c8102e; color: #fff6d0; font-weight: 900; font-size: min(5vmin, 30px); border: 3px solid #ffd23f; box-shadow: 0 4px 0 #5a1206; }
+.zmword small .pe { height: 1.2em; vertical-align: -.25em; }
+.zmshake { animation: zmshake .5s linear .12s; }
+@keyframes zmflash { 0% { opacity: 0; } 12% { opacity: 1; } 100% { opacity: .35; } }
+@keyframes zmspin { to { transform: rotate(90deg); } }
+@keyframes zmrayin { from { opacity: 0; transform: scale(.3); } }
+@keyframes zmring { from { transform: scale(.2); opacity: 1; } to { transform: scale(7); opacity: 0; } }
+@keyframes zmbit { from { transform: translate(0, 0) rotate(0) scale(.4); opacity: 1; } 70% { opacity: 1; } to { transform: translate(var(--x), var(--y)) rotate(var(--r)) scale(1.1); opacity: 0; } }
+@keyframes zmslam { 0% { transform: scale(3.2) rotate(-8deg); opacity: 0; filter: blur(8px); } 60% { opacity: 1; filter: blur(0); } 100% { transform: scale(1) rotate(-4deg); opacity: 1; } }
+@keyframes zmout { to { opacity: 0; } }
+@keyframes zmshake { 0%, 100% { transform: translate(0, 0); } 15% { transform: translate(-8px, 5px); } 30% { transform: translate(7px, -6px); } 45% { transform: translate(-6px, -4px); } 60% { transform: translate(5px, 6px); } 75% { transform: translate(-3px, 2px); } }
