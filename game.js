@@ -74,7 +74,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.61';
+const APP_VERSION = '2026.11.62';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -2081,7 +2081,8 @@ function vChess(V) {
       if (st) render();
       showCover(m.winner == null
         ? `<div class="big">🤝</div><div>${m.reason}</div>`
-        : `<div class="big">🏆</div><div class="vsrow"><span class="vsp">${pinfo(m.winner).emoji}<b>${who(m.winner)} 獲勝!</b></span></div><div class="small">${m.reason}</div>`);
+        : `<div class="winart">${pinfo(m.winner).full}</div><div class="wintitle">🏆 ${who(m.winner)} 獲勝!</div><div class="small">${m.reason}</div>`);
+      if (m.winner != null && fighting()) { if (m.winner === V.me) { SFX.win(); confetti(); buzz([40, 40, 80]); } else SFX.bad(); }
     }
   };
 }
