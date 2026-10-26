@@ -74,7 +74,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.58';
+const APP_VERSION = '2026.11.59';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -537,7 +537,7 @@ const GAMES = [
   },
   {
     id: 'xqmj', emoji: '🀄', name: '象棋麻將', tag: '麻將+策略', color: '#c0392b', desc: '象棋牌打麻將,可吃可碰,一局接一局累積',
-    rules: ['2~4 人,32 張象棋牌(紅:帥 仕仕 相相 俥俥 傌傌 炮炮 兵x5;黑同理),每人 4 張,莊家 5 張;一局接一局打,分數累積,打到大家按「結算」為止,總分最高的人贏', '輪到你:摸一張牌,再打出一張;自己摸到湊成「一組 + 一對」就能按「自摸」', '一組 = 同色的 帥仕相、俥傌炮(黑:將士象、車馬砲),或同色的三張兵(卒);一對 = 兩張一模一樣的牌,或「帥 + 將」', '別人打出來的牌:湊成胡牌就能「胡」(放槍);手上有兩張同色的兵(卒)就能「碰」(誰打的都行);能和手上兩張湊成順子就能「吃」(誰打的都能吃)。優先順序:胡 > 碰 > 吃', '吃 / 碰之後那一組亮在桌上,手上剩 2 張,打出一張後剩 1 張,等著湊成一對', '想聽牌可以在打牌時按「聽牌」,之後電腦自動幫你摸打、遇到就胡;第一手就聽叫「現聽」', '台數:自摸 2、將帥聽令 2、紅一色 1、黑一色 1、兵卒一家 2、五兵合縱 5、五卒連橫 5、螞蟻雄兵(2 馬 + 3 兵)2、天胡 6、地胡 6、人胡 2、海底 1、聽牌 1、現聽 2', '胡牌得「底 1 + 台數」分;莊家胡牌連莊,否則換下一位當莊;牌山摸完沒人胡就流局(莊家連莊)。每局結束時可以按「結算」投票,過半數的真人同意就結束遊戲'],
+    rules: ['2~4 人,32 張象棋牌(紅:帥 仕仕 相相 俥俥 傌傌 炮炮 兵x5;黑同理),每人 4 張,莊家 5 張;一局接一局打,分數累積,打到開局的房主按「結算」為止,總分最高的人贏', '輪到你:摸一張牌,再打出一張;自己摸到湊成「一組 + 一對」就能按「自摸」', '一組 = 同色的 帥仕相、俥傌炮(黑:將士象、車馬砲),或同色的三張兵(卒);一對 = 兩張一模一樣的牌,或「帥 + 將」', '別人打出來的牌:湊成胡牌就能「胡」(放槍);手上有兩張同色的兵(卒)就能「碰」(誰打的都行);能和手上兩張湊成順子就能「吃」(誰打的都能吃)。優先順序:胡 > 碰 > 吃', '吃 / 碰之後那一組亮在桌上,手上剩 2 張,打出一張後剩 1 張,等著湊成一對', '想聽牌可以在打牌時按「聽牌」,之後電腦自動幫你摸打、遇到就胡;第一手就聽叫「現聽」', '台數:自摸 2、將帥聽令 2、紅一色 1、黑一色 1、兵卒一家 2、五兵合縱 5、五卒連橫 5、螞蟻雄兵(2 馬 + 3 兵)2、天胡 6、地胡 6、人胡 2、海底 1、聽牌 1、現聽 2', '胡牌得「底 1 + 台數」分;莊家胡牌連莊,否則換下一位當莊;牌山摸完沒人胡就流局(莊家連莊)。每局結束時,開局的房主可以按「結算」結束遊戲'],
     host: hXqmj, view: vXqmj, noCountdown: true,
   },
   {
@@ -8459,9 +8459,8 @@ function hXqmj(H) {
   const P = H.players.slice(), n = P.length, TURN_MS = 25000, CLAIM_MS = 8000;
   const tot = {}, hands = {}, melds = {}, drawn = {}, ready = {}, discN = {};
   P.forEach(s => { tot[s] = 0; hands[s] = []; melds[s] = []; });
-  let rd = 0, dealerI = rand(0, n - 1) - 1, lian = 0, wall = [], disc = [], turnI = 0, phase = 'idle', last = null, tok = 0, ctok = 0, cid = 0, claims = {}, elig = [], resp = {}, drewId = null, over = false, autoFn = null, firstRound = true, votes = new Set();
+  let rd = 0, dealerI = rand(0, n - 1) - 1, lian = 0, wall = [], disc = [], turnI = 0, phase = 'idle', last = null, tok = 0, ctok = 0, cid = 0, claims = {}, elig = [], resp = {}, drewId = null, over = false, autoFn = null, firstRound = true;
   if (dealerI < 0) dealerI = n - 1; // 第一局開始時 +1 回到抽到的那位
-  const humans = () => P.filter(s => !pinfo(s).bot && H.online(s));
   const syncScores = () => { P.forEach(s => { H.scores[s] = tot[s]; }); H.bc({ t: 'score', scores: H.scores }); };
   const priv = s => H.to(s, { t: 'g', e: 'hand', hand: hands[s].slice(), drew: s === P[turnI] && phase === 'act' ? drewId : null });
   const pub = () => H.bc({
@@ -8473,7 +8472,7 @@ function hXqmj(H) {
     rd++;
     if (!keepDealer) { dealerI = (dealerI + 1) % n; lian = 0; } else lian++;
     wall = shuffle([...Array(32).keys()]);
-    disc = []; last = null; elig = []; resp = {}; claims = {}; drewId = null; phase = 'deal'; firstRound = true; votes = new Set();
+    disc = []; last = null; elig = []; resp = {}; claims = {}; drewId = null; phase = 'deal'; firstRound = true;
     P.forEach(s => { hands[s] = []; melds[s] = []; drawn[s] = 0; ready[s] = 0; discN[s] = 0; for (let i = 0; i < 4; i++) hands[s].push(wall.pop()); });
     hands[P[dealerI]].push(wall.pop()); // 莊家多一張,第一手直接打(或直接天胡)
     turnI = dealerI;
@@ -8587,8 +8586,7 @@ function hXqmj(H) {
     H.bc({ t: 'g', e: 'draw', rd, tot: { ...tot }, hands: reveal(), melds, order: P, dealer: P[dealerI], again: true });
     roundEnd(true, 6500); // 流局:莊家連莊
   }
-  function roundEnd(keepDealer, ms) { // 每一局結束:等一下就下一局;大家可以按「結算」投票結束
-    votes = new Set();
+  function roundEnd(keepDealer, ms) { // 每一局結束:等一下就下一局;房主可以按「結算」結束
     const my = ++tok;
     H.s.after(ms, () => { if (my === tok && !over) startRound(keepDealer); });
   }
@@ -8599,12 +8597,7 @@ function hXqmj(H) {
     input(slot, m) {
       if (over || !m) return;
       if (phase === 'end') {
-        if (m.e === 'settle' && humans().includes(slot)) {
-          votes.add(slot);
-          const need = Math.floor(humans().length / 2) + 1;
-          H.bc({ t: 'g', e: 'vote', n: votes.size, need });
-          if (votes.size >= need) settle();
-        }
+        if (m.e === 'settle' && slot === NET.mySlot) settle(); // 只有開局的人(房主)可以結算
         return;
       }
       if (phase === 'act' && slot === P[turnI]) {
@@ -8619,7 +8612,6 @@ function hXqmj(H) {
       if (P.filter(H.online).length < 2) { over = true; tok++; ctok++; H.bc({ t: 'g', e: 'abort' }); H.s.after(1500, H.finish); return; }
       if (phase === 'claim') elig.filter(o => !H.online(o)).forEach(o => claimResp(o, 'pass'));
       else if (phase === 'act' && !H.online(P[turnI]) && autoFn) H.s.after(800, autoFn);
-      else if (phase === 'end') { const need = Math.floor(humans().length / 2) + 1; if (humans().length && votes.size >= need) settle(); }
     },
   };
 }
@@ -8712,17 +8704,17 @@ function vXqmj(V) {
   chiB.addEventListener('pointerdown', () => reply('chi'));
   pengB.addEventListener('pointerdown', () => reply('peng'));
   passB.addEventListener('pointerdown', () => reply('pass'));
-  T.msg.addEventListener('pointerdown', e => { // 結算面板上的「結算」按鈕(投票;過半數的真人同意就結束)
+  T.msg.addEventListener('pointerdown', e => { // 結算面板上的「結算」按鈕(只有房主看得到,按了就結束)
     if (!e.target.closest('.xqsettle') || voted) return;
     voted = true;
     V.send({ e: 'settle' });
     const b = $('.xqsettle', T.msg);
-    if (b) { b.disabled = true; b.textContent = '已投票結算'; }
+    if (b) { b.disabled = true; b.textContent = '結算中…'; }
   });
 
   const standings = (tot, order) => `<div class="xqrank">${order.slice().sort((a, b) => tot[b] - tot[a]).map((s, k) => `<span class="${s === me ? 'me' : ''}"><em>${k + 1}</em>${pinfo(s).emoji} ${who(s)}<b>${tot[s]}</b></span>`).join('')}</div>`;
   const miniHands = (m, skip) => `<div class="xqhands">${m.order.filter(s => s !== skip).map(s => `<div><small>${pinfo(s).emoji} ${who(s)}</small><span>${(m.melds[s] || []).map(x => `<span class="xqmeld on-seat">${x.tiles.map(c => xqTile(c, 'xs flat')).join('')}</span>`).join('')}${m.hands[s].map(c => xqTile(c, 'xs')).join('')}</span></div>`).join('')}</div>`;
-  const nextBox = (again, dealer) => `<div class="xqnext"><small>${again ? `莊家連莊!` : ''}下一局馬上開始…</small><button class="btn orange sm xqsettle">結算(結束遊戲)</button><small class="xqvote"></small></div>`;
+  const nextBox = (again, dealer) => `<div class="xqnext"><small>${again ? `莊家連莊!` : ''}下一局馬上開始…</small>${NET.role === 'host' ? '<button class="btn orange sm xqsettle">結算(結束遊戲)</button>' : '<small class="xqvote">房主可以按「結算」結束遊戲</small>'}</div>`;
   V.on = m => {
     if (m.e === 'hand') {
       hand = m.hand; drew = m.drew;
@@ -8769,7 +8761,6 @@ function vXqmj(V) {
       SFX.tick();
       return;
     }
-    if (m.e === 'vote') { const v = $('.xqvote', T.msg); if (v) v.textContent = `結算投票 ${m.n} / ${m.need}`; return; }
     if (m.e === 'settled') { const v = $('.xqnext', T.msg); if (v) v.innerHTML = '<b>結算中…</b>'; return; }
     if (m.e === 'abort') T.say('<div class="big">👋</div><b class="xqtitle">對手都離開了</b>');
   };
