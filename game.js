@@ -74,7 +74,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.62';
+const APP_VERSION = '2026.11.64';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -537,7 +537,7 @@ const GAMES = [
   },
   {
     id: 'xqmj', emoji: '🀄', name: '象棋麻將', tag: '麻將+策略', color: '#c0392b', desc: '象棋牌打麻將,可吃可碰,一局接一局累積',
-    rules: ['2~4 人,32 張象棋牌(紅:帥 仕仕 相相 俥俥 傌傌 炮炮 兵x5;黑同理),每人 4 張,莊家 5 張;一局接一局打,分數累積,打到開局的房主按「結算」為止,總分最高的人贏', '輪到你:摸一張牌,再打出一張;自己摸到湊成「一組 + 一對」就能按「自摸」', '一組 = 同色的 帥仕相、俥傌炮(黑:將士象、車馬砲),或同色的三張兵(卒);一對 = 兩張一模一樣的牌,或「帥 + 將」', '別人打出來的牌:湊成胡牌就能「胡」(放槍);手上有兩張同色的兵(卒)就能「碰」(誰打的都行);能和手上兩張湊成順子就能「吃」(誰打的都能吃;上家打的牌不限時間,可以慢慢想要「吃」還是「摸牌」)。優先順序:胡 > 碰 > 吃', '吃 / 碰之後那一組亮在桌上,手上剩 2 張,打出一張後剩 1 張,等著湊成一對', '想聽牌可以在打牌時按「聽牌」,之後電腦自動幫你摸打、遇到就胡;第一手就聽叫「現聽」', '台數:自摸 2、將帥聽令 2、紅一色 1、黑一色 1、兵卒一家 2、五兵合縱 5、五卒連橫 5、螞蟻雄兵(2 馬 + 3 兵)2、天胡 6、地胡 6、人胡 2、海底 1、聽牌 1、現聽 2', '胡牌得「底 1 + 台數」分;莊家胡牌連莊,否則換下一位當莊;牌山摸完沒人胡就流局(莊家連莊)。每局結束時,開局的房主可以按「結算」結束遊戲'],
+    rules: ['2~4 人,32 張象棋牌(紅:帥 仕仕 相相 俥俥 傌傌 炮炮 兵x5;黑同理),每人 4 張,莊家 5 張;一局接一局打,分數累積,打到開局的房主按「結算」為止,總分最高的人贏', '輪到你:摸一張牌,再打出一張;自己摸到湊成「一組 + 一對」就能按「自摸」', '一組 = 同色的 帥仕相、俥傌炮(黑:將士象、車馬砲),或同色的三張兵(卒);一對 = 兩張一模一樣的牌,或「帥 + 將」', '別人打出來的牌:湊成胡牌就能「胡」(放槍);手上有兩張同色的兵(卒)就能「碰」(誰打的都行);能和手上兩張湊成順子就能「吃組」(誰打的都能吃,湊成的那一組亮在桌上)。優先順序:胡 > 碰 > 吃組 > 吃牌', '輪到你之前,上家剛打的牌可以「吃牌」:拿來代替摸牌,不管湊不湊得成組,再打出一張(不能馬上打回同一張),多一個換牌的機會;不想吃就按「不吃,摸牌」(不限時間,可以慢慢想)', '吃組 / 碰之後那一組亮在桌上,手上剩 2 張,打出一張後剩 1 張,等著湊成一對', '想聽牌可以在打牌時按「聽牌」,之後電腦自動幫你摸打、遇到就胡;第一手就聽叫「現聽」', '台數:自摸 2、將帥聽令 2、紅一色 1、黑一色 1、兵卒一家 2、五兵合縱 5、五卒連橫 5、螞蟻雄兵(2 馬 + 3 兵)2、天胡 6、地胡 6、人胡 2、海底 1、聽牌 1、現聽 2', '胡牌得「底 1 + 台數」分;莊家胡牌連莊,否則換下一位當莊;牌山摸完沒人胡就流局(莊家連莊)。每局結束時,開局的房主可以按「結算」結束遊戲'],
     host: hXqmj, view: vXqmj, noCountdown: true,
   },
   {
@@ -2177,7 +2177,8 @@ function vChess(V) {
       if (st) render();
       showCover(m.winner == null
         ? `<div class="big">🤝</div><div>${m.reason}</div>`
-        : `<div class="big">🏆</div><div class="vsrow"><span class="vsp">${pinfo(m.winner).emoji}<b>${who(m.winner)} 獲勝!</b></span></div><div class="small">${m.reason}</div>`);
+        : `<div class="winart">${pinfo(m.winner).full}</div><div class="wintitle">🏆 ${who(m.winner)} 獲勝!</div><div class="small">${m.reason}</div>`);
+      if (m.winner != null && fighting()) { if (m.winner === V.me) { SFX.win(); confetti(); buzz([40, 40, 80]); } else SFX.bad(); }
     }
   };
 }
@@ -8544,10 +8545,11 @@ function xqShape(h) { // 還沒聽牌時,手上的牌「搭」得好不好:對�
   }
   return sc;
 }
-function xqPick(h, noise, melds) { // 要打哪一張:打完聽得越多越好;還沒聽就留搭得好的
-  if (noise && Math.random() < noise * 0.6) return pick(h);
+function xqPick(h, noise, melds, exclude) { // 要打哪一張:打完聽得越多越好;還沒聽就留搭得好的;exclude = 不能打的那張(吃牌換牌時剛吃進來的)
+  if (noise && Math.random() < noise * 0.6) return pick(h.filter(c => c !== exclude));
   let best = null;
   h.forEach((c, i) => {
+    if (c === exclude) return;
     const r = h.filter((_, x) => x !== i), sc = xqWaits(r, melds).length * 10 + xqShape(r) + Math.random() * 0.5;
     if (!best || sc > best.sc) best = { sc, c };
   });
@@ -8559,6 +8561,7 @@ function hXqmj(H) {
   const tot = {}, hands = {}, melds = {}, drawn = {}, ready = {}, discN = {};
   P.forEach(s => { tot[s] = 0; hands[s] = []; melds[s] = []; });
   let rd = 0, dealerI = rand(0, n - 1) - 1, lian = 0, wall = [], disc = [], turnI = 0, phase = 'idle', last = null, tok = 0, ctok = 0, cid = 0, claims = {}, elig = [], resp = {}, drewId = null, over = false, autoFn = null, firstRound = true;
+  let takenId = null; // 吃牌換牌:剛吃進來、這一手不能馬上打回去的那張
   if (dealerI < 0) dealerI = n - 1; // 第一局開始時 +1 回到抽到的那位
   const syncScores = () => { P.forEach(s => { H.scores[s] = tot[s]; }); H.bc({ t: 'score', scores: H.scores }); };
   const priv = s => H.to(s, { t: 'g', e: 'hand', hand: hands[s].slice(), drew: s === P[turnI] && phase === 'act' ? drewId : null });
@@ -8571,7 +8574,7 @@ function hXqmj(H) {
     rd++;
     if (!keepDealer) { dealerI = (dealerI + 1) % n; lian = 0; } else lian++;
     wall = shuffle([...Array(32).keys()]);
-    disc = []; last = null; elig = []; resp = {}; claims = {}; drewId = null; phase = 'deal'; firstRound = true;
+    disc = []; last = null; elig = []; resp = {}; claims = {}; drewId = null; takenId = null; phase = 'deal'; firstRound = true;
     P.forEach(s => { hands[s] = []; melds[s] = []; drawn[s] = 0; ready[s] = 0; discN[s] = 0; for (let i = 0; i < 4; i++) hands[s].push(wall.pop()); });
     hands[P[dealerI]].push(wall.pop()); // 莊家多一張,第一手直接打(或直接天胡)
     turnI = dealerI;
@@ -8589,7 +8592,7 @@ function hXqmj(H) {
       if (my !== tok || over || phase !== 'act') return;
       if (xqWin(hands[s], melds[s])) return doWin(s, null);
       // 聽牌之後不能換牌:沒胡就把剛摸進來的那張打掉(不能動手上聽牌的牌);沒聽牌的(逾時、離線)才挑最不要的打
-      discardTile(s, ready[s] && drewId != null && hands[s].includes(drewId) ? drewId : xqPick(hands[s], 0, melds[s]), false);
+      discardTile(s, ready[s] && drewId != null && hands[s].includes(drewId) ? drewId : xqPick(hands[s], 0, melds[s], takenId), false);
     };
     if (ready[s] || !H.online(s)) H.s.after(1300, autoFn); else H.s.after(TURN_MS, autoFn);
   }
@@ -8605,6 +8608,7 @@ function hXqmj(H) {
   function discardTile(s, c, wantReady) {
     const h = hands[s], i = h.indexOf(c);
     if (i < 0) return;
+    takenId = null;
     h.splice(i, 1);
     if (wantReady && !ready[s] && xqWaits(h, melds[s]).length) ready[s] = discN[s] === 0 ? 2 : 1; // 第一手就聽 = 現聽(2 台),之後才聽 = 聽牌(1 台)
     discN[s]++;
@@ -8613,11 +8617,13 @@ function hXqmj(H) {
     drewId = null;
     tok++;
     claims = {};
+    const nx = P[(P.indexOf(s) + 1) % n]; // 下家
     P.forEach(o => {
       if (o === s || !H.online(o)) return;
       const win = !!xqWin(hands[o].concat(c), melds[o]);
       const cl = ready[o] || melds[o].length ? { peng: null, chi: null } : xqClaims(hands[o], c); // 聽牌之後不能換牌;已經吃碰過一組就不能再吃碰
-      if (win || cl.peng || cl.chi) claims[o] = { win, peng: cl.peng, chi: cl.chi };
+      const take = o === nx && !ready[o]; // 吃牌:下家可以拿上家剛打的牌代替摸牌,不管湊不湊得成組,當作換牌的機會(聽牌之後不能換)
+      if (win || cl.peng || cl.chi || take) claims[o] = { win, peng: cl.peng, chi: cl.chi, take };
     });
     elig = Object.keys(claims).map(Number);
     resp = {};
@@ -8627,9 +8633,9 @@ function hXqmj(H) {
     P.forEach(priv);
     const my = ++ctok;
     if (!elig.length) return H.s.after(700, () => { if (my === ctok && phase === 'claim') nextTurn(); });
-    elig.forEach(o => H.to(o, { t: 'g', e: 'claim', cid, c, from: s, win: claims[o].win, peng: claims[o].peng, chi: claims[o].chi }));
+    elig.forEach(o => H.to(o, { t: 'g', e: 'claim', cid, c, from: s, win: claims[o].win, peng: claims[o].peng, chi: claims[o].chi, take: claims[o].take }));
     elig.filter(o => ready[o]).forEach(o => claimResp(o, 'win')); // 聽牌之後自動胡
-    const nx = P[(P.indexOf(s) + 1) % n], slow = claims[nx] && claims[nx].chi && !pinfo(nx).bot; // 下家吃上家的牌:不限 8 秒,等他選「吃」或「摸牌」(最多一個回合的時間)
+    const slow = claims[nx] && (claims[nx].chi || claims[nx].take) && !pinfo(nx).bot; // 下家吃上家的牌(吃組或吃牌換牌):不限 8 秒,等他選「吃」或「摸牌」(最多一個回合的時間)
     if (phase === 'claim') H.s.after(CLAIM_MS, () => {
       if (my !== ctok) return;
       if (!slow || nx in resp || Object.values(resp).some(r => r === 'win' || r === 'peng')) return resolveClaim(); // 有人胡 / 碰就不用等吃
@@ -8640,18 +8646,30 @@ function hXqmj(H) {
   function claimResp(o, what) {
     if (phase !== 'claim' || !elig.includes(o) || o in resp) return;
     const cl = claims[o];
-    resp[o] = what === 'win' && cl.win ? 'win' : what === 'peng' && cl.peng ? 'peng' : what === 'chi' && cl.chi ? 'chi' : 'pass';
+    resp[o] = what === 'win' && cl.win ? 'win' : what === 'peng' && cl.peng ? 'peng' : what === 'chi' && cl.chi ? 'chi' : what === 'take' && cl.take ? 'take' : 'pass';
     if (elig.every(x => x in resp)) H.s.after(300, resolveClaim);
   }
   function resolveClaim() {
     if (phase !== 'claim' || over) return;
     ctok++;
     const from = P.indexOf(last.s), order = Array.from({ length: n - 1 }, (_, k) => P[(from + 1 + k) % n]); // 從放槍(打牌)的人的下家開始數
-    for (const what of ['win', 'peng', 'chi']) { // 優先順序:胡 > 碰 > 吃;同樣的話離打牌的人最近的先
+    for (const what of ['win', 'peng', 'chi', 'take']) { // 優先順序:胡 > 碰 > 吃組 > 吃牌(換牌);同樣的話離打牌的人最近的先
       const o = order.find(x => resp[x] === what);
-      if (o != null) return what === 'win' ? doWin(o, last.s) : doMeld(o, what);
+      if (o != null) return what === 'win' ? doWin(o, last.s) : what === 'take' ? doTake(o) : doMeld(o, what);
     }
     nextTurn();
+  }
+  function doTake(o) { // 吃牌(換牌):下家拿上家剛打的牌代替摸牌(不管湊不湊得成組),再打出一張;不能馬上把剛吃進來的那張打回去
+    const c = last.c, from = last.s;
+    hands[o].push(c);
+    disc.pop();
+    last = { s: o, c, meld: 'take', from };
+    firstRound = false;
+    turnI = P.indexOf(o);
+    drewId = c; takenId = c;
+    elig = []; claims = {};
+    tok++; ctok++;
+    beginAct();
   }
   function doMeld(o, type) { // 吃 / 碰:把別人剛打的牌拿來,和手上的兩張湊成一組亮出來,然後換自己打一張(不摸牌)
     const c = last.c, use = claims[o][type], from = last.s;
@@ -8707,9 +8725,9 @@ function hXqmj(H) {
       }
       if (phase === 'act' && slot === P[turnI]) {
         if (m.e === 'win') { if (xqWin(hands[slot], melds[slot])) doWin(slot, null); return; }
-        if (m.e === 'discard' && !ready[slot]) { const c = +m.c; if (hands[slot].includes(c)) discardTile(slot, c, !!m.ready); }
+        if (m.e === 'discard' && !ready[slot]) { const c = +m.c; if (hands[slot].includes(c) && c !== takenId) discardTile(slot, c, !!m.ready); }
       } else if (phase === 'claim') {
-        if (['win', 'peng', 'chi', 'pass'].includes(m.e)) claimResp(slot, m.e);
+        if (['win', 'peng', 'chi', 'take', 'pass'].includes(m.e)) claimResp(slot, m.e);
       }
     },
     presence() {
@@ -8729,6 +8747,7 @@ function zimoFx(root, mine, p) {
     return `<i style="--x:${(Math.cos(a) * d).toFixed(1)}vmin;--y:${(Math.sin(a) * d).toFixed(1)}vmin;--r:${Math.round(Math.random() * 720 - 360)}deg;--d:${(0.25 + Math.random() * 0.35).toFixed(2)}s;--c:${['#ffd23f', '#ffb400', '#fff3b0', '#ff7a3d', '#e83b3b'][i % 5]}"></i>`;
   }).join('');
   fx.innerHTML = `<div class="zmflash"></div><div class="zmrays"></div><div class="zmring"></div><div class="zmbits">${bits}</div>
+    <div class="zmchar">${p.full}</div>
     <div class="zmword"><span class="zmtxt"><em>自摸</em><b>自摸</b></span><small>${p.emoji} ${mine ? '你' : esc(p.name)}</small></div>`;
   root.appendChild(fx);
   root.classList.remove('zmshake'); void root.offsetWidth; root.classList.add('zmshake');
@@ -8741,22 +8760,24 @@ function zimoFx(root, mine, p) {
 function vXqmj(V) {
   const me = V.me, T = cdTable(V);
   let st = null, hand = [], drew = null, sel = null, replied = false, cl = null, voted = false;
-  T.btns.innerHTML = `<button class="btn white sm xqpass">過</button><button class="btn orange sm xqchi">吃</button><button class="btn orange sm xqpeng">碰</button><button class="btn blue sm xqready">聽牌</button><button class="btn green sm xqdiscard">打出這張</button><button class="btn red sm xqwin">胡!</button>`;
-  const passB = $('.xqpass', T.btns), chiB = $('.xqchi', T.btns), pengB = $('.xqpeng', T.btns), readyB = $('.xqready', T.btns), discB = $('.xqdiscard', T.btns), winB = $('.xqwin', T.btns);
+  T.btns.innerHTML = `<button class="btn white sm xqpass">過</button><button class="btn orange sm xqchi">吃</button><button class="btn orange sm xqtake">吃牌</button><button class="btn orange sm xqpeng">碰</button><button class="btn blue sm xqready">聽牌</button><button class="btn green sm xqdiscard">打出這張</button><button class="btn red sm xqwin">胡!</button>`;
+  const passB = $('.xqpass', T.btns), chiB = $('.xqchi', T.btns), takeB = $('.xqtake', T.btns), pengB = $('.xqpeng', T.btns), readyB = $('.xqready', T.btns), discB = $('.xqdiscard', T.btns), winB = $('.xqwin', T.btns);
   const who = s => (s === me ? '你' : esc(pinfo(s).name));
   const myMelds = () => (st && st.melds && st.melds[me]) || [];
   const myAct = () => st && st.phase === 'act' && st.turn === me;
   const claimMe = () => st && st.phase === 'claim' && st.elig.includes(me) && !replied && cl && cl.cid === st.cid ? cl : null;
-  const idle = () => { [passB, chiB, pengB, readyB, discB, winB].forEach(b => { b.style.display = 'none'; }); T.info.innerHTML = ''; V.root.classList.remove('myturn'); }; // 局與局之間:按鈕收起來
+  const idle = () => { [passB, chiB, takeB, pengB, readyB, discB, winB].forEach(b => { b.style.display = 'none'; }); T.info.innerHTML = ''; V.root.classList.remove('myturn'); }; // 局與局之間:按鈕收起來
 
   function render() {
     if (!st) return;
     const act = myAct(), claim = claimMe(), amReady = st.ready[me] > 0, ms = myMelds(), win = act ? xqWin(hand, ms) : null;
+    const tk = act && st.last && st.last.meld === 'take' && st.last.s === me ? st.last.c : null; // 剛吃進來的牌:這一手不能打回去
+    if (tk != null && sel === tk) sel = null;
     const w = T.hand.clientWidth || 340, cnt = Math.max(hand.length + (ms.length ? 3 : 0), 4);
     const tw = Math.max(36, Math.min(76, Math.floor((w - 12 - (cnt - 1) * 5) / cnt), Math.floor(T.budget() / 1.35)));
     const base = hand.filter(c => c !== drew).sort((a, b) => xqFace(a) - xqFace(b));
     const list = drew != null && hand.includes(drew) ? [...base, drew] : base;
-    T.hand.innerHTML = `<div class="xqhand">${ms.map(m => `<span class="xqmeld">${m.tiles.map(c => xqTile(c, 'flat', `--tw:${tw}px`)).join('')}</span>`).join('')}${list.map(c => xqTile(c, (sel === c ? 'sel ' : '') + (c === drew ? 'drew ' : '') + (act && !amReady ? 'tap' : ''), `--tw:${tw}px`)).join('')}</div>`;
+    T.hand.innerHTML = `<div class="xqhand">${ms.map(m => `<span class="xqmeld">${m.tiles.map(c => xqTile(c, 'flat', `--tw:${tw}px`)).join('')}</span>`).join('')}${list.map(c => xqTile(c, (sel === c ? 'sel ' : '') + (c === drew ? 'drew ' : '') + (c === tk ? 'dim ' : '') + (act && !amReady ? 'tap' : ''), `--tw:${tw}px`)).join('')}</div>`;
     discB.style.display = act && !amReady ? '' : 'none';
     discB.disabled = sel == null;
     const canReady = act && !amReady && sel != null && xqWaits(hand.filter(c => c !== sel), ms).length > 0;
@@ -8767,13 +8788,15 @@ function vXqmj(V) {
     winB.classList.toggle('pulse', !!(win || (claim && claim.win)));
     chiB.style.display = claim && claim.chi ? '' : 'none';
     pengB.style.display = claim && claim.peng ? '' : 'none';
-    if (claim && claim.chi) chiB.textContent = '吃 ' + xqName(claim.c) + claim.chi.map(xqName).join('');
+    takeB.style.display = claim && claim.take ? '' : 'none';
+    if (claim && claim.take) takeB.textContent = '吃牌 ' + xqName(claim.c);
+    if (claim && claim.chi) chiB.textContent = '吃組 ' + xqName(claim.c) + claim.chi.map(xqName).join('');
     if (claim && claim.peng) pengB.textContent = '碰 ' + xqName(claim.c) + xqName(claim.c) + xqName(claim.c);
     passB.style.display = claim ? '' : 'none';
     passB.textContent = claim && st.order[(st.order.indexOf(st.last.s) + 1) % st.order.length] === me ? '不吃,摸牌' : '過';
     const dealer = st.dealer === me ? `<em class="xqdlr">莊${st.lian ? ' 連' + st.lian : ''}</em>` : '', rdy = amReady ? `<em class="xqrdy">${st.ready[me] === 2 ? '現聽' : '聽牌'}</em>` : '';
     let msg;
-    if (claim) msg = `<b class="cdyou">${who(st.last.s)} 打出 ${xqName(claim.c)},你可以${[claim.win && '胡', claim.peng && '碰', claim.chi && '吃'].filter(Boolean).join('、')}!</b>`;
+    if (claim) msg = `<b class="cdyou">${who(st.last.s)} 打出 ${xqName(claim.c)},你可以${[claim.win && '胡', claim.peng && '碰', claim.chi && '吃組', claim.take && '吃牌(換牌)'].filter(Boolean).join('、')}!</b>`;
     else if (act) msg = win ? `<b class="cdyou">可以自摸了!${win.fans.map(f => f[0]).join('、') || '平胡'}</b>` : amReady ? '聽牌中:自動摸打…' : `<b class="cdyou">輪到你!</b>${ms.length && st.last && st.last.s === me && st.last.meld ? '吃 / 碰之後,打出一張' : '選一張打出去'}${sel != null && canReady ? '(這樣打就能聽牌)' : ''}`;
     else if (st.phase === 'claim') msg = `${who(st.last.s)} 打出 <b>${xqName(st.last.c)}</b>…`;
     else msg = `等 ${esc(pinfo(st.turn).name)} 出牌…`;
@@ -8782,7 +8805,7 @@ function vXqmj(V) {
   }
   function renderBoard() {
     T.seats(st.order, me, st.counts, st.phase === 'act' ? st.turn : null, s => `<span class="xqmeta"><i>${st.tot[s]} 分</i>${st.dealer === s ? `<em class="xqdlr">莊${st.lian ? ' 連' + st.lian : ''}</em>` : ''}${st.ready[s] ? `<em class="xqrdy">${st.ready[s] === 2 ? '現聽' : '聽牌'}</em>` : ''}</span>${(st.melds[s] || []).map(m => `<span class="xqmeld on-seat">${m.tiles.map(c => xqTile(c, 'xs flat')).join('')}</span>`).join('')}`);
-    const lastTxt = !st.last ? '' : st.last.meld ? `${pinfo(st.last.s).emoji} ${who(st.last.s)} <b class="xqcall">${st.last.meld === 'chi' ? '吃' : '碰'}</b> 了 ${xqName(st.last.c)}` : `${pinfo(st.last.s).emoji} ${who(st.last.s)} 打出 <b>${xqName(st.last.c)}</b>`;
+    const lastTxt = !st.last ? '' : st.last.meld ? `${pinfo(st.last.s).emoji} ${who(st.last.s)} <b class="xqcall">${{ chi: '吃組', peng: '碰', take: '吃牌' }[st.last.meld]}</b> 了 ${xqName(st.last.c)}` : `${pinfo(st.last.s).emoji} ${who(st.last.s)} 打出 <b>${xqName(st.last.c)}</b>`;
     T.mid.innerHTML = `<div class="xqhead">第 <b>${st.rd}</b> 局 · 牌山還有 <b>${st.wall}</b> 張</div>
       <div class="xqpool">${st.disc.length ? st.disc.map(([s, c], i) => xqTile(c, 'sm' + (i === st.disc.length - 1 && !(st.last && st.last.meld) ? ' last' : ''), `--pc:${pinfo(s).color}`)).join('') : '<span class="xqempty">還沒有人打牌</span>'}</div>
       ${lastTxt ? `<div class="cdwho${st.last.meld ? ' cov' : ''}">${lastTxt}</div>` : ''}`;
@@ -8791,6 +8814,7 @@ function vXqmj(V) {
     const k = e.target.closest('.xqt');
     if (!k || !k.dataset.c || !myAct() || st.ready[me]) return;
     const c = +k.dataset.c;
+    if (st.last && st.last.meld === 'take' && st.last.s === me && c === st.last.c) { toast('剛吃進來的牌不能馬上打回去'); return; }
     sel = sel === c ? null : c;
     SFX.tap(); render();
   });
@@ -8809,6 +8833,7 @@ function vXqmj(V) {
   });
   chiB.addEventListener('pointerdown', () => reply('chi'));
   pengB.addEventListener('pointerdown', () => reply('peng'));
+  takeB.addEventListener('pointerdown', () => reply('take'));
   passB.addEventListener('pointerdown', () => reply('pass'));
   T.msg.addEventListener('pointerdown', e => { // 結算面板上的「結算」按鈕(只有房主看得到,按了就結束)
     if (!e.target.closest('.xqsettle') || voted) return;
@@ -8825,7 +8850,7 @@ function vXqmj(V) {
     if (m.e === 'hand') {
       hand = m.hand; drew = m.drew;
       if (sel != null && !hand.includes(sel)) sel = null;
-      if (st && st.turn === me && st.phase === 'act' && sel == null && drew != null) sel = drew;
+      if (st && st.turn === me && st.phase === 'act' && sel == null && drew != null && !(st.last && st.last.meld === 'take')) sel = drew;
       render();
       return;
     }
@@ -8842,7 +8867,7 @@ function vXqmj(V) {
       if (!prev || prev.cid !== m.cid) replied = false;
       T.msg.classList.remove('on');
       if (m.last && (!prev || !prev.last || prev.last.c !== m.last.c || prev.disc.length !== m.disc.length || prev.last.meld !== m.last.meld)) beep(m.last.meld ? 700 : m.last.s === me ? 420 : 520, 0.07, 'triangle', 0.09);
-      if (m.phase === 'act' && m.turn === me && (!prev || prev.turn !== me || prev.phase !== 'act')) { buzzTurn(); if (sel == null && drew != null) sel = drew; }
+      if (m.phase === 'act' && m.turn === me && (!prev || prev.turn !== me || prev.phase !== 'act')) { buzzTurn(); if (sel == null && drew != null && !(m.last && m.last.meld === 'take')) sel = drew; }
       else if (m.phase === 'claim' && m.elig.includes(me) && (!prev || prev.phase !== 'claim')) { buzzTurn(); }
       else if (m.phase === 'act' && m.turn !== me && prev && prev.turn !== m.turn && m.order.includes(me)) buzzOther();
       renderBoard(); render();
@@ -8851,7 +8876,7 @@ function vXqmj(V) {
     if (m.e === 'win') {
       st = null; idle();
       if (m.tsumo) zimoFx(V.root, m.w === me, pinfo(m.w));
-      T.say(`<div class="big">${m.w === me ? '🏆' : '🀄'}</div><b class="xqtitle">${m.tsumo ? (m.w === me ? '你自摸了!' : `${esc(pinfo(m.w).name)} 自摸!`) : m.w === me ? '你胡牌了!' : `${esc(pinfo(m.w).name)} 胡牌!`}</b>
+      T.say(`<div class="winart">${pinfo(m.w).full}</div><b class="xqtitle">${m.tsumo ? (m.w === me ? '你自摸了!' : `${esc(pinfo(m.w).name)} 自摸!`) : m.w === me ? '你胡牌了!' : `${esc(pinfo(m.w).name)} 胡牌!`}</b>
         <small>${m.tsumo ? '自摸' : `${who(m.from)} 放槍`} · 第 ${m.rd} 局</small>
         <div class="xqwinhand">${m.set.map(c => xqTile(c, 'md' + (c === m.tile ? ' hit' : ''))).join('')}<i></i>${m.pair.map(c => xqTile(c, 'md' + (c === m.tile ? ' hit' : ''))).join('')}</div>
         <div class="xqfans">${m.fans.length ? m.fans.map(([n, t]) => `<span><b>${n}</b><i>${t} 台</i></span>`).join('') : '<span><b>平胡</b><i>0 台</i></span>'}</div>
@@ -9323,7 +9348,8 @@ BOTS.xqmj = (H, s, m, k) => { // 電腦:能胡就胡;不能胡就打「打完聽
         if (st.tok !== id || !st.hand.length) return;
         const ml = m.melds[s] || [];
         if (xqWin(st.hand, ml)) return botSend(H, s, { e: 'win' });
-        const c = xqPick(st.hand, 1 - k.sk, ml), rest = st.hand.filter(x => x !== c);
+        const tk = m.last && m.last.meld === 'take' && m.last.s === s ? m.last.c : null; // 剛吃牌換牌:不能把同一張打回去
+        const c = xqPick(st.hand, 1 - k.sk, ml, tk), rest = st.hand.filter(x => x !== c);
         botSend(H, s, { e: 'discard', c, ready: !m.ready[s] && Math.random() < 0.55 && xqWaits(rest, ml).length > 0 });
       });
     }
@@ -9343,7 +9369,15 @@ BOTS.xqmj = (H, s, m, k) => { // 電腦:能胡就胡;不能胡就打「打完聽
         const outs = Math.max(...rest.map(keep => xqOuts([keep], mel, new Set([...vis, ...use]))));
         if (!best || outs > best.outs) best = { type, outs };
       });
+      // 吃牌換牌(只有下家有):拿來換掉手上最沒用的一張,換完聽得更好才吃
+      const takeOk = m.take && (() => {
+        const h5 = [...h, m.c], ml = st.melds[s] || [];
+        let bs = -1;
+        h5.forEach((c, i) => { if (c !== m.c) { const r = h5.filter((_, x) => x !== i); bs = Math.max(bs, xqWaits(r, ml).length * 10 + xqShape(r)); } });
+        return bs > xqWaits(h, ml).length * 10 + xqShape(h) + 0.5;
+      })();
       if (best && (best.outs > cur || (cur === 0 && best.outs > 0 && Math.random() < 0.4 + k.sk * 0.3))) botSend(H, s, { e: best.type });
+      else if (takeOk) botSend(H, s, { e: 'take' });
       else botSend(H, s, { e: 'pass' });
     });
   }
