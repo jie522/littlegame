@@ -85,11 +85,13 @@ function onViewportChange() {
   fixViewport();
   [120, 400, 900].forEach(ms => setTimeout(fixViewport, ms));
 }
+// iPhone 不理會「禁止縮放」:兩指捏會把網頁放大,放大之後按鈕就對不準,所以直接擋掉(快點兩下放大已經由 CSS 的 touch-action: manipulation 擋掉)
+['gesturestart', 'gesturechange', 'gestureend'].forEach(ev => document.addEventListener(ev, e => e.preventDefault(), { passive: false }));
 addEventListener('orientationchange', onViewportChange);
 addEventListener('resize', onViewportChange);
 if (window.visualViewport) visualViewport.addEventListener('resize', onViewportChange);
 
-const APP_VERSION = '2026.11.65';
+const APP_VERSION = '2026.11.66';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */

@@ -24,6 +24,7 @@
            1px 1px 0 var(--ink), -1px -1px 0 var(--ink), 1px -1px 0 var(--ink), -1px 1px 0 var(--ink);
 }
 
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; } /* iPhone 轉成橫的時不要自動放大文字(會讓整個版面位移) */
 html, body {
   height: 100%;
   overflow: hidden;
@@ -70,7 +71,7 @@ body { position: fixed; inset: 0; width: 100%; } /* 頁面本身完全不能捲�
 /* 手機直式畫面;電腦上置中成手機大小 */
 #app {
   position: fixed;
-  top: 0; bottom: 0; left: 50%;
+  top: 0; bottom: 0; left: 50%; /* 上下貼齊螢幕邊緣:轉向、網址列收起來時瀏覽器會自己算好高度 */
   width: min(100%, 480px);
   transform: translateX(-50%);
 }
