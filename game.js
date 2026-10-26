@@ -74,7 +74,7 @@ function applyChars() {
 }
 const myChar = () => { const c = store.get('char', 0); return Number.isInteger(c) && c >= 0 && c < CHARS.length ? c : 0; };
 
-const APP_VERSION = '2026.11.60';
+const APP_VERSION = '2026.11.61';
 const S = { muted: store.get('muted', false) };
 
 /* ---------- 音效 & 震動 ---------- */
@@ -1729,6 +1729,102 @@ function hChess(H) {
       if (gone != null) end(fighters.find(s => s !== gone), '對手離開了');
     },
   };
+}
+
+/* ---------- 暗棋的電腦:往後算兩步半(我走 / 翻 → 對手最好的回應 → 我能不能吃回來),翻棋照剩下的棋算機率 ----------
+   棋子的價值會看場上還剩什麼:能吃掉的敵棋越多越值錢(對手的帥還在,兵就很值錢;炮隔子什麼都能吃) */
+const CHESS_KINDS = { K: 1, A: 2, E: 2, R: 2, N: 2, C: 2, P: 5 };
+const chessBeats = (a, d) => (a === 'K' && d === 'P' ? false : a === 'P' && d === 'K' ? true : CHESS_RANK[a] >= CHESS_RANK[d]);
+function chessGen(cells, color, capsOnly) { // 這一方所有能走的步 [from, to](只看上下左右,炮再加隔一顆的直線吃子)
+  const out = [];
+  for (let i = 0; i < 32; i++) {
+    const a = cells[i];
+    if (!a || a.h || a.c !== color) continue;
+    const r = Math.floor(i / CHESS_COLS), c = i % CHESS_COLS;
+    for (const [dr, dc] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+      const rr = r + dr, cc = c + dc;
+      if (rr < 0 || rr >= CHESS_ROWS || cc < 0 || cc >= CHESS_COLS) continue;
+      const t = rr * CHESS_COLS + cc, d = cells[t];
+      if (!d) { if (!capsOnly) out.push([i, t]); continue; }
+      if (a.k !== 'C' && !d.h && d.c !== color && chessBeats(a.k, d.k)) out.push([i, t]);
+    }
+    if (a.k === 'C') {
+      for (const [dr, dc] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+        let rr = r + dr, cc = c + dc, screen = false;
+        while (rr >= 0 && rr < CHESS_ROWS && cc >= 0 && cc < CHESS_COLS) {
+          const t = rr * CHESS_COLS + cc, d = cells[t];
+          if (d) {
+            if (!screen) screen = true;
+            else { if (!d.h && d.c !== color) out.push([i, t]); break; }
+          }
+          rr += dr; cc += dc;
+        }
+      }
+    }
+  }
+  return out;
+}
+function chessAI(cells, col, dead, level, lastOpp, myLast, idle) {
+  const opp = col === 'r' ? 'b' : 'r';
+  const alive = c => { const n = { ...CHESS_KINDS }; (dead[c] || []).forEach(k => { n[k]--; }); return n; };
+  const pool = { r: alive('r'), b: alive('b') }; // 還沒翻開的棋:活著的減掉已經翻開的
+  cells.forEach(x => { if (x && !x.h) pool[x.c][x.k]--; });
+  const BASE = { K: 60, A: 30, E: 15, R: 9, N: 6, C: 22, P: 4 };
+  const valOf = (c, k, en) => { // en = 敵方各種棋還活著幾顆(固定價值,只有兵和帥會看對方剩什麼)
+    if (k === 'P') return BASE.P + (en.K > 0 ? 10 : 0); // 對方的帥(將)還在,兵就能吃它
+    if (k === 'K') return BASE.K - 5 * Math.max(0, en.P); // 對方兵越多,帥越危險
+    return BASE[k];
+  };
+  const dist = (a, b) => Math.abs(Math.floor(a / CHESS_COLS) - Math.floor(b / CHESS_COLS)) + Math.abs((a % CHESS_COLS) - (b % CHESS_COLS));
+  // 局面分數(站在 col 這一方):活著的棋的價值總和(含沒翻開的)差 + 一點點「強棋靠近打得贏的敵棋」
+  function evalPos(cs, pl) { // pl = 還沒翻開的棋(假設翻開了某一顆時要扣掉)
+    const n = { r: { ...pl.r }, b: { ...pl.b } }, mine = [], theirs = [];
+    cs.forEach((x, i) => { if (x && !x.h) { n[x.c][x.k]++; (x.c === col ? mine : theirs).push(i); } });
+    let sc = 0;
+    for (const k in n[col]) sc += n[col][k] * valOf(col, k, n[opp]);
+    for (const k in n[opp]) sc -= n[opp][k] * valOf(opp, k, n[col]);
+    if (n[opp] && Object.values(n[opp]).every(v => v <= 0)) return 9999;
+    if (Object.values(n[col]).every(v => v <= 0)) return -9999;
+    for (const i of mine) {
+      let best = 9;
+      for (const j of theirs) if (chessBeats(cs[i].k, cs[j].k)) best = Math.min(best, dist(i, j));
+      if (best < 9) sc -= best * 0.5;
+    }
+    if (theirs.length && theirs.length <= 6) sc -= chessGen(cs, opp, false).length * 0.3; // 殘局:把對方逼到沒路走
+    return sc;
+  }
+  const apply = (cs, f, t) => { const n = cs.slice(); n[t] = n[f]; n[f] = null; return n; };
+  // 我方吃回來(只看吃子)
+  const quiet = (cs, pl) => { let b = evalPos(cs, pl); for (const [f, t] of chessGen(cs, col, true)) b = Math.max(b, evalPos(apply(cs, f, t), pl)); return b; };
+  // 對手的回應:挑讓我最差的那一步(翻棋當作局面不變)
+  const leaf = (cs, pl) => (level >= 1 ? quiet(cs, pl) : evalPos(cs, pl));
+  const reply = (cs, pl) => {
+    let w = leaf(cs, pl);
+    for (const [f, t] of chessGen(cs, opp, false)) w = Math.min(w, leaf(apply(cs, f, t), pl));
+    return w;
+  };
+  const cand = [];
+  for (const [f, t] of chessGen(cells, col, false)) {
+    let sc = reply(apply(cells, f, t), pool);
+    if (myLast && myLast.from === t && myLast.to === f) sc -= 3; // 不要走回頭路(來回走會和棋)
+    cand.push({ sc, o: { e: 'move', from: f, to: t } });
+  }
+  const tot = c => Object.values(pool[c]).reduce((a, b) => a + Math.max(0, b), 0), all = tot('r') + tot('b');
+  cells.forEach((x, i) => {
+    if (!x || !x.h || !all) return;
+    let sc = 0;
+    for (const c of ['r', 'b']) for (const k in pool[c]) {
+      if (pool[c][k] <= 0) continue;
+      const cs = cells.slice(); cs[i] = { c, k };
+      const pl = { r: { ...pool.r }, b: { ...pool.b } }; pl[c][k]--;
+      sc += pool[c][k] / all * reply(cs, pl);
+    }
+    cand.push({ sc: sc + 0.5 + (idle > 10 ? 4 : 0), o: { e: 'flip', i } }); // 差不多的時候偏好翻棋;很久沒吃子就更想翻(推進局面、避免和棋)
+  });
+  if (!cand.length) return null;
+  cand.forEach(x => { x.sc += Math.random() * (level === 0 ? 25 : level === 1 ? 3 : 0.3); });
+  cand.sort((a, b) => b.sc - a.sc);
+  return cand[0].o;
 }
 
 /* ---------- 暗棋的 3D 畫面:Blender 做的木頭棋盤和棋子(assets/chess.glb),翻棋、走棋、吃子都有動畫 ----------
@@ -8865,37 +8961,14 @@ const BOTS = {
 
   chess(H, s, m, k) {
     if (m.t !== 'g' || m.e !== 'board' || m.turn !== s) return;
-    H.s.after(rand(900, 1700) * k.spd, () => {
+    H.s.after(rand(700, 1400) * k.spd, () => {
       const cells = m.cells, col = m.color[s];
       const hid = cells.map((x, i) => (x && x.h ? i : -1)).filter(i => i >= 0);
-      const act = o => botSend(H, s, o);
-      if (!col) return act({ e: 'flip', i: pick(hid) });
-      const moves = [];
-      cells.forEach((x, i) => { if (x && !x.h && x.c === col) chessTargets(cells, i).forEach(t => moves.push([i, t])); });
-      const caps = moves.filter(([, t]) => cells[t]).sort((a, b) => CHESS_RANK[cells[b[1]].k] - CHESS_RANK[cells[a[1]].k]);
-      if (caps.length && Math.random() < 0.5 + k.sk / 2) {
-        const [f, t] = NET.level === 0 && caps.length > 1 ? pick(caps.slice(0, 2)) : caps[0];
-        return act({ e: 'move', from: f, to: t });
-      }
-      if (hid.length && (Math.random() < 0.55 || !moves.length)) return act({ e: 'flip', i: pick(hid) });
-      if (!moves.length) return;
-      if (Math.random() > k.sk) { const [f, t] = pick(moves); return act({ e: 'move', from: f, to: t }); }
-      // 往打得贏的敵棋靠近,並避開會被吃掉的位置
-      const enemies = [];
-      cells.forEach((x, i) => { if (x && !x.h && x.c !== col) enemies.push([i, x.k]); });
-      const dist = (a, b) => Math.abs(Math.floor(a / CHESS_COLS) - Math.floor(b / CHESS_COLS)) + Math.abs((a % CHESS_COLS) - (b % CHESS_COLS));
-      const beats = (a, d) => (a === 'K' && d === 'P' ? false : a === 'P' && d === 'K' ? true : CHESS_RANK[a] >= CHESS_RANK[d]);
-      let best = null;
-      moves.forEach(([f, t]) => {
-        const me = cells[f].k;
-        let sc = 6 + Math.random();
-        enemies.forEach(([ei, ek]) => {
-          if (beats(me, ek)) sc = Math.min(sc, dist(t, ei) + Math.random());
-          if (dist(t, ei) === 1 && beats(ek, me)) sc += 4;
-        });
-        if (!best || sc < best.sc) best = { sc, f, t };
-      });
-      act({ e: 'move', from: best.f, to: best.t });
+      if (!col) return botSend(H, s, { e: 'flip', i: pick(hid) }); // 第一步:還不知道自己是哪一色,隨便翻
+      const st = H.bs[s] || (H.bs[s] = {});
+      const o = chessAI(cells, col, m.dead || { r: [], b: [] }, NET.level, m.last && m.last.slot !== s ? m.last : null, st.my, m.idle || 0);
+      st.my = o && o.e === 'move' ? o : null;
+      if (o) botSend(H, s, o);
     });
   },
 };
